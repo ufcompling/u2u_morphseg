@@ -113,13 +113,10 @@ def generate_train(original_train_data, datadir, lang, initial_size, select_inte
 		os.makedirs(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/' + '/random/', exist_ok=True)
 		os.makedirs(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/' + '/random/' + str(select_interval), exist_ok=True)
 		os.makedirs(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/random/' + str(select_interval) + '/select0', exist_ok = True)
-		os.makedirs(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/random/' + str(select_interval) + '/select0/error_0', exist_ok = True)
-		os.makedirs(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/random/' + str(select_interval) + '/select0/error_0/1', exist_ok = True)
+
 		os.makedirs(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/' + '/al/', exist_ok=True)
 		os.makedirs(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/' + '/al/' + str(select_interval), exist_ok=True)	
 		os.makedirs(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/al/' + str(select_interval) + '/select0', exist_ok = True)
-		os.makedirs(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/al/' + str(select_interval) + '/select0/error_0', exist_ok = True)
-		os.makedirs(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/al/' + str(select_interval) + '/select0/error_0/1', exist_ok = True)
 
 		while size < max_size:
 			size += select_interval
@@ -134,8 +131,6 @@ def generate_train(original_train_data, datadir, lang, initial_size, select_inte
 		select_size = 0
 		for size in sizes:
 			os.makedirs(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/random/' + str(select_interval) + '/select' + str(select_size), exist_ok = True)
-			os.makedirs(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/random/' + str(select_interval) + '/select' + str(select_size) + '/error_0', exist_ok = True)
-			os.makedirs(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/random/' + str(select_interval) + '/select' + str(select_size) + '/error_0/1', exist_ok = True)
 
 			try:
 				while n_toks < size:
@@ -149,8 +144,8 @@ def generate_train(original_train_data, datadir, lang, initial_size, select_inte
 			except:
 				pass
 
-			train_set_src_file = io.open(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/random/' + str(select_interval) + '/select' + str(select_size) + '/error_0/1/train.' + str(initial_size) + '.src', 'w')
-			train_set_tgt_file = io.open(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/random/' + str(select_interval) + '/select' + str(select_size) + '/error_0/1/train.' + str(initial_size) + '.tgt', 'w')
+			train_set_src_file = io.open(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/random/' + str(select_interval) + '/select' + str(select_size) + '/train.' + str(initial_size) + '.src', 'w')
+			train_set_tgt_file = io.open(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/random/' + str(select_interval) + '/select' + str(select_size) + '/train.' + str(initial_size) + '.tgt', 'w')
 			for pair in train_set:
 				train_set_src_file.write(pair[0] + '\n')
 				train_set_tgt_file.write(pair[1] + '\n')
@@ -159,8 +154,8 @@ def generate_train(original_train_data, datadir, lang, initial_size, select_inte
 			
 			if select_size == 0:			
 				select_set = train_data  # Define select_set as train_set or appropriate data
-				select_set_src_file = io.open(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/al/' + str(select_interval) + '/select0/error_0/1/select.' + str(initial_size) + '.src', 'w')
-				select_set_tgt_file = io.open(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/al/' + str(select_interval) + '/select0/error_0/1/select.' + str(initial_size) + '.tgt', 'w')
+				select_set_src_file = io.open(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/al/' + str(select_interval) + '/select0/select.' + str(initial_size) + '.src', 'w')
+				select_set_tgt_file = io.open(datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/al/' + str(select_interval) + '/select0/select.' + str(initial_size) + '.tgt', 'w')
 				for pair in select_set:
 					select_set_src_file.write(pair[0] + '\n')
 					select_set_tgt_file.write(pair[1] + '\n')
@@ -170,8 +165,8 @@ def generate_train(original_train_data, datadir, lang, initial_size, select_inte
 			select_size += select_interval
 	
 	for i in range(n):
-		os.system('cp ' + datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/random/' + str(select_interval) + '/select0/error_0/1/train.' + str(initial_size) + '.src' + ' ' + datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/al/' + str(select_interval) + '/select0/error_0/1/')
-		os.system('cp ' + datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/random/' + str(select_interval) + '/select0/error_0/1/train.' + str(initial_size) + '.tgt' + ' ' + datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/al/' + str(select_interval) + '/select0/error_0/1/')
+		os.system('cp ' + datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/random/' + str(select_interval) + '/select0/train.' + str(initial_size) + '.src' + ' ' + datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/al/' + str(select_interval) + '/select0/')
+		os.system('cp ' + datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/random/' + str(select_interval) + '/select0/train.' + str(initial_size) + '.tgt' + ' ' + datadir + lang + '/' + str(initial_size) + '/' + str(i) + '/al/' + str(select_interval) + '/select0/')
 
 original_train_data, original_test_data = random_partition(datadir, lang)
 

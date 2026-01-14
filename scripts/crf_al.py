@@ -25,8 +25,6 @@ parser.add_argument('--select_size', type = str, default = '0', help = 'how much
 parser.add_argument('--d', type = int, default = 4, help = 'delta; context window to consider for feature set construction')
 parser.add_argument('--e', type = float, default = 0.001, help = 'epsilon parameter for training CRF; may not use this in training')
 parser.add_argument('--i', type = int, default = 100, help = 'maximum number of iterations for training CRF')
-parser.add_argument('--error_prop', type = str, default = '0', help = 'error proportions; 0, 0.1, 0.2, 0.3')
-parser.add_argument('--error_seed', type = str, default = '1', help = 'for each error proportion value, create three different sets')
 
 args = parser.parse_args()
 
@@ -40,24 +38,20 @@ select_size = args.select_size
 delta = args.d
 epsilon = args.e
 max_iterations = args.i
-error_prop = args.error_prop
-error_seed = args.error_seed # When error proportion is 0, there is just one seed
 
 # Data directory for the current iteration
-sub_datadir = datadir + lang + '/' + initial_size + '/' + seed + '/' + method + '/' + select_interval + '/select' + select_size + '/error_0/1/'
+sub_datadir = datadir + lang + '/' + initial_size + '/' + seed + '/' + method + '/' + select_interval + '/select' + select_size + '/'
 
 subprocess.run(['mkdir', '-p', datadir + lang + '/' + initial_size])
 subprocess.run(['mkdir', '-p', datadir + lang + '/' + initial_size + '/' + seed])
 subprocess.run(['mkdir', '-p', datadir + lang + '/' + initial_size + '/' + seed + '/' + method])
 subprocess.run(['mkdir', '-p', datadir + lang + '/' + initial_size + '/' + seed + '/' + method + '/' + select_interval])
 subprocess.run(['mkdir', '-p', datadir + lang + '/' + initial_size + '/' + seed + '/' + method + '/' + select_interval + '/select' + select_size])
-subprocess.run(['mkdir', '-p', datadir + lang + '/' + initial_size + '/' + seed + '/' + method + '/' + select_interval + '/select' + select_size + '/error_0/'])
-subprocess.run(['mkdir', '-p', datadir + lang + '/' + initial_size + '/' + seed + '/' + method + '/' + select_interval + '/select' + select_size + '/error_0/1/'])
 
 # Data directory for the previous iteration
 previous_datadir = ''
 if select_size not in ['0']:
-	previous_datadir = datadir + lang + '/' + initial_size + '/' + seed + '/' + method + '/' + select_interval + '/select' + str(int(select_size) - int(select_interval)) + '/error_0/1/'
+	previous_datadir = datadir + lang + '/' + initial_size + '/' + seed + '/' + method + '/' + select_interval + '/select' + str(int(select_size) - int(select_interval)) + '/'
 
 	os.system('cat ' + previous_datadir + 'train.' + initial_size + '.src ' + previous_datadir + '/increment.src >' + sub_datadir + 'train.' + initial_size + '.src')
 	os.system('cat ' + previous_datadir + 'train.' + initial_size + '.tgt ' + previous_datadir + '/increment.tgt >' + sub_datadir + 'train.' + initial_size + '.tgt')

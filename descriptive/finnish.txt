@@ -1,0 +1,3 @@
+Total number of words: 1835
+Average word length: 13.02724795640327
+Average number of morphemes per word: 3.4168937329700273
