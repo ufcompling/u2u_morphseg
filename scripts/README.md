@@ -14,6 +14,7 @@ This came from a different experiment; my initial purpose is to compare active l
 
 Once you generate the random datasets, you will see, e.g.,
 
+```
 data/
 └── finnish/                     # Language
     └── 100/                     # Initial training size to start active learning process (`initial_size`)
@@ -24,4 +25,8 @@ data/
                     ├── select50/    # Second AL iteration (e.g., 0 + 50 selected samples = 50; training size would be initial training size + 50)
                     ├── select100/   # Third AL iteration (e.g., 0 + 50 + 50 selected samples = 100; training size would be initial training size + 100)
                     └── ...          # Continuous AL iterations until reaching maximum original data size
+```
 
+`python scripts/crf_al.py --lang finnish`
+
+`python scripts/crf_al.py --lang finnish --select_size 50`
