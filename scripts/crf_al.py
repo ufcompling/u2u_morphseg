@@ -375,7 +375,7 @@ def mainCRF():
 	if os.path.exists(select_src):
 		dictionaries, train_words, test_words, select_words, train_morphs, test_morphs, select_morphs = gather_data(train_tgt, test_tgt, select_tgt)
 	else:
-		dictionaries, train_words, test_words, select_words, train_morphs, test_morphs, select_morphs = gather_data(train_tgt, test_tgt, select_tgt=None)
+		dictionaries, train_words, test_words, select_words, train_morphs, test_morphs, select_morphs = gather_data(train_tgt, test_tgt, select=None)
 
 	Y_test_predict, Y_select_predict = build(model_filename, dictionaries, train_words, test_words, select_words, select_morphs, delta, epsilon, max_iterations)
 
