@@ -9,13 +9,14 @@ import itertools
 import datetime
 import re, argparse
 import pickle
-import io, os, sys, subprocess
+import io, os, sys
 import statistics
 import json
+from pathlib import Path
 from scipy.special import rel_entr
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--datadir', type = str, default = 'data/', help = 'path to data')
+parser.add_argument('--datadir', type = str, default = 'data', help = 'path to data')
 parser.add_argument('--lang', type = str, help = 'language')
 parser.add_argument('--initial_size', type = str, default = '100', help = 'data initial_size to start AL iteration')
 parser.add_argument('--seed', type = str, default = '0', help = 'different initial training sets')
@@ -40,24 +41,19 @@ epsilon = args.e
 max_iterations = args.i
 
 # Data directory for the current iteration
-sub_datadir = datadir + lang + '/' + initial_size + '/' + seed + '/' + method + '/' + select_interval + '/select' + select_size + '/'
-
-subprocess.run(['mkdir', '-p', datadir + lang + '/' + initial_size])
-subprocess.run(['mkdir', '-p', datadir + lang + '/' + initial_size + '/' + seed])
-subprocess.run(['mkdir', '-p', datadir + lang + '/' + initial_size + '/' + seed + '/' + method])
-subprocess.run(['mkdir', '-p', datadir + lang + '/' + initial_size + '/' + seed + '/' + method + '/' + select_interval])
-subprocess.run(['mkdir', '-p', datadir + lang + '/' + initial_size + '/' + seed + '/' + method + '/' + select_interval + '/select' + select_size])
+sub_datadir = f'{datadir}/{lang}/{initial_size}/{seed}/{method}/{select_interval}/select{select_size}'
+if not os.path.exists(sub_datadir):
+	os.makedirs(sub_datadir)
 
 # Data directory for the previous iteration
-previous_datadir = ''
+prev_datadir = ''
 if select_size not in ['0']:
-	previous_datadir = datadir + lang + '/' + initial_size + '/' + seed + '/' + method + '/' + select_interval + '/select' + str(int(select_size) - int(select_interval)) + '/'
+	prev_datadir = f'{datadir}/{lang}/{initial_size}/{seed}/{method}/{select_interval}/select{int(select_size) - int(select_interval)}'
 
-	os.system('cat ' + previous_datadir + 'train.' + initial_size + '.src ' + previous_datadir + '/increment.src >' + sub_datadir + 'train.' + initial_size + '.src')
-	os.system('cat ' + previous_datadir + 'train.' + initial_size + '.tgt ' + previous_datadir + '/increment.tgt >' + sub_datadir + 'train.' + initial_size + '.tgt')
-	os.system('cp ' + previous_datadir + 'residual.src ' + sub_datadir + 'select.' + initial_size + '.src')
-	os.system('cp ' + previous_datadir + 'residual.tgt ' + sub_datadir + 'select.' + initial_size + '.tgt')
-
+	os.system(f'cat {prev_datadir}/train.{initial_size}.src {prev_datadir}/increment.src > {sub_datadir}/train.{initial_size}.src')
+	os.system(f'cat {prev_datadir}/train.{initial_size}.tgt {prev_datadir}/increment.tgt > {sub_datadir}/train.{initial_size}.tgt')
+	os.system(f'cp {prev_datadir}/residual.src {sub_datadir}/select.{initial_size}.src')
+	os.system(f'cp {prev_datadir}/residual.tgt {sub_datadir}/select.{initial_size}.tgt')
 
 ### Gathering data ###
 def gather_data(train, test, select = None):   # *_tgt files 
@@ -246,8 +242,8 @@ def build(model_filename, dictionaries, train_words, test_words, select_words, s
 		select_sorted_morphs = [z[1] for z in confidence_data]
 		select_sorted_confidence = [z[2] for z in confidence_data]
 
-		increment_src = open(sub_datadir + 'increment.src', 'w')
-		increment_tgt = open(sub_datadir + 'increment.tgt', 'w')
+		increment_src = open(f'{sub_datadir}/increment.src', 'w')
+		increment_tgt = open(f'{sub_datadir}/increment.tgt', 'w')
 		n_toks = 0
 		i = 0
 		while n_toks < int(select_interval):
@@ -260,8 +256,8 @@ def build(model_filename, dictionaries, train_words, test_words, select_words, s
 
 		residual_words = select_sorted_words[i : ]
 		residual_morphs = select_sorted_morphs[i: ]
-		residual_src = open(sub_datadir + 'residual.src', 'w')
-		residual_tgt = open(sub_datadir + 'residual.tgt', 'w')
+		residual_src = open(f'{sub_datadir}/residual.src', 'w')
+		residual_tgt = open(f'{sub_datadir}/residual.tgt', 'w')
 		for i in range(len(residual_words)):
 			word = residual_words[i]
 			morphs = '!'.join(residual_morphs[i])
@@ -353,18 +349,18 @@ def F1(gold_word, pred_word):
 
 def mainCRF():
 
-	test_src = datadir + lang + '/test.full.src'
-	test_tgt = datadir + lang + '/test.full.tgt'
+	test_src = f'{datadir}/{lang}/test.full.src'
+	test_tgt = f'{datadir}/{lang}/test.full.tgt'
 
-	train_src = sub_datadir + 'train.' + initial_size + '.src'
-	train_tgt = sub_datadir + 'train.' + initial_size + '.tgt'
-	select_src = sub_datadir + 'select.' + initial_size + '.src'
-	select_tgt = sub_datadir + 'select.' + initial_size + '.tgt'
+	train_src = f'{sub_datadir}/train.{initial_size}.src'
+	train_tgt = f'{sub_datadir}/train.{initial_size}.tgt'
+	select_src = f'{sub_datadir}/select.{initial_size}.src'
+	select_tgt = f'{sub_datadir}/select.{initial_size}.tgt'
 
-	test_pred = sub_datadir + 'test.full.pred'
-	select_pred = sub_datadir + 'select.' + initial_size + '.pred'
+	test_pred = f'{sub_datadir}/test.full.pred'
+	select_pred = f'{sub_datadir}/select.{initial_size}.pred'
 
-	model_filename = sub_datadir + 'crf.model'
+	model_filename = f'{sub_datadir}/crf.model'
 
 	if os.path.exists(select_src):
 		dictionaries, train_words, test_words, select_words, train_morphs, test_morphs, select_morphs = gather_data(train_tgt, test_tgt, select_tgt)
@@ -391,7 +387,7 @@ def mainCRF():
 
 
 	# Overall evaluation metrics
-	evaluation_file = sub_datadir + 'eval.txt'
+	evaluation_file = f'{sub_datadir}/eval.txt'
 	precision_scores = []
 	recall_scores = []
 	f1_scores = []
