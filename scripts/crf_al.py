@@ -123,12 +123,12 @@ def get_char_features(bounded_word, i, delta):
 	char_dict = dict()
 
 	for j in range(delta):
-		char_dict['right_' + bounded_word[i:i + j + 1]] = 1
+		char_dict['right_' + bounded_word[i:i+j+1]] = 1
 
 	for j in range(delta):
 		if i - j - 1 < 0: 
 			break
-		char_dict['left_' + bounded_word[i - j - 1:i]] = 1
+		char_dict['left_' + bounded_word[i-j-1:i]] = 1
 
 	char_dict['pos_start_' + str(i)] = 1  # extra feature: left index of the letter in the word
 
@@ -167,10 +167,6 @@ def get_features(words, bmes, delta):
 		word_chars.append(chars)
 
 	return X, Y, word_chars
-
-def datafile(filename, data):
-	with open(filename, 'w') as T:
-		T.write('\n'.join(data))
 
 ## Sorting data based on confidence
 def sort_confidence(select_words, select_morphs, confscores, modelname):
@@ -315,37 +311,43 @@ def reconstruct_predictions(pred_labels, words):
 
 	return predictions
 
-# Save data and predictions
+# Save predictions
 def save_predictions(predictions, file_path):
 	with io.open(file_path, 'w', encoding = 'utf-8') as f:
 		for tok in predictions:
 			tok = '!'.join(m for m in tok)
 			f.write(' '.join(c for c in tok) + '\n')
 
-# F1 score as the evaluation metric
-def F1(gold_word, pred_word):
+# Evaluate predictions with statistical metrics (precision, recall, F1 score)
+def calculate_metrics(y_true, y_pred):
+	correct_total = sum(1 for m in y_pred if m in y_true)
 
-	correct_total = 0
+	if not y_pred:
+		return 0, 0, 0
 
-	for m in pred_word:
-		if m in gold_word:
-			correct_total += 1
+	precision = correct_total / len(y_pred)
+	recall = correct_total / len(y_true)
 
-	gold_total = len(gold_word)
-	pred_total = len(pred_word)
+	f1 = 2 * (precision * recall) / (precision + recall) if precision + recall != 0 else 0
 
-	precision = correct_total / pred_total
-	recall = correct_total / gold_total
+	return round(precision * 100, 2), round(recall * 100, 2), round(f1 * 100, 2)
 
-	F1 = 0
+def evaluate_predictions(gold_word, pred_word):
+	precision_scores = []
+	recall_scores = []
+	f1_scores = []
 
-	try:
-		F1 = 2 * (precision * recall) / (precision + recall)
-		F1 = round(F1 * 100, 2)
-	except:
-		F1 = 0
+	for i in range(len(pred_word)):
+		precision, recall, f1 = calculate_metrics(gold_word[i], pred_word[i])
+		precision_scores.append(precision)
+		recall_scores.append(recall)
+		f1_scores.append(f1)
 
-	return round(precision * 100, 2), round(recall * 100, 2), F1
+	average_precision = round(statistics.mean(precision_scores), 2)
+	average_recall = round(statistics.mean(recall_scores), 2)
+	average_f1 = round(statistics.mean(f1_scores), 2)
+
+	return average_precision, average_recall, average_f1
 
 def main():
 
@@ -371,40 +373,30 @@ def main():
 	# Gather words, morphs, and bmes
 	data = process_data(paths['train_tgt'], paths['test_tgt'], paths['select_tgt']) # data = {train/test/select: {words: [], morphs: [], bmes: {}}}
 	
-	# Build and evaluate the model. Reformat output of model into readable format
+	# Build and evaluate the model
 	Y_test_predict, Y_select_predict = build_and_evaluate_crf(sub_datadir, data, args.d, args.select_interval)
-	test_predictions = reconstruct_predictions(Y_test_predict, data['test']['words'])
 
 	# Outputting predictions for the test and the select file
+	test_predictions = reconstruct_predictions(Y_test_predict, data['test']['words'])
 	save_predictions(test_predictions, paths['test_pred'])
+
 	if os.path.exists(paths['select_src']):
 		select_predictions = reconstruct_predictions(Y_select_predict, data['select']['words'])				
 		save_predictions(select_predictions, paths['select_pred'])
 
 	# Overall evaluation metrics
-	precision_scores = []
-	recall_scores = []
-	f1_scores = []
-	#print(f'{len(test_predictions)=}\n{len(data['test']['morphs'])=}')
-	for i in range(len(test_predictions)):
-		y_true = data['test']['morphs'][i]
-		y_pred = test_predictions[i]
-		precision, recall, f1 = F1(y_true, y_pred)
-		precision_scores.append(precision)
-		recall_scores.append(recall)
-		f1_scores.append(f1)
-
-	average_precision = round(statistics.mean(precision_scores), 2)
-	average_recall = round(statistics.mean(recall_scores), 2)
-	average_f1 = round(statistics.mean(f1_scores), 2)
-
+	average_precision, average_recall, average_f1 = evaluate_predictions(data['test']['morphs'], test_predictions)
 	with open(paths['eval_file'], 'w') as f:
-		f.write('Precision: ' + str(average_precision) + '\n')
-		f.write('Recall: ' + str(average_recall) + '\n')
-		f.write('F1: ' + str(average_f1) + '\n')
+		f.write(f'Precision: {average_precision}\n')
+		f.write(f'Recall: {average_recall}\n')
+		f.write(f'F1: {average_f1}\n')
 
-	print('eval file generated')
-	print(args.lang, args.initial_size, average_precision, average_recall, average_f1)
+	print('Eval File Generated:')
+	print(f'  Language: {args.lang}')
+	print(f'  Initial Size: {args.initial_size}')
+	print(f'  Average Precision: {average_precision}')
+	print(f'  Average Recall: {average_recall}')
+	print(f'  Average F1 Score: {average_f1}')
 
 if __name__ == '__main__':
 	main()
