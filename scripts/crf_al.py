@@ -12,157 +12,165 @@ import pickle
 import io, os, sys
 import statistics
 import json
-from pathlib import Path
 from scipy.special import rel_entr
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--datadir', type = str, default = 'data', help = 'path to data')
-parser.add_argument('--lang', type = str, help = 'language')
-parser.add_argument('--initial_size', type = str, default = '100', help = 'data initial_size to start AL iteration')
-parser.add_argument('--seed', type = str, default = '0', help = 'different initial training sets')
-parser.add_argument('--method', type = str, default = 'al')
-parser.add_argument('--select_interval', type = str, default = '50', help = 'how much data to select in each AL iteration; 50, 100, maybe larger')
-parser.add_argument('--select_size', type = str, default = '0', help = 'how much data have selected from all AL iterations thus far')
-parser.add_argument('--d', type = int, default = 4, help = 'delta; context window to consider for feature set construction')
-parser.add_argument('--e', type = float, default = 0.001, help = 'epsilon parameter for training CRF; may not use this in training')
-parser.add_argument('--i', type = int, default = 100, help = 'maximum number of iterations for training CRF')
+def parse_arguments():
 
-args = parser.parse_args()
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--datadir', type = str, default = 'data', help = 'path to data')
+	parser.add_argument('--lang', type = str, help = 'language')
+	parser.add_argument('--initial_size', type = str, default = '100', help = 'data initial_size to start AL iteration')
+	parser.add_argument('--seed', type = str, default = '0', help = 'different initial training sets')
+	parser.add_argument('--method', type = str, default = 'al')
+	parser.add_argument('--select_interval', type = str, default = '50', help = 'how much data to select in each AL iteration; 50, 100, maybe larger')
+	parser.add_argument('--select_size', type = str, default = '0', help = 'how much data have selected from all AL iterations thus far')
+	parser.add_argument('--d', type = int, default = 4, help = 'delta; context window to consider for feature set construction')
+	parser.add_argument('--e', type = float, default = 0.001, help = 'epsilon parameter for training CRF; may not use this in training')
+	parser.add_argument('--i', type = int, default = 100, help = 'maximum number of iterations for training CRF')
 
-datadir = args.datadir
-lang = args.lang
-initial_size = args.initial_size
-seed = args.seed
-method = args.method
-select_interval = args.select_interval
-select_size = args.select_size
-delta = args.d
-epsilon = args.e
-max_iterations = args.i
+	return parser.parse_args()
 
-# Data directory for the current iteration
-sub_datadir = f'{datadir}/{lang}/{initial_size}/{seed}/{method}/{select_interval}/select{select_size}'
-if not os.path.exists(sub_datadir):
-	os.makedirs(sub_datadir)
+def setup_datadirs(args):
+	# Data directory for the current iteration
+	sub_datadir = f'{args.datadir}/{args.lang}/{args.initial_size}/{args.seed}/{args.method}/{args.select_interval}/select{args.select_size}'
+	if not os.path.exists(sub_datadir):
+		os.makedirs(sub_datadir)
 
-# Data directory for the previous iteration
-prev_datadir = ''
-if select_size not in ['0']:
-	prev_datadir = f'{datadir}/{lang}/{initial_size}/{seed}/{method}/{select_interval}/select{int(select_size) - int(select_interval)}'
+	# Data directory for the previous iteration
+	prev_datadir = ''
+	if args.select_size not in ['0']:
+		prev_datadir = f'{args.datadir}/{args.lang}/{args.initial_size}/{args.seed}/{args.method}/{args.select_interval}/select{int(args.select_size) - int(args.select_interval)}'
 
-	os.system(f'cat {prev_datadir}/train.{initial_size}.src {prev_datadir}/increment.src > {sub_datadir}/train.{initial_size}.src')
-	os.system(f'cat {prev_datadir}/train.{initial_size}.tgt {prev_datadir}/increment.tgt > {sub_datadir}/train.{initial_size}.tgt')
-	os.system(f'cp {prev_datadir}/residual.src {sub_datadir}/select.{initial_size}.src')
-	os.system(f'cp {prev_datadir}/residual.tgt {sub_datadir}/select.{initial_size}.tgt')
+		# Training set = previous training set + previous increment
+		os.system(f'cat {prev_datadir}/train.{args.initial_size}.src {prev_datadir}/increment.src > {sub_datadir}/train.{args.initial_size}.src')
+		os.system(f'cat {prev_datadir}/train.{args.initial_size}.tgt {prev_datadir}/increment.tgt > {sub_datadir}/train.{args.initial_size}.tgt')
+		# Unlabeled set = previous residual
+		os.system(f'cp {prev_datadir}/residual.src {sub_datadir}/select.{args.initial_size}.src')
+		os.system(f'cp {prev_datadir}/residual.tgt {sub_datadir}/select.{args.initial_size}.tgt')
+
+	return sub_datadir
 
 ### Gathering data ###
-def gather_data(train, test, select = None):   # *_tgt files 
 
-	### COLLECT DATA AND LABELLING ###
-	train_dict = {}
-	test_dict = {}
-	select_dict = {}
+def get_line_morphs(line):
+	toks = line.strip().split()
+	morphs = (''.join(c for c in toks)).split('!')
+	word = ''.join(m for m in morphs)
+	return word, morphs
 
-	input_files = [train, test, select] 
-	dictionaries = (train_dict, test_dict, select_dict)
+def get_bmes_labels(morphs):
+	label = ''
 
-	train_words = []
-	test_words = []
-	select_words = []
+	for morph in morphs:
+		if len(morph) == 1:
+			label += 'S'
+		else:
+			label += 'B'
 
-	train_morphs = []
-	test_morphs = []
-	select_morphs = []
+			for _ in range(len(morph)-2):
+				label += 'M'
 
-	counter = 0
-	
-	for file in input_files:
-		data = []
+			label += 'E'
 
-		with io.open(file, encoding = 'utf-8') as f:
+	return label
 
-			for line in f:
-				toks = line.strip().split()
-				morphs = (''.join(c for c in toks)).split('!')
-				word = ''.join(m for m in morphs)
+def load_file_data(file):
+	words = []
+	morphs = []
+	bmes = dict()
 
-				if file == train:
-					train_words.append(word)
-					train_morphs.append(morphs)
+	if not file or not os.path.exists(file):
+		return words, morphs, bmes
 
-				if file == test:
-					test_words.append(word)
-					test_morphs.append(morphs)
+	with io.open(file, encoding='utf-8') as f:
+		for line in f:
+			word, line_morphs = get_line_morphs(line)
+			bmes_labels = get_bmes_labels(line_morphs)
 
-				if file == select:
-					select_words.append(word)
-					select_morphs.append(morphs)
+			words.append(word)
+			morphs.append(line_morphs)
+			bmes[word] = bmes_labels
+		
+	return words, morphs, bmes
 
-				label = ''
+def process_data(train_path, test_path, select_path = None):   # *.tgt files 
 
-				for morph in morphs:
-					if len(morph) == 1:
-						label += 'S'
-					else:
-						label += 'B'
+	train_words, train_morphs, train_bmes = load_file_data(train_path)
+	test_words, test_morphs, test_bmes = load_file_data(test_path)
+	select_words, select_morphs, select_bmes = load_file_data(select_path)
 
-						for i in range(len(morph)-2):
-							label += 'M'
-
-						label += 'E'
-
-				w_dict = {}
-				dictionaries[counter][''.join(m for m in morphs)] = label
-
-		counter += 1
-
-	return dictionaries, train_words, test_words, select_words, train_morphs, test_morphs, select_morphs
-
+	return {
+		'train': {
+			'words': train_words,
+			'morphs': train_morphs,
+			'bmes': train_bmes
+		},
+		'test': {
+			'words': test_words,
+			'morphs': test_morphs,
+			'bmes': test_bmes
+		},
+		'select': {
+			'words': select_words,
+			'morphs': select_morphs,
+			'bmes': select_bmes
+		}
+	}
 
 ### Computing features ###
 
-def features(word_dictonary, original_words, delta):
+def get_char_features(bounded_word, i, delta):
+	char_dict = dict()
 
-	X = [] # list (learning set) of list (word) of dics (chars), INPUT for crf
-	Y = [] # list (learning set) of list (word) of labels (chars), INPUT for crf
-	words = [] # list (learning set) of list (word) of chars
+	for j in range(delta):
+		char_dict['right_' + bounded_word[i:i + j + 1]] = 1
 
-	for word in original_words:
-		word_plus = '[' + word + ']' # <w> and <\w> replaced with [ and ]
-		word_list = [] # container of the dic of each character in a word
-		word_label_list = [] # container of the label of each character in a word
+	for j in range(delta):
+		if i - j - 1 < 0: 
+			break
+		char_dict['left_' + bounded_word[i - j - 1:i]] = 1
+
+	char_dict['pos_start_' + str(i)] = 1  # extra feature: left index of the letter in the word
+
+	return char_dict
+
+def get_word_features(word, bmes, delta):
+	bounded_word = f'[{word}]' # <w> and <\w> replaced with [ and ], respectively
+	word_X = [] # list (word) of dicts (chars)
+	word_Y = [] # list (word) of labels (chars)
+	word_chars = [] # list (learning set) of list (word) of chars
 	
-		for i in range(len(word_plus)):
-			char_dic = {} # dic of features of the actual char
-		
-			for j in range(delta):
-				char_dic['right_' + word_plus[i:i + j + 1]] = 1
-		
-			for j in range(delta):
-				if i - j - 1 < 0: break
-				char_dic['left_' + word_plus[i - j - 1:i]] = 1
-			char_dic['pos_start_' + str(i)] = 1  # extra feature: left index of the letter in the word
-			# char_dic['pos_end_' + str(len(word) - i)] = 1  # extra feature: right index of the letter in the word
-		#    if word_plus[i] in ['a', 's', 'o']: # extra feature: stressed characters (discussed in the report)
-		#        char_dic[str(word_plus[i])] = 1
-			word_list.append(char_dic)
-		
-			if word_plus[i] == '[': word_label_list.append('[') # labeling start and end
-			elif word_plus[i] == ']': word_label_list.append(']')
-			else: word_label_list.append(word_dictonary[word][i-1]) # labeling chars
+	for i in range(len(bounded_word)):
+		char_dict = get_char_features(bounded_word, i, delta)
+		word_X.append(char_dict)
 
-		X.append(word_list)
-		Y.append(word_label_list)
-		temp_list_word = [char for char in word_plus]
-		words.append(temp_list_word)
+		char = bounded_word[i]
+		word_chars.append(char)
 
-	return (X, Y, words)
+		if bounded_word[i] in ['[', ']']: # labeling start and end
+			word_Y.append(char)
+		else: # labeling chars
+			word_Y.append(bmes[word][i - 1])
 
+	return word_X, word_Y, word_chars
+
+def get_features(words, bmes, delta):
+
+	X = [] # list (learning set) of list (word) of dicts (chars), INPUT for crf
+	Y = [] # list (learning set) of list (word) of labels (chars), INPUT for crf
+	word_chars = [] # list (learning set) of list (word) of chars
+
+	for word in words:
+		features, labels, chars = get_word_features(word, bmes, delta)
+		X.append(features)
+		Y.append(labels)
+		word_chars.append(chars)
+
+	return X, Y, word_chars
 
 def datafile(filename, data):
 	with open(filename, 'w') as T:
 		T.write('\n'.join(data))
-
 
 ## Sorting data based on confidence
 def sort_confidence(select_words, select_morphs, confscores, modelname):
@@ -190,22 +198,10 @@ def sort_confidence(select_words, select_morphs, confscores, modelname):
 
 	return with_confidence
 
-
 ### Building models ###
-def build(model_filename, dictionaries, train_words, test_words, select_words, select_morphs, delta, epsilon, max_iterations):
 
-	train_dict, test_dict, select_dict = dictionaries
+def build_crf(sub_datadir, X_train, Y_train):
 
-	X_train, Y_train, words_train = features(train_dict, train_words, delta)
-	X_test, Y_test, words_test = features(test_dict, test_words, delta)
-	if select_words != []:
-		X_select, Y_select, words_select = features(select_dict, select_words, delta)
-
-	### train ###
-
-#    crf = sklearn_crfsuite.CRF(algorithm = 'ap', epsilon = epsilon, max_iterations = max_iterations)
-#    crf.fit(X_train, Y_train, X_dev=X_dev, y_dev=Y_dev)
-	
 	crf = sklearn_crfsuite.CRF(
 		algorithm='lbfgs',
 		c1=0.1,
@@ -213,20 +209,17 @@ def build(model_filename, dictionaries, train_words, test_words, select_words, s
 		max_iterations=100,
 		all_possible_transitions=True
 	)
-
 	crf.fit(X_train, Y_train)
+	pickle.dump(crf, io.open(f'{sub_datadir}/crf.model', 'wb'))
 
-	pickle.dump(crf, io.open(model_filename, "wb"))
+	return crf
 
-	print('training done')
-
-	### Evaluating ###
-
+def evaluate_crf(crf, sub_datadir, data, X_test, X_select, select_interval):
 	Y_test_predict = crf.predict(X_test)
 	Y_select_predict = []
-	if select_words != []:
+	if data['select']['words'] != []:
 		Y_select_predict = crf.predict(X_select)
-		Y_select_predicted_sequences = [list(zip(select_words[i], Y_select_predict[i])) for i in range(len(Y_select_predict))]
+		Y_select_predicted_sequences = [list(zip(data['select']['words'][i], Y_select_predict[i])) for i in range(len(Y_select_predict))]
 
 		# get confidence score
 		all_probs = crf.predict_marginals(X_select)
@@ -234,7 +227,7 @@ def build(model_filename, dictionaries, train_words, test_words, select_words, s
 		for s, word in enumerate(Y_select_predicted_sequences):
 			confidences.append(sum(all_probs[s][i][wordpair[1]] for i, wordpair in enumerate(word))/len(word))
 
-		confidence_data = sort_confidence(select_words, select_morphs, confidences, 'CRF')
+		confidence_data = sort_confidence(data['select']['words'], data['select']['morphs'], confidences, 'CRF')
 		print('selection predictions and confidence scores generated')
 
 		# generate increment.src and residual.src
@@ -266,43 +259,49 @@ def build(model_filename, dictionaries, train_words, test_words, select_words, s
 
 	return Y_test_predict, Y_select_predict
 
+def build_and_evaluate_crf(sub_datadir, data, delta, select_interval):
+	
+	X_train, Y_train, _ = get_features(data['train']['words'], data['train']['bmes'], delta)
+	X_test, _, _ = get_features(data['test']['words'], data['test']['bmes'], delta)
+	if data['select']['words']:
+		X_select, _, _ = get_features(data['select']['words'], data['select']['bmes'], delta)
+
+	crf = build_crf(sub_datadir, X_train, Y_train)
+	
+	return evaluate_crf(crf, sub_datadir, data, X_test, X_select, select_interval)
 
 # Going from predicted labels to predicted morphemes
-def reconstruct(pred_labels, words):
+def reconstruct_predictions(pred_labels, words):
 
-	pred_list = []
+	predictions = []
 
-	for idx in range(len(pred_labels)):
-		pred = pred_labels[idx]
-		word = words[idx]
+	for i in range(len(pred_labels)):
+		pred = pred_labels[i]
+		word = words[i]
 
-		labels = ''.join(w for w in pred[1 : -1])
-		labels = labels.split('E')
-	
-		if '' in labels:
-			labels.remove('')
+		# Remove '[' and ']' and split by end markers (E)
+		labels = [label for label in ''.join(w for w in pred[1:-1]).split('E') if label]
+		
 		new_labels = []
-
 		for tok in labels:
+			
+			# If nothing is marked single, then it's fine; add back the end marker
 			if 'S' not in tok:
 				tok += 'E'
 				new_labels.append(tok)
 
+			# Otherwise, if the tok only contains single markers, then add that many single markers
+			elif (s_count := tok.count('S')) == len(tok):
+				new_labels.extend(['S'] * s_count)
+			
+			# Otherwise, append an S marker for the single morphemes or concatenate an end marker to each morpheme and add it
 			else:
-				c = tok.count('S')
-
-				if c == len(tok):
-					for z in range(c):
+				tok = tok.split('S')
+				for bmes_label in tok:
+					if bmes_label == '':
 						new_labels.append('S')
-
-				else:
-					tok = tok.split('S')
-
-					for z in tok:
-						if z == '':
-							new_labels.append('S')
-						else:
-							new_labels.append(z + 'E')
+					else:
+						new_labels.append(bmes_label + 'E')
 
 		morphs = []
 
@@ -315,9 +314,9 @@ def reconstruct(pred_labels, words):
 				pre = len(''.join(z for z in new_labels[ : i]))
 				morphs.append(word[pre: pre + l])
 
-		pred_list.append(morphs)
+		predictions.append(morphs)
 
-	return pred_list
+	return predictions
 
 # F1 score as the evaluation metric
 def F1(gold_word, pred_word):
@@ -344,32 +343,34 @@ def F1(gold_word, pred_word):
 
 	return round(precision * 100, 2), round(recall * 100, 2), F1
 
+def main():
 
-### Building models ###
+	args = parse_arguments()
+	sub_datadir = setup_datadirs(args)
 
-def mainCRF():
+	# Data gathering file paths
+	train_tgt = f'{sub_datadir}/train.{args.initial_size}.tgt'
+	test_tgt = f'{args.datadir}/{args.lang}/test.full.tgt'
+	select_tgt = f'{sub_datadir}/select.{args.initial_size}.tgt'
 
-	test_src = f'{datadir}/{lang}/test.full.src'
-	test_tgt = f'{datadir}/{lang}/test.full.tgt'
-
-	train_src = f'{sub_datadir}/train.{initial_size}.src'
-	train_tgt = f'{sub_datadir}/train.{initial_size}.tgt'
-	select_src = f'{sub_datadir}/select.{initial_size}.src'
-	select_tgt = f'{sub_datadir}/select.{initial_size}.tgt'
-
+	# Prediction saving file paths
 	test_pred = f'{sub_datadir}/test.full.pred'
-	select_pred = f'{sub_datadir}/select.{initial_size}.pred'
+	select_pred = f'{sub_datadir}/select.{args.initial_size}.pred'
 
-	model_filename = f'{sub_datadir}/crf.model'
+	# Source file paths
+	test_src = f'{args.datadir}/{args.lang}/test.full.src'
+	train_src = f'{sub_datadir}/train.{args.initial_size}.src'
+	select_src = f'{sub_datadir}/select.{args.initial_size}.src'	
 
-	if os.path.exists(select_src):
-		dictionaries, train_words, test_words, select_words, train_morphs, test_morphs, select_morphs = gather_data(train_tgt, test_tgt, select_tgt)
-	else:
-		dictionaries, train_words, test_words, select_words, train_morphs, test_morphs, select_morphs = gather_data(train_tgt, test_tgt, select=None)
+	# Gather words, morphs, and bmes
+	
+	data = process_data(train_tgt, test_tgt, select_tgt) # data = {train/test/select: {words: [], morphs: [], bmes: {}}}
+	
+	Y_test_predict, Y_select_predict = build_and_evaluate_crf(sub_datadir, data, args.d, args.select_interval)
 
-	Y_test_predict, Y_select_predict = build(model_filename, dictionaries, train_words, test_words, select_words, select_morphs, delta, epsilon, max_iterations)
+	test_predictions = reconstruct_predictions(Y_test_predict, data['test']['words'])
 
-	test_predictions = reconstruct(Y_test_predict, test_words)
+
 
 	## Outputting predictions for the test and the select file
 	with io.open(test_pred, 'w', encoding = 'utf-8') as f:
@@ -378,7 +379,7 @@ def mainCRF():
 			f.write(' '.join(c for c in tok) + '\n')
 
 	if os.path.exists(select_src):
-		select_predictions = reconstruct(Y_select_predict, select_words)				
+		select_predictions = reconstruct_predictions(Y_select_predict, data['select']['words'])				
 			
 		with io.open(select_pred, 'w', encoding = 'utf-8') as f:
 			for tok in select_predictions:
@@ -392,9 +393,9 @@ def mainCRF():
 	recall_scores = []
 	f1_scores = []
 	print(len(test_predictions))
-	print(len(test_morphs))
+	print(len(data['test']['morphs']))
 	for i in range(len(test_predictions)):
-		y_true = test_morphs[i]
+		y_true = data['test']['morphs'][i]
 		y_pred = test_predictions[i]
 		precision, recall, f1 = F1(y_true, y_pred)
 		precision_scores.append(precision)
@@ -411,8 +412,7 @@ def mainCRF():
 		f.write('F1: ' + str(average_f1) + '\n')
 
 	print('eval file generated')
-	print(lang, initial_size, average_precision, average_recall, average_f1)
+	print(args.lang, args.initial_size, average_precision, average_recall, average_f1)
 
-
-mainCRF()
-
+if __name__ == '__main__':
+	main()
