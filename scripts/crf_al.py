@@ -182,18 +182,14 @@ def sort_confidence(select_words, select_morphs, confscores, modelname):
 	
 	SEPARATOR = '|'
 
-	with_confidence = list(zip(select_words, select_morphs, confscores))
-	with_confidence.sort(key = lambda x: x[2])
-	sorted_words = [z[0] for z in with_confidence]
-	sorted_morphs = [z[1] for z in with_confidence]
-	sorted_confidence = [z[2] for z in with_confidence]
+	# Sort words/morphs by their confidence
+	with_confidence = sorted(list(zip(select_words, select_morphs, confscores)), key=lambda x: x[2])
+	sorted_words, sorted_morphs, sorted_confidence = zip(*with_confidence)
 
 	datastring = []
 	for i in range(len(sorted_words)):
-		word = sorted_words[i]
-		morphs = sorted_morphs[i]
-		pairs = list(zip(word, morphs))
-		info = ' '.join([pair[0] + SEPARATOR + pair[1] for pair in pairs]) + '\t' + str(sorted_confidence[i])
+		pairs = list(zip(sorted_words[i], sorted_morphs[i]))
+		info = ' '.join(pair[0] + SEPARATOR + pair[1] for pair in pairs) + '\t' + str(sorted_confidence[i])
 		datastring.append(info)
 
 	return with_confidence
@@ -214,6 +210,7 @@ def build_crf(sub_datadir, X_train, Y_train):
 
 	return crf
 
+# TODO!: refactor
 def evaluate_crf(crf, sub_datadir, data, X_test, X_select, select_interval):
 	Y_test_predict = crf.predict(X_test)
 	Y_select_predict = []
@@ -318,6 +315,13 @@ def reconstruct_predictions(pred_labels, words):
 
 	return predictions
 
+# Save data and predictions
+def save_predictions(predictions, file_path):
+	with io.open(file_path, 'w', encoding = 'utf-8') as f:
+		for tok in predictions:
+			tok = '!'.join(m for m in tok)
+			f.write(' '.join(c for c in tok) + '\n')
+
 # F1 score as the evaluation metric
 def F1(gold_word, pred_word):
 
@@ -348,52 +352,40 @@ def main():
 	args = parse_arguments()
 	sub_datadir = setup_datadirs(args)
 
-	# Data gathering file paths
-	train_tgt = f'{sub_datadir}/train.{args.initial_size}.tgt'
-	test_tgt = f'{args.datadir}/{args.lang}/test.full.tgt'
-	select_tgt = f'{sub_datadir}/select.{args.initial_size}.tgt'
-
-	# Prediction saving file paths
-	test_pred = f'{sub_datadir}/test.full.pred'
-	select_pred = f'{sub_datadir}/select.{args.initial_size}.pred'
-
-	# Source file paths
-	test_src = f'{args.datadir}/{args.lang}/test.full.src'
-	train_src = f'{sub_datadir}/train.{args.initial_size}.src'
-	select_src = f'{sub_datadir}/select.{args.initial_size}.src'	
+	paths = {
+		# Data gathering file paths
+		'train_tgt': f'{sub_datadir}/train.{args.initial_size}.tgt',
+		'test_tgt': f'{args.datadir}/{args.lang}/test.full.tgt',
+		'select_tgt': f'{sub_datadir}/select.{args.initial_size}.tgt',
+		# Prediction saving file paths
+		'test_pred': f'{sub_datadir}/test.full.pred',
+		'select_pred': f'{sub_datadir}/select.{args.initial_size}.pred',
+		# Source file paths
+		'test_src': f'{args.datadir}/{args.lang}/test.full.src',
+		'train_src': f'{sub_datadir}/train.{args.initial_size}.src',
+		'select_src': f'{sub_datadir}/select.{args.initial_size}.src',
+		# Evaluation file paths
+		'eval_file': f'{sub_datadir}/eval.txt'	
+	}
 
 	# Gather words, morphs, and bmes
+	data = process_data(paths['train_tgt'], paths['test_tgt'], paths['select_tgt']) # data = {train/test/select: {words: [], morphs: [], bmes: {}}}
 	
-	data = process_data(train_tgt, test_tgt, select_tgt) # data = {train/test/select: {words: [], morphs: [], bmes: {}}}
-	
+	# Build and evaluate the model. Reformat output of model into readable format
 	Y_test_predict, Y_select_predict = build_and_evaluate_crf(sub_datadir, data, args.d, args.select_interval)
-
 	test_predictions = reconstruct_predictions(Y_test_predict, data['test']['words'])
 
-
-
-	## Outputting predictions for the test and the select file
-	with io.open(test_pred, 'w', encoding = 'utf-8') as f:
-		for tok in test_predictions:
-			tok = '!'.join(m for m in tok)
-			f.write(' '.join(c for c in tok) + '\n')
-
-	if os.path.exists(select_src):
+	# Outputting predictions for the test and the select file
+	save_predictions(test_predictions, paths['test_pred'])
+	if os.path.exists(paths['select_src']):
 		select_predictions = reconstruct_predictions(Y_select_predict, data['select']['words'])				
-			
-		with io.open(select_pred, 'w', encoding = 'utf-8') as f:
-			for tok in select_predictions:
-				tok = '!'.join(m for m in tok)
-				f.write(' '.join(c for c in tok) + '\n')
-
+		save_predictions(select_predictions, paths['select_pred'])
 
 	# Overall evaluation metrics
-	evaluation_file = f'{sub_datadir}/eval.txt'
 	precision_scores = []
 	recall_scores = []
 	f1_scores = []
-	print(len(test_predictions))
-	print(len(data['test']['morphs']))
+	#print(f'{len(test_predictions)=}\n{len(data['test']['morphs'])=}')
 	for i in range(len(test_predictions)):
 		y_true = data['test']['morphs'][i]
 		y_pred = test_predictions[i]
@@ -406,7 +398,7 @@ def main():
 	average_recall = round(statistics.mean(recall_scores), 2)
 	average_f1 = round(statistics.mean(f1_scores), 2)
 
-	with open(evaluation_file, 'w') as f:
+	with open(paths['eval_file'], 'w') as f:
 		f.write('Precision: ' + str(average_precision) + '\n')
 		f.write('Recall: ' + str(average_recall) + '\n')
 		f.write('F1: ' + str(average_f1) + '\n')
