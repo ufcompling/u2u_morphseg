@@ -14,6 +14,7 @@ import statistics
 import json
 from scipy.special import rel_entr
 
+### Set up arguments and datadirs ###
 def parse_arguments():
 
 	parser = argparse.ArgumentParser()
@@ -50,8 +51,7 @@ def setup_datadirs(args):
 
 	return sub_datadir
 
-### Gathering data ###
-
+### Gathering Data ###
 def get_line_morphs(line):
 	toks = line.strip().split()
 	morphs = (''.join(c for c in toks)).split('!')
@@ -117,8 +117,7 @@ def process_data(train_path, test_path, select_path = None):   # *.tgt files
 		}
 	}
 
-### Computing features ###
-
+### Computing Features ###
 def get_char_features(bounded_word, i, delta):
 	char_dict = dict()
 
@@ -168,8 +167,18 @@ def get_features(words, bmes, delta):
 
 	return X, Y, word_chars
 
-## Sorting data based on confidence
-def sort_confidence(select_words, select_morphs, confscores, modelname):
+### Sorting Data based on Confidence ###
+def get_confidence_scores(words, predictions, marginals):
+
+	Y_select_predicted_sequences = [list(zip(words[i], predictions[i])) for i in range(len(predictions))]
+
+	confscores = []
+	for s, word in enumerate(Y_select_predicted_sequences):
+		confscores.append(sum(marginals[s][i][wordpair[1]] for i, wordpair in enumerate(word))/len(word))
+
+	return confscores
+
+def sort_confidence(words, morphs, confscores):
 	'''sort auto-annotated words based on how "confident" 
 	the model was at it predictions of each character's label, 
 	by increasing "confidence", 
@@ -179,7 +188,7 @@ def sort_confidence(select_words, select_morphs, confscores, modelname):
 	SEPARATOR = '|'
 
 	# Sort words/morphs by their confidence
-	with_confidence = sorted(list(zip(select_words, select_morphs, confscores)), key=lambda x: x[2])
+	with_confidence = sorted(list(zip(words, morphs, confscores)), key=lambda x: x[2])
 	sorted_words, sorted_morphs, sorted_confidence = zip(*with_confidence)
 
 	datastring = []
@@ -190,7 +199,7 @@ def sort_confidence(select_words, select_morphs, confscores, modelname):
 
 	return with_confidence
 
-### Building models ###
+### Building Models ###
 
 def build_crf(sub_datadir, X_train, Y_train):
 
@@ -206,49 +215,44 @@ def build_crf(sub_datadir, X_train, Y_train):
 
 	return crf
 
-# TODO!: refactor
-def evaluate_crf(crf, sub_datadir, data, X_test, X_select, select_interval):
+def split_increment_residual(confidence_data, select_interval):
+
+	increment_data = confidence_data[:int(select_interval)]
+	residual_data = confidence_data[int(select_interval):]
+
+	return increment_data, residual_data
+
+def save_data(data, sub_datadir, file_name):
+	
+	words, morphs_list, _ = zip(*data)
+	
+	with open(f'{sub_datadir}/{file_name}.src', 'w') as src:
+		for word in words:
+			src.write(' '.join(w for w in word) + '\n')
+
+	with open(f'{sub_datadir}/{file_name}.tgt', 'w') as tgt:
+		for morphs in morphs_list:
+			seg_word = '!'.join(morphs)
+			tgt.write(' '.join(w for w in seg_word) + '\n')
+
+def evaluate_crf(crf, sub_datadir, data, X_test, select_interval, delta):
+
 	Y_test_predict = crf.predict(X_test)
+
 	Y_select_predict = []
-	if data['select']['words'] != []:
+	if data['select']['words']:
+		X_select, _, _ = get_features(data['select']['words'], data['select']['bmes'], delta)
 		Y_select_predict = crf.predict(X_select)
-		Y_select_predicted_sequences = [list(zip(data['select']['words'][i], Y_select_predict[i])) for i in range(len(Y_select_predict))]
 
-		# get confidence score
-		all_probs = crf.predict_marginals(X_select)
-		confidences = []
-		for s, word in enumerate(Y_select_predicted_sequences):
-			confidences.append(sum(all_probs[s][i][wordpair[1]] for i, wordpair in enumerate(word))/len(word))
+		# Get Confidence Data
+		marginals = crf.predict_marginals(X_select)
+		confscores = get_confidence_scores(data['select']['words'], Y_select_predict, marginals)
+		confidence_data = sort_confidence(data['select']['words'], data['select']['morphs'], confscores)
 
-		confidence_data = sort_confidence(data['select']['words'], data['select']['morphs'], confidences, 'CRF')
-		print('selection predictions and confidence scores generated')
-
-		# generate increment.src and residual.src
-		select_sorted_words = [z[0] for z in confidence_data]
-		select_sorted_morphs = [z[1] for z in confidence_data]
-		select_sorted_confidence = [z[2] for z in confidence_data]
-
-		increment_src = open(f'{sub_datadir}/increment.src', 'w')
-		increment_tgt = open(f'{sub_datadir}/increment.tgt', 'w')
-		n_toks = 0
-		i = 0
-		while n_toks < int(select_interval):
-			word = select_sorted_words[i]
-			morphs = '!'.join(select_sorted_morphs[i])
-			increment_src.write(' '.join(w for w in word) + '\n')
-			increment_tgt.write(' '.join(w for w in morphs) + '\n')
-			n_toks += 1
-			i += 1
-
-		residual_words = select_sorted_words[i : ]
-		residual_morphs = select_sorted_morphs[i: ]
-		residual_src = open(f'{sub_datadir}/residual.src', 'w')
-		residual_tgt = open(f'{sub_datadir}/residual.tgt', 'w')
-		for i in range(len(residual_words)):
-			word = residual_words[i]
-			morphs = '!'.join(residual_morphs[i])
-			residual_src.write(' '.join(w for w in word) + '\n')
-			residual_tgt.write(' '.join(w for w in morphs) + '\n')
+		# Generate increment.src and residual.src
+		increment_data, residual_data = split_increment_residual(confidence_data, select_interval)
+		save_data(increment_data, sub_datadir, 'increment')
+		save_data(residual_data, sub_datadir, 'residual')
 
 	return Y_test_predict, Y_select_predict
 
@@ -256,12 +260,10 @@ def build_and_evaluate_crf(sub_datadir, data, delta, select_interval):
 	
 	X_train, Y_train, _ = get_features(data['train']['words'], data['train']['bmes'], delta)
 	X_test, _, _ = get_features(data['test']['words'], data['test']['bmes'], delta)
-	if data['select']['words']:
-		X_select, _, _ = get_features(data['select']['words'], data['select']['bmes'], delta)
 
 	crf = build_crf(sub_datadir, X_train, Y_train)
 	
-	return evaluate_crf(crf, sub_datadir, data, X_test, X_select, select_interval)
+	return evaluate_crf(crf, sub_datadir, data, X_test, select_interval, delta)
 
 # Going from predicted labels to predicted morphemes
 def reconstruct_predictions(pred_labels, words):
@@ -391,7 +393,7 @@ def main():
 		f.write(f'Recall: {average_recall}\n')
 		f.write(f'F1: {average_f1}\n')
 
-	print('Eval File Generated:')
+	print('Complete!')
 	print(f'  Language: {args.lang}')
 	print(f'  Initial Size: {args.initial_size}')
 	print(f'  Average Precision: {average_precision}')
