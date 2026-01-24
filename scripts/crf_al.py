@@ -4,14 +4,10 @@ from sklearn import metrics
 from sklearn.metrics import precision_recall_fscore_support
 import sklearn_crfsuite
 import matplotlib.pyplot as plt
-import string
-import itertools
-import datetime
-import re, argparse
+import argparse
 import pickle
-import io, os, sys
+import io, os
 import statistics
-import json
 from scipy.special import rel_entr
 
 ### Set up arguments and datadirs ###
@@ -19,7 +15,7 @@ def parse_arguments():
 
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--datadir', type = str, default = 'data', help = 'path to data')
-	parser.add_argument('--lang', type = str, help = 'language')
+	parser.add_argument('--lang', type = str, default = 'lang', help = 'language')
 	parser.add_argument('--initial_size', type = str, default = '100', help = 'data initial_size to start AL iteration')
 	parser.add_argument('--seed', type = str, default = '0', help = 'different initial training sets')
 	parser.add_argument('--method', type = str, default = 'al')
@@ -42,7 +38,7 @@ def setup_datadirs(args):
 	if args.select_size not in ['0']:
 		prev_datadir = f'{args.datadir}/{args.lang}/{args.initial_size}/{args.seed}/{args.method}/{args.select_interval}/select{int(args.select_size) - int(args.select_interval)}'
 
-		# Training set = previous training set + previous increment
+		# Labeled set = previous training set + previous increment
 		os.system(f'cat {prev_datadir}/train.{args.initial_size}.src {prev_datadir}/increment.src > {sub_datadir}/train.{args.initial_size}.src')
 		os.system(f'cat {prev_datadir}/train.{args.initial_size}.tgt {prev_datadir}/increment.tgt > {sub_datadir}/train.{args.initial_size}.tgt')
 		# Unlabeled set = previous residual
@@ -178,36 +174,31 @@ def get_confidence_scores(words, predictions, marginals):
 
 	return confscores
 
-def sort_confidence(words, morphs, confscores):
-	'''sort auto-annotated words based on how "confident" 
-	the model was at it predictions of each character's label, 
-	by increasing "confidence", 
-	lower probability == less confidence.
-	Writes to file.'''
+def sort_by_confidence(words, morphs, confscores):
 	
-	SEPARATOR = '|'
-
 	# Sort words/morphs by their confidence
 	with_confidence = sorted(list(zip(words, morphs, confscores)), key=lambda x: x[2])
-	sorted_words, sorted_morphs, sorted_confidence = zip(*with_confidence)
 
-	datastring = []
-	for i in range(len(sorted_words)):
-		pairs = list(zip(sorted_words[i], sorted_morphs[i]))
-		info = ' '.join(pair[0] + SEPARATOR + pair[1] for pair in pairs) + '\t' + str(sorted_confidence[i])
-		datastring.append(info)
+	# For debugging:
+	# SEPARATOR = '|'
+	# sorted_words, sorted_morphs, sorted_confidence = zip(*with_confidence)
+	# datastring = []
+	# for i in range(len(sorted_words)):
+	# 	pairs = list(zip(sorted_words[i], sorted_morphs[i]))
+	# 	info = ' '.join(pair[0] + SEPARATOR + pair[1] for pair in pairs) + '\t' + str(sorted_confidence[i])
+	# 	datastring.append(info)
 
 	return with_confidence
 
 ### Building Models ###
 
-def build_crf(sub_datadir, X_train, Y_train):
+def build_crf(sub_datadir, X_train, Y_train, max_iterations=100):
 
 	crf = sklearn_crfsuite.CRF(
 		algorithm='lbfgs',
 		c1=0.1,
 		c2=0.1,
-		max_iterations=100,
+		max_iterations=max_iterations,
 		all_possible_transitions=True
 	)
 	crf.fit(X_train, Y_train)
@@ -247,7 +238,7 @@ def evaluate_crf(crf, sub_datadir, data, X_test, select_interval, delta):
 		# Get Confidence Data
 		marginals = crf.predict_marginals(X_select)
 		confscores = get_confidence_scores(data['select']['words'], Y_select_predict, marginals)
-		confidence_data = sort_confidence(data['select']['words'], data['select']['morphs'], confscores)
+		confidence_data = sort_by_confidence(data['select']['words'], data['select']['morphs'], confscores)
 
 		# Generate increment.src and residual.src
 		increment_data, residual_data = split_increment_residual(confidence_data, select_interval)
@@ -302,12 +293,12 @@ def reconstruct_predictions(pred_labels, words):
 
 		for i in range(len(new_labels)):
 			tok = new_labels[i]
-			l = len(tok)
+			tok_length = len(tok)
 			if i == 0:
-				morphs.append(word[0 : l])
+				morphs.append(word[0:tok_length])
 			else:
-				pre = len(''.join(z for z in new_labels[ : i]))
-				morphs.append(word[pre: pre + l])
+				pre = len(''.join(z for z in new_labels[:i]))
+				morphs.append(word[pre:pre+tok_length])
 
 		predictions.append(morphs)
 
@@ -394,7 +385,7 @@ def main():
 		f.write(f'F1: {average_f1}\n')
 
 	print('Complete!')
-	print(f'  Language: {args.lang}')
+	print(f'  Language: {args.lang.title()}')
 	print(f'  Initial Size: {args.initial_size}')
 	print(f'  Average Precision: {average_precision}')
 	print(f'  Average Recall: {average_recall}')
