@@ -343,38 +343,38 @@ def main() -> None:
 
 	paths: dict[str, str] = {
 		# Data gathering file paths
-		'train_tgt': f'{sub_datadir}/train.{args.initial_size}.tgt',
-		'test_tgt': f'{args.datadir}/{args.lang}/test.full.tgt',
-		'select_tgt': f'{sub_datadir}/select.{args.initial_size}.tgt',
+		'TRAIN_TGT': f'{sub_datadir}/train.{args.initial_size}.tgt',
+		'TEST_TGT': f'{args.datadir}/{args.lang}/test.full.tgt',
+		'SELECT_TGT': f'{sub_datadir}/select.{args.initial_size}.tgt',
 		# Prediction saving file paths
-		'test_pred': f'{sub_datadir}/test.full.pred',
-		'select_pred': f'{sub_datadir}/select.{args.initial_size}.pred',
+		'TEST_PRED': f'{sub_datadir}/test.full.pred',
+		'SELECT_PRED': f'{sub_datadir}/select.{args.initial_size}.pred',
 		# Source file paths
-		'test_src': f'{args.datadir}/{args.lang}/test.full.src',
-		'train_src': f'{sub_datadir}/train.{args.initial_size}.src',
-		'select_src': f'{sub_datadir}/select.{args.initial_size}.src',
+		'TRAIN_SRC': f'{sub_datadir}/train.{args.initial_size}.src',
+		'TEST_SRC': f'{args.datadir}/{args.lang}/test.full.src',
+		'SELECT_SRC': f'{sub_datadir}/select.{args.initial_size}.src',
 		# Evaluation file paths
-		'eval_file': f'{sub_datadir}/eval.txt'	
+		'EVAL_FILE': f'{sub_datadir}/eval.txt'	
 	}
 
 	# Gather words, morphs, and bmes
 	# data = {train/test/select: {words: [], morphs: [], bmes: {}}}
-	data: dict[str, dict] = process_data(paths['train_tgt'], paths['test_tgt'], paths['select_tgt'])
+	data: dict[str, dict] = process_data(paths['TRAIN_TGT'], paths['TEST_TGT'], paths['SELECT_TGT'])
 	
 	# Build and evaluate the model
 	Y_test_predict, Y_select_predict = build_and_evaluate_crf(sub_datadir, args, data)
 
 	# Outputting predictions for the test and the select file
 	test_predictions: list[list[str]] = reconstruct_predictions(Y_test_predict, data['test']['words'])
-	save_predictions(test_predictions, paths['test_pred'])
+	save_predictions(test_predictions, paths['TEST_PRED'])
 
-	if os.path.exists(paths['select_src']):
+	if os.path.exists(paths['SELECT_SRC']):
 		select_predictions: list[list[str]] = reconstruct_predictions(Y_select_predict, data['select']['words'])	
-		save_predictions(select_predictions, paths['select_pred'])
+		save_predictions(select_predictions, paths['SELECT_PRED'])
 
 	# Overall evaluation metrics
 	average_precision, average_recall, average_f1 = evaluate_predictions(data['test']['morphs'], test_predictions)
-	with open(paths['eval_file'], 'w') as f:
+	with open(paths['EVAL_FILE'], 'w') as f:
 		f.write(f'Precision: {average_precision}\n')
 		f.write(f'Recall: {average_recall}\n')
 		f.write(f'F1: {average_f1}\n')
