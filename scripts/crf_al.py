@@ -225,7 +225,7 @@ def save_data(data: list[tuple[str, list[str], float]], sub_datadir: str, file_n
 			seg_word: str = '!'.join(morphs)
 			tgt.write(' '.join(w for w in seg_word) + '\n')
 
-def evaluate_crf(crf: sklearn_crfsuite.CRF, sub_datadir: str, args: argparse.Namespace, data: dict[str, dict], X_test: list[list[dict[str, int]]]) \
+def output_crf(crf: sklearn_crfsuite.CRF, sub_datadir: str, args: argparse.Namespace, data: dict[str, dict], X_test: list[list[dict[str, int]]]) \
 	-> tuple[list[list[str]], list[list[str]]]:
 
 	Y_test_predict: list[list[str]] = crf.predict(X_test)
@@ -247,14 +247,14 @@ def evaluate_crf(crf: sklearn_crfsuite.CRF, sub_datadir: str, args: argparse.Nam
 
 	return Y_test_predict, Y_select_predict
 
-def build_and_evaluate_crf(sub_datadir: str, args: argparse.Namespace, data: dict[str, dict]) -> tuple[list[list[str]], list[list[str]]]:
+def build_and_output_crf(sub_datadir: str, args: argparse.Namespace, data: dict[str, dict]) -> tuple[list[list[str]], list[list[str]]]:
 
 	X_train, Y_train, _ = get_features(data['train']['words'], data['train']['bmes'], args.d)
 	X_test, _, _ = get_features(data['test']['words'], data['test']['bmes'], args.d)
 
 	crf: sklearn_crfsuite.CRF = build_crf(sub_datadir, X_train, Y_train)
 	
-	return evaluate_crf(crf, sub_datadir, args, data, X_test)
+	return output_crf(crf, sub_datadir, args, data, X_test)
 
 # Going from predicted labels to predicted morphemes
 def reconstruct_predictions(pred_labels: list[list[str]], words: list[str]) -> list[list[str]]:
@@ -362,7 +362,7 @@ def main() -> None:
 	data: dict[str, dict] = process_data(paths['TRAIN_TGT'], paths['TEST_TGT'], paths['SELECT_TGT'])
 	
 	# Build and evaluate the model
-	Y_test_predict, Y_select_predict = build_and_evaluate_crf(sub_datadir, args, data)
+	Y_test_predict, Y_select_predict = build_and_output_crf(sub_datadir, args, data)
 
 	# Outputting predictions for the test and the select file
 	test_predictions: list[list[str]] = reconstruct_predictions(Y_test_predict, data['test']['words'])
