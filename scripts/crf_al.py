@@ -1,5 +1,4 @@
-import io, os
-import argparse
+import io, os, argparse
 import sklearn_crfsuite
 import pickle
 import statistics
@@ -52,7 +51,7 @@ def main() -> None:
 	args: argparse.Namespace = parse_arguments()
 	sub_datadir: str = setup_datadirs(args)
 
-	paths: dict[str, str] = {
+	PATHS: dict[str, str] = {
 		# Data gathering file paths
 		'TRAIN_TGT': f'{sub_datadir}/train.{args.initial_size}.tgt',
 		'TEST_TGT': f'{args.datadir}/{args.lang}/test.full.tgt',
@@ -69,23 +68,22 @@ def main() -> None:
 	}
 
 	# Gather words, morphs, and bmes
-	# data = {train/test/select: {words: [], morphs: [], bmes: {}}}
-	data: DataDict = process_data(paths['TRAIN_TGT'], paths['TEST_TGT'], paths['SELECT_TGT'])
+	data: DataDict = process_data(PATHS['TRAIN_TGT'], PATHS['TEST_TGT'], PATHS['SELECT_TGT'])
 	
 	# Build and evaluate the model
 	Y_test_predict, Y_select_predict = build_and_output_crf(sub_datadir, args, data)
 
 	# Outputting predictions for the test and the select file
 	test_predictions: list[MorphList] = reconstruct_predictions(Y_test_predict, data['test']['words'])
-	save_predictions(test_predictions, paths['TEST_PRED'])
+	save_predictions(test_predictions, PATHS['TEST_PRED'])
 
-	if os.path.exists(paths['SELECT_SRC']):
+	if os.path.exists(PATHS['SELECT_SRC']):
 		select_predictions: list[MorphList] = reconstruct_predictions(Y_select_predict, data['select']['words'])	
-		save_predictions(select_predictions, paths['SELECT_PRED'])
+		save_predictions(select_predictions, PATHS['SELECT_PRED'])
 
 	# Overall evaluation metrics
 	average_precision, average_recall, average_f1 = evaluate_predictions(data['test']['morphs'], test_predictions)
-	with open(paths['EVAL_FILE'], 'w') as f:
+	with open(PATHS['EVAL_FILE'], 'w') as f:
 		f.write(f'Precision: {average_precision}\n')
 		f.write(f'Recall: {average_recall}\n')
 		f.write(f'F1: {average_f1}\n')
@@ -114,6 +112,7 @@ def parse_arguments() -> argparse.Namespace:
 	return parser.parse_args()
 
 ### Set up directories ###
+# TODO: replace os.system calls with manual file concatenation and copying (doesn't work in Pyodide)
 def setup_datadirs(args: argparse.Namespace) -> str:
 	# Data directory for the current iteration
 	sub_datadir: str = f'{args.datadir}/{args.lang}/{args.initial_size}/{args.seed}/{args.method}/{args.select_interval}/select{args.select_size}'
