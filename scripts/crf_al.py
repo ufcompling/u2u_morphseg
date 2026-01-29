@@ -2,7 +2,7 @@ import os, argparse
 import sklearn_crfsuite
 import pickle
 import statistics
-from typing import TypeAlias, TypedDict
+from typing import TypeAlias, TypedDict, Literal
 
 # Unused Libraries:
 # from sklearn.model_selection import train_test_split
@@ -16,13 +16,13 @@ from typing import TypeAlias, TypedDict
 Word: TypeAlias = str
 Morph: TypeAlias = str
 MorphList: TypeAlias = list[str]
-BMESLabel: TypeAlias = str
+PredictionLabel: TypeAlias = Literal['B', 'M', 'E', 'S', '[', ']']
 
 CharFeatures: TypeAlias = dict[str, int]
 WordFeatures: TypeAlias = list[CharFeatures]
 DatasetFeatures: TypeAlias = list[WordFeatures]
 
-WordLabels: TypeAlias = list[BMESLabel]
+WordLabels: TypeAlias = list[PredictionLabel]
 DatasetLabels: TypeAlias = list[WordLabels]
 
 WordChars: TypeAlias = list[str]
@@ -31,8 +31,9 @@ DatasetChars: TypeAlias = list[WordChars]
 ConfidenceScore: TypeAlias = float
 ConfidenceData: TypeAlias = tuple[Word, list[Morph], ConfidenceScore]
 
-DatasetMarginals: TypeAlias = list[list[dict[str, int]]]
-DatasetBMESPairs: TypeAlias = list[list[tuple[str, BMESLabel]]]
+CharMarginals: TypeAlias = dict[PredictionLabel, float]
+WordMarginals: TypeAlias = list[CharMarginals]
+DatasetMarginals: TypeAlias = list[WordMarginals]
 
 BMESDict: TypeAlias = dict[Word, str]
 
@@ -248,14 +249,14 @@ def get_features(words: list[Word], bmes: BMESDict, delta: int) -> tuple[Dataset
 	return X, Y, dataset_chars
 
 ### Sorting Data based on Confidence ###
-# TODO: this seems like an unnecessarily obtuse way to do this. Figure out if there is a more optimal method of calculating this
 def get_confidence_scores(words: list[Word], predictions: DatasetLabels, marginals: DatasetMarginals) -> list[ConfidenceScore]:
 
-	Y_select_predicted_sequences: DatasetBMESPairs = [list(zip(words[i], predictions[i])) for i in range(len(predictions))]
-
 	confscores: list[ConfidenceScore] = []
-	for s, word in enumerate(Y_select_predicted_sequences):
-		confscores.append(sum(marginals[s][i][wordpair[1]] for i, wordpair in enumerate(word))/len(word))
+	for word, prediction, marginal in zip(words, predictions, marginals):
+		# Remove '[' and ']' so that the characters match up with the labels
+		boundless_pred = prediction[1:-1]
+		boundless_marg = marginal[1:-1]
+		confscores.append(sum(boundless_marg[i][label] for i, label in enumerate(boundless_pred)) / len(word))
 
 	return confscores
 
