@@ -97,7 +97,7 @@ def main() -> None:
 
 # TODO: Remove and replace with method of receiving these values from frontend!!!
 def parse_arguments() -> argparse.Namespace:
-	parser = argparse.ArgumentParser()
+	parser: argparse.ArgumentParser = argparse.ArgumentParser()
 	parser.add_argument('--datadir', type = str, default = 'data', help = 'path to data')
 	parser.add_argument('--lang', type = str, default = 'lang', help = 'language')
 	parser.add_argument('--initial_size', type = str, default = '100', help = 'data initial_size to start AL iteration')
@@ -248,6 +248,7 @@ def get_features(words: list[Word], bmes: BMESDict, delta: int) -> tuple[Dataset
 	return X, Y, dataset_chars
 
 ### Sorting Data based on Confidence ###
+# TODO: this seems like an unnecessarily obtuse way to do this. Figure out if there is a more optimal method of calculating this
 def get_confidence_scores(words: list[Word], predictions: DatasetLabels, marginals: DatasetMarginals) -> list[ConfidenceScore]:
 
 	Y_select_predicted_sequences: DatasetBMESPairs = [list(zip(words[i], predictions[i])) for i in range(len(predictions))]
@@ -261,7 +262,7 @@ def get_confidence_scores(words: list[Word], predictions: DatasetLabels, margina
 def sort_by_confidence(words: list[Word], morphs: list[MorphList], confscores: list[ConfidenceScore]) -> list[ConfidenceData]:
 	
 	# Sort words/morphs by their confidence
-	with_confidence: list[ConfidenceData] = sorted(list(zip(words, morphs, confscores)), key=lambda x: x[2])
+	with_confidence: list[ConfidenceData] = sorted(zip(words, morphs, confscores), key=lambda x: x[2])
 
 	# For debugging:
 	# SEPARATOR = '|'
@@ -308,8 +309,8 @@ def save_data(confidence_data: list[ConfidenceData], sub_datadir: str, file_name
 
 	with open(f'{sub_datadir}/{file_name}.tgt', 'w', encoding='utf-8') as tgt:
 		for morphs in morphs_list:
-			seg_word: str = '!'.join(morphs)
-			tgt.write(' '.join(w for w in seg_word) + '\n')
+			segmented: Word = '!'.join(morphs)
+			tgt.write(' '.join(w for w in segmented) + '\n')
 
 def output_crf(crf: sklearn_crfsuite.CRF, sub_datadir: str, args: argparse.Namespace, data: DataDict, X_test: DatasetFeatures) -> tuple[DatasetLabels, DatasetLabels]:
 
@@ -388,8 +389,8 @@ def reconstruct_predictions(pred_labels: DatasetLabels, words: list[Word]) -> li
 # Save predictions
 def save_predictions(predictions: list[MorphList], file_path: str) -> None:
 	with open(file_path, 'w', encoding = 'utf-8') as f:
-		for tok in predictions:
-			segmented: Word = '!'.join(tok)
+		for morphs in predictions:
+			segmented: Word = '!'.join(morphs)
 			f.write(' '.join(c for c in segmented) + '\n')
 
 # Evaluate predictions with statistical metrics (precision, recall, F1 score)
