@@ -2,7 +2,7 @@ import os, argparse, shutil
 import sklearn_crfsuite
 import pickle
 import statistics
-from typing import TypeAlias, TypedDict, Literal
+from typing import TypeAlias, TypedDict, Literal, cast
 
 # Unused Libraries:
 # from sklearn.model_selection import train_test_split
@@ -242,9 +242,9 @@ def get_word_features(word: Word, bmes: BMESDict, delta: int) -> tuple[WordFeatu
 		word_chars.append(char)
 
 		if char in ['[', ']']: # labeling start and end
-			labels.append(char)
+			labels.append(cast(PredictionLabel, char))
 		else: # labeling chars
-			labels.append(bmes[word][i-1])
+			labels.append(cast(PredictionLabel, bmes[word][i-1]))
 
 	return features, labels, word_chars
 
