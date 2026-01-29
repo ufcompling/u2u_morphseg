@@ -1,4 +1,4 @@
-import io, os, argparse
+import os, argparse
 import sklearn_crfsuite
 import pickle
 import statistics
@@ -119,8 +119,8 @@ def setup_datadirs(args: argparse.Namespace) -> str:
 	if not os.path.exists(sub_datadir):
 		os.makedirs(sub_datadir)
 
-	# Data directory for the previous iteration
 	if args.select_size != 0:
+		# Data directory for the previous iteration
 		prev_datadir: str = f'{args.datadir}/{args.lang}/{args.initial_size}/{args.seed}/{args.method}/{args.select_interval}/select{int(args.select_size) - int(args.select_interval)}'
 		# Labeled set = previous training set + previous increment
 		os.system(f'cat {prev_datadir}/train.{args.initial_size}.src {prev_datadir}/increment.src > {sub_datadir}/train.{args.initial_size}.src')
