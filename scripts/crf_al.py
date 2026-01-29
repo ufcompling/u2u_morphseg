@@ -155,14 +155,14 @@ def get_bmes_labels(morphs: MorphList) -> str:
 	return label
 
 def load_file_data(file_path: str | None) -> tuple[list[Word], list[MorphList], BMESDict]:
-	words: list[str] = []
-	morphs: list[list[str]] = []
-	bmes: dict[str, str] = dict()
+	words: list[Word] = []
+	morphs: list[MorphList] = []
+	bmes: BMESDict = dict()
 
 	if not file_path or not os.path.exists(file_path):
 		return words, morphs, bmes
 
-	with io.open(file_path, encoding='utf-8') as f:
+	with open(file_path, encoding='utf-8') as f:
 		for line in f:
 			word, line_morphs = get_line_morphs(line)
 			bmes_labels = get_bmes_labels(line_morphs)
@@ -387,7 +387,7 @@ def reconstruct_predictions(pred_labels: DatasetLabels, words: list[Word]) -> li
 
 # Save predictions
 def save_predictions(predictions: list[MorphList], file_path: str) -> None:
-	with io.open(file_path, 'w', encoding = 'utf-8') as f:
+	with open(file_path, 'w', encoding = 'utf-8') as f:
 		for tok in predictions:
 			segmented: Word = '!'.join(tok)
 			f.write(' '.join(c for c in segmented) + '\n')
