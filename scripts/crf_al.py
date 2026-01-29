@@ -1,4 +1,4 @@
-import os, argparse
+import os, argparse, shutil
 import sklearn_crfsuite
 import pickle
 import statistics
@@ -113,7 +113,14 @@ def parse_arguments() -> argparse.Namespace:
 	return parser.parse_args()
 
 ### Set up directories ###
-# TODO: replace os.system calls with manual file concatenation and copying (doesn't work in Pyodide)
+def read_file(file_path: str) -> str:
+	with open(file_path, 'r', encoding='utf-8') as f:
+		return f.read()
+	
+def write_file(file_path: str, content: str) -> None:
+	with open(file_path, 'w', encoding='utf-8') as f:
+		f.write(content)
+
 def setup_datadirs(args: argparse.Namespace) -> str:
 	# Data directory for the current iteration
 	sub_datadir: str = f'{args.datadir}/{args.lang}/{args.initial_size}/{args.seed}/{args.method}/{args.select_interval}/select{args.select_size}'
@@ -123,12 +130,19 @@ def setup_datadirs(args: argparse.Namespace) -> str:
 	if args.select_size != 0:
 		# Data directory for the previous iteration
 		prev_datadir: str = f'{args.datadir}/{args.lang}/{args.initial_size}/{args.seed}/{args.method}/{args.select_interval}/select{int(args.select_size) - int(args.select_interval)}'
+		
 		# Labeled set = previous training set + previous increment
-		os.system(f'cat {prev_datadir}/train.{args.initial_size}.src {prev_datadir}/increment.src > {sub_datadir}/train.{args.initial_size}.src')
-		os.system(f'cat {prev_datadir}/train.{args.initial_size}.tgt {prev_datadir}/increment.tgt > {sub_datadir}/train.{args.initial_size}.tgt')
+		train_src = read_file(f'{prev_datadir}/train.{args.initial_size}.src')
+		increment_src = read_file(f'{prev_datadir}/increment.src')
+		write_file(f'{sub_datadir}/train.{args.initial_size}.src', train_src + increment_src)
+
+		train_tgt = read_file(f'{prev_datadir}/train.{args.initial_size}.tgt')
+		increment_tgt = read_file(f'{prev_datadir}/increment.tgt')
+		write_file(f'{sub_datadir}/train.{args.initial_size}.tgt', train_tgt + increment_tgt)
+		
 		# Unlabeled set = previous residual
-		os.system(f'cp {prev_datadir}/residual.src {sub_datadir}/select.{args.initial_size}.src')
-		os.system(f'cp {prev_datadir}/residual.tgt {sub_datadir}/select.{args.initial_size}.tgt')
+		shutil.copy(f'{prev_datadir}/residual.src', f'{sub_datadir}/select.{args.initial_size}.src')
+		shutil.copy(f'{prev_datadir}/residual.tgt', f'{sub_datadir}/select.{args.initial_size}.tgt')
 
 	return sub_datadir
 
@@ -254,8 +268,7 @@ def get_confidence_scores(words: list[Word], predictions: DatasetLabels, margina
 	confscores: list[ConfidenceScore] = []
 	for word, prediction, marginal in zip(words, predictions, marginals):
 		# Remove '[' and ']' so that the characters match up with the labels
-		boundless_pred = prediction[1:-1]
-		boundless_marg = marginal[1:-1]
+		boundless_pred, boundless_marg = prediction[1:-1], marginal[1:-1]
 		confscores.append(sum(boundless_marg[i][label] for i, label in enumerate(boundless_pred)) / len(word))
 
 	return confscores
