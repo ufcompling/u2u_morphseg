@@ -1,14 +1,101 @@
-from collections import Counter
-from sklearn.model_selection import train_test_split
-from sklearn import metrics
-from sklearn.metrics import precision_recall_fscore_support
-import sklearn_crfsuite
-import matplotlib.pyplot as plt
-import argparse
-import pickle
 import io, os
+import argparse
+import sklearn_crfsuite
+import pickle
 import statistics
-from scipy.special import rel_entr
+from typing import TypeAlias, TypedDict
+
+# Unused Libraries:
+# from sklearn.model_selection import train_test_split
+# from collections import Counter
+# from sklearn import metrics
+# import matplotlib.pyplot as plt
+# from sklearn.metrics import precision_recall_fscore_support
+# from scipy.special import rel_entr
+
+# Type Hinting
+Word: TypeAlias = str
+Morph: TypeAlias = str
+MorphList: TypeAlias = list[str]
+BMESLabel: TypeAlias = str
+
+CharFeatures: TypeAlias = dict[str, int]
+WordFeatures: TypeAlias = list[CharFeatures]
+DatasetFeatures: TypeAlias = list[WordFeatures]
+
+WordLabels: TypeAlias = list[BMESLabel]
+DatasetLabels: TypeAlias = list[WordLabels]
+
+WordChars: TypeAlias = list[str]
+DatasetChars: TypeAlias = list[WordChars]
+
+ConfidenceScore: TypeAlias = float
+ConfidenceData: TypeAlias = tuple[Word, list[Morph], ConfidenceScore]
+
+DatasetMarginals: TypeAlias = list[list[dict[str, int]]]
+DatasetBMESPairs: TypeAlias = list[list[tuple[str, BMESLabel]]]
+
+BMESDict: TypeAlias = dict[Word, str]
+
+class DatasetInfo(TypedDict):
+	words: list[Word]
+	morphs: list[MorphList]
+	bmes: BMESDict
+
+class DataDict(TypedDict):
+	train: DatasetInfo
+	test: DatasetInfo
+	select: DatasetInfo
+
+def main() -> None:
+
+	args: argparse.Namespace = parse_arguments()
+	sub_datadir: str = setup_datadirs(args)
+
+	paths: dict[str, str] = {
+		# Data gathering file paths
+		'TRAIN_TGT': f'{sub_datadir}/train.{args.initial_size}.tgt',
+		'TEST_TGT': f'{args.datadir}/{args.lang}/test.full.tgt',
+		'SELECT_TGT': f'{sub_datadir}/select.{args.initial_size}.tgt',
+		# Prediction saving file paths
+		'TEST_PRED': f'{sub_datadir}/test.full.pred',
+		'SELECT_PRED': f'{sub_datadir}/select.{args.initial_size}.pred',
+		# Source file paths
+		'TRAIN_SRC': f'{sub_datadir}/train.{args.initial_size}.src',
+		'TEST_SRC': f'{args.datadir}/{args.lang}/test.full.src',
+		'SELECT_SRC': f'{sub_datadir}/select.{args.initial_size}.src',
+		# Evaluation file paths
+		'EVAL_FILE': f'{sub_datadir}/eval.txt'	
+	}
+
+	# Gather words, morphs, and bmes
+	# data = {train/test/select: {words: [], morphs: [], bmes: {}}}
+	data: DataDict = process_data(paths['TRAIN_TGT'], paths['TEST_TGT'], paths['SELECT_TGT'])
+	
+	# Build and evaluate the model
+	Y_test_predict, Y_select_predict = build_and_output_crf(sub_datadir, args, data)
+
+	# Outputting predictions for the test and the select file
+	test_predictions: list[MorphList] = reconstruct_predictions(Y_test_predict, data['test']['words'])
+	save_predictions(test_predictions, paths['TEST_PRED'])
+
+	if os.path.exists(paths['SELECT_SRC']):
+		select_predictions: list[MorphList] = reconstruct_predictions(Y_select_predict, data['select']['words'])	
+		save_predictions(select_predictions, paths['SELECT_PRED'])
+
+	# Overall evaluation metrics
+	average_precision, average_recall, average_f1 = evaluate_predictions(data['test']['morphs'], test_predictions)
+	with open(paths['EVAL_FILE'], 'w') as f:
+		f.write(f'Precision: {average_precision}\n')
+		f.write(f'Recall: {average_recall}\n')
+		f.write(f'F1: {average_f1}\n')
+
+	print('Complete!')
+	print(f'  Language: {args.lang.title()}')
+	print(f'  Initial Size: {args.initial_size}')
+	print(f'  Average Precision: {average_precision}')
+	print(f'  Average Recall: {average_recall}')
+	print(f'  Average F1 Score: {average_f1}')
 
 # TODO: Remove and replace with method of receiving these values from frontend!!!
 def parse_arguments() -> argparse.Namespace:
@@ -46,13 +133,13 @@ def setup_datadirs(args: argparse.Namespace) -> str:
 	return sub_datadir
 
 ### Gathering Data ###
-def get_line_morphs(line: str) -> tuple[str, list[str]]:
+def get_line_morphs(line: str) -> tuple[Word, MorphList]:
 	toks: list[str] = line.strip().split()
 	morphs: list[str] = (''.join(c for c in toks)).split('!')
 	word: str = ''.join(m for m in morphs)
 	return word, morphs
 
-def get_bmes_labels(morphs: list[str]) -> str:
+def get_bmes_labels(morphs: MorphList) -> str:
 	label: str = ''
 
 	for morph in morphs:
@@ -68,7 +155,7 @@ def get_bmes_labels(morphs: list[str]) -> str:
 
 	return label
 
-def load_file_data(file_path: str | None) -> tuple[list[str], list[list[str]], dict[str, str]]:
+def load_file_data(file_path: str | None) -> tuple[list[Word], list[MorphList], BMESDict]:
 	words: list[str] = []
 	morphs: list[list[str]] = []
 	bmes: dict[str, str] = dict()
@@ -87,7 +174,7 @@ def load_file_data(file_path: str | None) -> tuple[list[str], list[list[str]], d
 		
 	return words, morphs, bmes
 
-def process_data(train_path: str, test_path: str, select_path: str | None = None) -> dict[str, dict]:  # *.tgt files 
+def process_data(train_path: str, test_path: str, select_path: str | None = None) -> DataDict:  # *.tgt files 
 
 	train_words, train_morphs, train_bmes = load_file_data(train_path)
 	test_words, test_morphs, test_bmes = load_file_data(test_path)
@@ -112,70 +199,70 @@ def process_data(train_path: str, test_path: str, select_path: str | None = None
 	}
 
 ### Computing Features ###
-def get_char_features(bounded_word: str, i: int, delta: int) -> dict[str, int]:
-	char_dict: dict[str, int] = {}
+def get_char_features(bounded: Word, i: int, delta: int) -> CharFeatures:
+	char_dict: CharFeatures = {}
 
 	for j in range(delta):
-		char_dict[f'right_{bounded_word[i:i+j+1]}'] = 1
+		char_dict[f'right_{bounded[i:i+j+1]}'] = 1
 
 	for j in range(delta):
 		if i - j - 1 < 0: 
 			break
-		char_dict[f'left_{bounded_word[i-j-1:i]}'] = 1
+		char_dict[f'left_{bounded[i-j-1:i]}'] = 1
 
 	char_dict[f'pos_start_{i}'] = 1  # extra feature: left index of the letter in the word
 
 	return char_dict
 
-def get_word_features(word: str, bmes: dict[str, str], delta: int) -> tuple[list[dict[str, int]], list[str], list[str]]:
-	bounded_word = f'[{word}]' # <w> and <\w> replaced with [ and ], respectively
-	features: list[dict[str, int]] = [] # list (word) of dicts (chars)
-	labels: list[str] = [] # list (word) of labels (chars)
-	chars: list[str] = [] # list (learning set) of list (word) of chars
+def get_word_features(word: Word, bmes: BMESDict, delta: int) -> tuple[WordFeatures, WordLabels, WordChars]:
+	bounded_word: Word = f'[{word}]' # <w> and <\w> replaced with [ and ], respectively
+	features: WordFeatures = [] # list (word) of dicts (chars)
+	labels: WordLabels = [] # list (word) of labels (chars)
+	word_chars: WordChars = [] # list (learning set) of list (word) of chars
 	
 	for i in range(len(bounded_word)):
-		char_dict = get_char_features(bounded_word, i, delta)
+		char_dict: CharFeatures = get_char_features(bounded_word, i, delta)
 		features.append(char_dict)
 
-		char = bounded_word[i]
-		chars.append(char)
+		char: str = bounded_word[i]
+		word_chars.append(char)
 
 		if char in ['[', ']']: # labeling start and end
 			labels.append(char)
 		else: # labeling chars
 			labels.append(bmes[word][i-1])
 
-	return features, labels, chars
+	return features, labels, word_chars
 
-def get_features(words: list[str], bmes: dict[str, str], delta: int) -> tuple[list[list[dict[str, int]]], list[list[str]], list[list[str]]]:
+def get_features(words: list[Word], bmes: BMESDict, delta: int) -> tuple[DatasetFeatures, DatasetLabels, DatasetChars]:
 
-	X: list[list[dict[str, int]]] = [] # list (learning set) of list (word) of dicts (chars), INPUT for crf
-	Y: list[list[str]] = []# list (learning set) of list (word) of labels (chars), INPUT for crf
-	word_chars: list[list[str]] = [] # list (learning set) of list (word) of chars
+	X: DatasetFeatures = [] # list (learning set) of list (word) of dicts (chars), INPUT for crf
+	Y: DatasetLabels = [] # list (learning set) of list (word) of labels (chars), INPUT for crf
+	dataset_chars: DatasetChars = [] # list (learning set) of list (word) of chars
 
 	for word in words:
-		features, labels, chars = get_word_features(word, bmes, delta)
+		features, labels, word_chars = get_word_features(word, bmes, delta)
 		X.append(features)
 		Y.append(labels)
-		word_chars.append(chars)
+		dataset_chars.append(word_chars)
 
-	return X, Y, word_chars
+	return X, Y, dataset_chars
 
 ### Sorting Data based on Confidence ###
-def get_confidence_scores(words: list[str], predictions: list[list[str]], marginals: list[list[dict[str, int]]]) -> list[float]:
+def get_confidence_scores(words: list[Word], predictions: DatasetLabels, marginals: DatasetMarginals) -> list[ConfidenceScore]:
 
-	Y_select_predicted_sequences: list[list[tuple[str, str]]] = [list(zip(words[i], predictions[i])) for i in range(len(predictions))]
+	Y_select_predicted_sequences: DatasetBMESPairs = [list(zip(words[i], predictions[i])) for i in range(len(predictions))]
 
-	confscores: list[float] = []
+	confscores: list[ConfidenceScore] = []
 	for s, word in enumerate(Y_select_predicted_sequences):
 		confscores.append(sum(marginals[s][i][wordpair[1]] for i, wordpair in enumerate(word))/len(word))
 
 	return confscores
 
-def sort_by_confidence(words: list[str], morphs: list[list[str]], confscores: list[float]) -> list[tuple[str, list[str], float]]:
+def sort_by_confidence(words: list[Word], morphs: list[MorphList], confscores: list[ConfidenceScore]) -> list[ConfidenceData]:
 	
 	# Sort words/morphs by their confidence
-	with_confidence: list[tuple[str, list[str], float]] = sorted(list(zip(words, morphs, confscores)), key=lambda x: x[2])
+	with_confidence: list[ConfidenceData] = sorted(list(zip(words, morphs, confscores)), key=lambda x: x[2])
 
 	# For debugging:
 	# SEPARATOR = '|'
@@ -190,7 +277,7 @@ def sort_by_confidence(words: list[str], morphs: list[list[str]], confscores: li
 
 ### Building Models ###
 
-def build_crf(sub_datadir: str, X_train: list[list[dict[str, int]]], Y_train: list[list[str]], max_iterations: int = 100) -> sklearn_crfsuite.CRF:
+def build_crf(sub_datadir: str, X_train: DatasetFeatures, Y_train: DatasetLabels, max_iterations: int = 100) -> sklearn_crfsuite.CRF:
 
 	crf: sklearn_crfsuite.CRF = sklearn_crfsuite.CRF(
 		algorithm='lbfgs',
@@ -204,17 +291,16 @@ def build_crf(sub_datadir: str, X_train: list[list[dict[str, int]]], Y_train: li
 
 	return crf
 
-def split_increment_residual(confidence_data: list[tuple[str, list[str], float]], select_interval: int) \
-	-> tuple[list[tuple[str, list[str], float]], list[tuple[str, list[str], float]]]:
+def split_increment_residual(confidence_data: list[ConfidenceData], select_interval: int) -> tuple[list[ConfidenceData], list[ConfidenceData]]:
 
-	increment_data: list[tuple[str, list[str], float]] = confidence_data[:select_interval]
-	residual_data: list[tuple[str, list[str], float]] = confidence_data[select_interval:]
+	increment_data: list[ConfidenceData] = confidence_data[:select_interval]
+	residual_data: list[ConfidenceData] = confidence_data[select_interval:]
 
 	return increment_data, residual_data
 
-def save_data(data: list[tuple[str, list[str], float]], sub_datadir: str, file_name: str) -> None:
+def save_data(confidence_data: list[ConfidenceData], sub_datadir: str, file_name: str) -> None:
 	
-	words, morphs_list, _ = zip(*data)
+	words, morphs_list, _ = zip(*confidence_data)
 	
 	with open(f'{sub_datadir}/{file_name}.src', 'w', encoding='utf-8') as src:
 		for word in words:
@@ -225,20 +311,19 @@ def save_data(data: list[tuple[str, list[str], float]], sub_datadir: str, file_n
 			seg_word: str = '!'.join(morphs)
 			tgt.write(' '.join(w for w in seg_word) + '\n')
 
-def output_crf(crf: sklearn_crfsuite.CRF, sub_datadir: str, args: argparse.Namespace, data: dict[str, dict], X_test: list[list[dict[str, int]]]) \
-	-> tuple[list[list[str]], list[list[str]]]:
+def output_crf(crf: sklearn_crfsuite.CRF, sub_datadir: str, args: argparse.Namespace, data: DataDict, X_test: DatasetFeatures) -> tuple[DatasetLabels, DatasetLabels]:
 
-	Y_test_predict: list[list[str]] = crf.predict(X_test)
+	Y_test_predict: DatasetLabels = crf.predict(X_test)
 
-	Y_select_predict: list[list[str]] = []
+	Y_select_predict: DatasetLabels = []
 	if data['select']['words']:
 		X_select, _, _ = get_features(data['select']['words'], data['select']['bmes'], args.d)
 		Y_select_predict = crf.predict(X_select)
 
 		# Get Confidence Data
-		marginals: list[list[dict[str, int]]] = crf.predict_marginals(X_select)
-		confscores: list[float] = get_confidence_scores(data['select']['words'], Y_select_predict, marginals)
-		conf_sorted_data: list[tuple[str, list[str], float]] = sort_by_confidence(data['select']['words'], data['select']['morphs'], confscores)
+		marginals: DatasetMarginals = crf.predict_marginals(X_select)
+		confscores: list[ConfidenceScore] = get_confidence_scores(data['select']['words'], Y_select_predict, marginals)
+		conf_sorted_data: list[ConfidenceData] = sort_by_confidence(data['select']['words'], data['select']['morphs'], confscores)
 
 		# Generate increment.src and residual.src
 		increment_data, residual_data = split_increment_residual(conf_sorted_data, args.select_interval)
@@ -247,7 +332,7 @@ def output_crf(crf: sklearn_crfsuite.CRF, sub_datadir: str, args: argparse.Names
 
 	return Y_test_predict, Y_select_predict
 
-def build_and_output_crf(sub_datadir: str, args: argparse.Namespace, data: dict[str, dict]) -> tuple[list[list[str]], list[list[str]]]:
+def build_and_output_crf(sub_datadir: str, args: argparse.Namespace, data: DataDict) -> tuple[DatasetLabels, DatasetLabels]:
 
 	X_train, Y_train, _ = get_features(data['train']['words'], data['train']['bmes'], args.d)
 	X_test, _, _ = get_features(data['test']['words'], data['test']['bmes'], args.d)
@@ -257,13 +342,13 @@ def build_and_output_crf(sub_datadir: str, args: argparse.Namespace, data: dict[
 	return output_crf(crf, sub_datadir, args, data, X_test)
 
 # Going from predicted labels to predicted morphemes
-def reconstruct_predictions(pred_labels: list[list[str]], words: list[str]) -> list[list[str]]:
+def reconstruct_predictions(pred_labels: DatasetLabels, words: list[Word]) -> list[MorphList]:
 
-	predictions: list[list[str]] = []
+	predictions: list[MorphList] = []
 
 	for i in range(len(pred_labels)):
-		pred: list[str] = pred_labels[i]
-		word: str = words[i]
+		pred: WordLabels = pred_labels[i]
+		word: Word = words[i]
 
 		# Remove '[' and ']' and split by end markers (E)
 		labels: list[str] = [label for label in ''.join(w for w in pred[1:-1]).split('E') if label]
@@ -288,7 +373,7 @@ def reconstruct_predictions(pred_labels: list[list[str]], words: list[str]) -> l
 					else:
 						new_labels.append(bmes_label + 'E')
 
-		morphs: list[str] = []
+		morphs: MorphList = []
 
 		for i in range(len(new_labels)):
 			tok_length: int = len(new_labels[i])
@@ -303,14 +388,14 @@ def reconstruct_predictions(pred_labels: list[list[str]], words: list[str]) -> l
 	return predictions
 
 # Save predictions
-def save_predictions(predictions: list[list[str]], file_path: str) -> None:
+def save_predictions(predictions: list[MorphList], file_path: str) -> None:
 	with io.open(file_path, 'w', encoding = 'utf-8') as f:
 		for tok in predictions:
-			tok = '!'.join(m for m in tok)
-			f.write(' '.join(c for c in tok) + '\n')
+			segmented_word: Word = '!'.join(m for m in tok)
+			f.write(' '.join(c for c in segmented_word) + '\n')
 
 # Evaluate predictions with statistical metrics (precision, recall, F1 score)
-def calculate_metrics(y_true: list[str], y_pred: list[str]) -> tuple[float, float, float]:
+def calculate_metrics(y_true: MorphList, y_pred: MorphList) -> tuple[float, float, float]:
 	correct_total: int = sum(1 for m in y_pred if m in y_true)
 
 	if not y_pred:
@@ -322,7 +407,7 @@ def calculate_metrics(y_true: list[str], y_pred: list[str]) -> tuple[float, floa
 
 	return round(precision, 2), round(recall, 2), round(f1, 2)
 
-def evaluate_predictions(gold_word: list[list[str]], pred_word: list[list[str]]) -> tuple[float, float, float]:
+def evaluate_predictions(gold_word: list[MorphList], pred_word: list[MorphList]) -> tuple[float, float, float]:
 	precision_scores: list[float] = []
 	recall_scores: list[float] = []
 	f1_scores: list[float] = []
@@ -335,56 +420,6 @@ def evaluate_predictions(gold_word: list[list[str]], pred_word: list[list[str]])
 
 	average_precision, average_recall, average_f1 = (round(statistics.mean(x), 2) for x in (precision_scores, recall_scores, f1_scores))
 	return average_precision, average_recall, average_f1
-
-def main() -> None:
-
-	args: argparse.Namespace = parse_arguments()
-	sub_datadir: str = setup_datadirs(args)
-
-	paths: dict[str, str] = {
-		# Data gathering file paths
-		'TRAIN_TGT': f'{sub_datadir}/train.{args.initial_size}.tgt',
-		'TEST_TGT': f'{args.datadir}/{args.lang}/test.full.tgt',
-		'SELECT_TGT': f'{sub_datadir}/select.{args.initial_size}.tgt',
-		# Prediction saving file paths
-		'TEST_PRED': f'{sub_datadir}/test.full.pred',
-		'SELECT_PRED': f'{sub_datadir}/select.{args.initial_size}.pred',
-		# Source file paths
-		'TRAIN_SRC': f'{sub_datadir}/train.{args.initial_size}.src',
-		'TEST_SRC': f'{args.datadir}/{args.lang}/test.full.src',
-		'SELECT_SRC': f'{sub_datadir}/select.{args.initial_size}.src',
-		# Evaluation file paths
-		'EVAL_FILE': f'{sub_datadir}/eval.txt'	
-	}
-
-	# Gather words, morphs, and bmes
-	# data = {train/test/select: {words: [], morphs: [], bmes: {}}}
-	data: dict[str, dict] = process_data(paths['TRAIN_TGT'], paths['TEST_TGT'], paths['SELECT_TGT'])
-	
-	# Build and evaluate the model
-	Y_test_predict, Y_select_predict = build_and_output_crf(sub_datadir, args, data)
-
-	# Outputting predictions for the test and the select file
-	test_predictions: list[list[str]] = reconstruct_predictions(Y_test_predict, data['test']['words'])
-	save_predictions(test_predictions, paths['TEST_PRED'])
-
-	if os.path.exists(paths['SELECT_SRC']):
-		select_predictions: list[list[str]] = reconstruct_predictions(Y_select_predict, data['select']['words'])	
-		save_predictions(select_predictions, paths['SELECT_PRED'])
-
-	# Overall evaluation metrics
-	average_precision, average_recall, average_f1 = evaluate_predictions(data['test']['morphs'], test_predictions)
-	with open(paths['EVAL_FILE'], 'w') as f:
-		f.write(f'Precision: {average_precision}\n')
-		f.write(f'Recall: {average_recall}\n')
-		f.write(f'F1: {average_f1}\n')
-
-	print('Complete!')
-	print(f'  Language: {args.lang.title()}')
-	print(f'  Initial Size: {args.initial_size}')
-	print(f'  Average Precision: {average_precision}')
-	print(f'  Average Recall: {average_recall}')
-	print(f'  Average F1 Score: {average_f1}')
 
 if __name__ == '__main__':
 	main()
