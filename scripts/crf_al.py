@@ -347,9 +347,7 @@ def reconstruct_predictions(pred_labels: DatasetLabels, words: list[Word]) -> li
 
 	predictions: list[MorphList] = []
 
-	for i in range(len(pred_labels)):
-		pred: WordLabels = pred_labels[i]
-		word: Word = words[i]
+	for pred, word in zip(pred_labels, words):
 
 		# Remove '[' and ']' and split by end markers (E)
 		labels: list[str] = [label for label in ''.join(w for w in pred[1:-1]).split('E') if label]
@@ -413,8 +411,8 @@ def evaluate_predictions(gold_word: list[MorphList], pred_word: list[MorphList])
 	recall_scores: list[float] = []
 	f1_scores: list[float] = []
 
-	for i in range(len(pred_word)):
-		precision, recall, f1 = calculate_metrics(gold_word[i], pred_word[i])
+	for gold_morphs, pred_morphs in zip(gold_word, pred_word):
+		precision, recall, f1 = calculate_metrics(gold_morphs, pred_morphs)
 		precision_scores.append(precision)
 		recall_scores.append(recall)
 		f1_scores.append(f1)
