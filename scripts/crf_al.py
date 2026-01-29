@@ -135,8 +135,8 @@ def setup_datadirs(args: argparse.Namespace) -> str:
 ### Gathering Data ###
 def get_line_morphs(line: str) -> tuple[Word, MorphList]:
 	toks: list[str] = line.strip().split()
-	morphs: list[str] = (''.join(c for c in toks)).split('!')
-	word: str = ''.join(m for m in morphs)
+	morphs: MorphList = ''.join(toks).split('!')
+	word: Word = ''.join(m for m in morphs)
 	return word, morphs
 
 def get_bmes_labels(morphs: MorphList) -> str:
@@ -287,7 +287,8 @@ def build_crf(sub_datadir: str, X_train: DatasetFeatures, Y_train: DatasetLabels
 		all_possible_transitions=True
 	)
 	crf.fit(X_train, Y_train)
-	pickle.dump(crf, io.open(f'{sub_datadir}/crf.model', 'wb'))
+	with open(f'{sub_datadir}/crf.model', 'wb') as f:
+		pickle.dump(crf, f)
 
 	return crf
 
@@ -391,8 +392,8 @@ def reconstruct_predictions(pred_labels: DatasetLabels, words: list[Word]) -> li
 def save_predictions(predictions: list[MorphList], file_path: str) -> None:
 	with io.open(file_path, 'w', encoding = 'utf-8') as f:
 		for tok in predictions:
-			segmented_word: Word = '!'.join(m for m in tok)
-			f.write(' '.join(c for c in segmented_word) + '\n')
+			segmented: Word = '!'.join(tok)
+			f.write(' '.join(c for c in segmented) + '\n')
 
 # Evaluate predictions with statistical metrics (precision, recall, F1 score)
 def calculate_metrics(y_true: MorphList, y_pred: MorphList) -> tuple[float, float, float]:
