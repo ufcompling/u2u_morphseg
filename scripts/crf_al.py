@@ -132,12 +132,12 @@ def setup_datadirs(args: argparse.Namespace) -> str:
 		prev_datadir: str = f'{args.datadir}/{args.lang}/{args.initial_size}/{args.seed}/{args.method}/{args.select_interval}/select{int(args.select_size) - int(args.select_interval)}'
 		
 		# Labeled set = previous training set + previous increment
-		train_src = read_file(f'{prev_datadir}/train.{args.initial_size}.src')
-		increment_src = read_file(f'{prev_datadir}/increment.src')
+		train_src: str = read_file(f'{prev_datadir}/train.{args.initial_size}.src')
+		increment_src: str = read_file(f'{prev_datadir}/increment.src')
 		write_file(f'{sub_datadir}/train.{args.initial_size}.src', train_src + increment_src)
 
-		train_tgt = read_file(f'{prev_datadir}/train.{args.initial_size}.tgt')
-		increment_tgt = read_file(f'{prev_datadir}/increment.tgt')
+		train_tgt: str = read_file(f'{prev_datadir}/train.{args.initial_size}.tgt')
+		increment_tgt: str = read_file(f'{prev_datadir}/increment.tgt')
 		write_file(f'{sub_datadir}/train.{args.initial_size}.tgt', train_tgt + increment_tgt)
 		
 		# Unlabeled set = previous residual
@@ -180,7 +180,7 @@ def load_file_data(file_path: str | None) -> tuple[list[Word], list[MorphList], 
 	with open(file_path, encoding='utf-8') as f:
 		for line in f:
 			word, line_morphs = get_line_morphs(line)
-			bmes_labels = get_bmes_labels(line_morphs)
+			bmes_labels: str = get_bmes_labels(line_morphs)
 
 			words.append(word)
 			morphs.append(line_morphs)
@@ -314,18 +314,16 @@ def split_increment_residual(confidence_data: list[ConfidenceData], select_inter
 	return increment_data, residual_data
 
 def save_data(confidence_data: list[ConfidenceData], sub_datadir: str, file_name: str) -> None:
-	
 	words, morphs_list, _ = zip(*confidence_data)
 	
+	src_content: list[str] = [' '.join(word) + '\n' for word in words]
 	with open(f'{sub_datadir}/{file_name}.src', 'w', encoding='utf-8') as src:
-		for word in words:
-			src.write(' '.join(w for w in word) + '\n')
+		src.writelines(src_content)
 
+	tgt_content: list[str] = [' '.join('!'.join(morphs)) + '\n' for morphs in morphs_list]
 	with open(f'{sub_datadir}/{file_name}.tgt', 'w', encoding='utf-8') as tgt:
-		for morphs in morphs_list:
-			segmented: Word = '!'.join(morphs)
-			tgt.write(' '.join(w for w in segmented) + '\n')
-
+		tgt.writelines(tgt_content)
+		
 def output_crf(crf: sklearn_crfsuite.CRF, sub_datadir: str, args: argparse.Namespace, data: DataDict, X_test: DatasetFeatures) -> tuple[DatasetLabels, DatasetLabels]:
 
 	Y_test_predict: DatasetLabels = crf.predict(X_test)
