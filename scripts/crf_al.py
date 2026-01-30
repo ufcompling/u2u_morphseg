@@ -323,7 +323,7 @@ def save_data(confidence_data: list[ConfidenceData], sub_datadir: str, file_name
 	tgt_content: list[str] = [' '.join('!'.join(morphs)) + '\n' for morphs in morphs_list]
 	with open(f'{sub_datadir}/{file_name}.tgt', 'w', encoding='utf-8') as tgt:
 		tgt.writelines(tgt_content)
-		
+
 def output_crf(crf: sklearn_crfsuite.CRF, sub_datadir: str, args: argparse.Namespace, data: DataDict, X_test: DatasetFeatures) -> tuple[DatasetLabels, DatasetLabels]:
 
 	Y_test_predict: DatasetLabels = crf.predict(X_test)
@@ -400,11 +400,10 @@ def reconstruct_predictions(pred_labels: DatasetLabels, words: list[Word]) -> li
 
 # Save predictions
 def save_predictions(predictions: list[MorphList], file_path: str) -> None:
+	pred_content: list[str] = [' '.join('!'.join(morphs)) + '\n' for morphs in predictions]
 	with open(file_path, 'w', encoding = 'utf-8') as f:
-		for morphs in predictions:
-			segmented: Word = '!'.join(morphs)
-			f.write(' '.join(c for c in segmented) + '\n')
-
+		f.writelines(pred_content)
+		
 # Evaluate predictions with statistical metrics (precision, recall, F1 score)
 def calculate_metrics(y_true: MorphList, y_pred: MorphList) -> tuple[float, float, float]:
 	correct_total: int = sum(1 for m in y_pred if m in y_true)
