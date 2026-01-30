@@ -385,14 +385,11 @@ def reconstruct_predictions(pred_labels: DatasetLabels, words: list[Word]) -> li
 						new_labels.append(bmes_label + 'E')
 
 		morphs: MorphList = []
-
-		for i in range(len(new_labels)):
-			tok_length: int = len(new_labels[i])
-			if i == 0:
-				morphs.append(word[0:tok_length])
-			else:
-				pre: int = len(''.join(z for z in new_labels[:i]))
-				morphs.append(word[pre:pre+tok_length])
+		prefix_length: int = 0
+		for label in new_labels:
+			tok_length: int = len(label)
+			morphs.append(word[prefix_length:prefix_length+tok_length])
+			prefix_length += tok_length
 
 		predictions.append(morphs)
 
@@ -403,7 +400,7 @@ def save_predictions(predictions: list[MorphList], file_path: str) -> None:
 	pred_content: list[str] = [' '.join('!'.join(morphs)) + '\n' for morphs in predictions]
 	with open(file_path, 'w', encoding = 'utf-8') as f:
 		f.writelines(pred_content)
-		
+
 # Evaluate predictions with statistical metrics (precision, recall, F1 score)
 def calculate_metrics(y_true: MorphList, y_pred: MorphList) -> tuple[float, float, float]:
 	correct_total: int = sum(1 for m in y_pred if m in y_true)
