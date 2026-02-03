@@ -1,1 +1,9 @@
 data/finnish/100/
+
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
+frontend/.cache/
