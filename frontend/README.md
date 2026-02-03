@@ -1,3 +1,49 @@
+### Frontend Setup & Run
+
+**Requirements:**
+- Node.js (v20.19.0+ or v22.12.0+)
+- Bun.js
+
+---
+
+#### 1. Update Node.js (if needed)
+If your node version is too old, the build will fail. Use NVM to update:
+```bash
+curl -o- [https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh](https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh) | bash
+source ~/.bashrc
+nvm install 22
+nvm use 22
+```
+
+#### 2. Install Bun.js
+```
+curl -fsSL [https://bun.sh/install](https://bun.sh/install) | bash
+source ~/.bashrc
+# Verify with: bun --version
+```
+
+#### 3. Running the app
+```
+cd frontend
+
+# Install dependencies
+bun install
+
+# Create production build
+bun run build
+
+# Launch the preview
+bun run preview
+```
+
+#### 4. Access the Site
+Open your browser to: http://localhost:4173/
+
+#### 5. Note.
+Use bun run dev if you want to make changes to the code with instant updates.
+
+
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
