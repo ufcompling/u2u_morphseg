@@ -3,7 +3,7 @@
 // Idk if this is necessary, but here it is.
 import React, { useState, useEffect, type JSX } from 'react';
 import Dexie from 'dexie';
-import {mapData, type rawData, type fileData} from './dataHelpers';
+import {mapData, type rawData, type fileData} from '../utils/dataHelpers';
 
 // Database class
 class FileDB extends Dexie {
@@ -15,11 +15,12 @@ class FileDB extends Dexie {
     });
   }
 }
-const Importer = (): JSX.Element => {
+const FileManager = (): JSX.Element => {
   const [db, setDb] = useState<FileDB | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<string>('');
   const [storedFiles, setStoredFiles] = useState<fileData[]>([]);
+  const [pyodide, setPyodide] = useState<any>(null);
 
   // Initialize database
   useEffect(() => {
@@ -27,11 +28,18 @@ const Importer = (): JSX.Element => {
       const database = new FileDB();
       await database.open();
       setDb(database);
+
+      setStatus('Loading Pyodide')
+      const pyodideModule = await (window as any).loadPyodide({
+        indexURL: "https://cdn.jsdelivr.net/pyodide/v0.24.1/full/"
+      });
+      setPyodide(pyodideModule);
+
       setStatus('Ready to Import');
-      await loadFiles();
     };
     initDB();
   }, []);
+  
   useEffect(() => {
     if (db) {
       loadFiles();
@@ -98,6 +106,36 @@ const Importer = (): JSX.Element => {
     await loadFiles();
   };
 
+  const pyodideProcessFile = async (id: number | undefined) => {
+    if (!db || id === undefined || !pyodide) return;
+    const file = await db.files.get(id);
+
+    if (!file || typeof file.content !== 'string') {
+      console.log('File not found or unsupported content type');
+     return; 
+    }
+    setStatus(`Processing file: ${file.filename}`);
+
+    const pythonCode = `
+  text: str = file_content
+  lines: list[str] = text.split('\\n')
+  '\\n'.join([line[::-1].upper() for line in lines])` // Perform some dummy processing (reverse and uppercase each line)
+
+    pyodide.globals.set('file_content', file.content);
+    const result = pyodide.runPython(pythonCode);
+
+    await db.files.add({
+      filename: `${file.filename}`,
+      content: result,
+      size: result.length,
+      type: 'text/plain'
+    });
+    
+    setStatus(`Processing completed for file: ${file.filename}`);
+    await db.files.delete(id);
+    await loadFiles();
+  }
+
   // Will sort these, and restructure this file later.
   // cough cough evan cough cough
   const deleteFile = async (id: number | undefined) => {
@@ -113,7 +151,7 @@ const Importer = (): JSX.Element => {
   // Render component, feel free to change
   return (
     <div>
-      <h2>Importer</h2>
+      <h2>File Manager</h2>
       <input type="file" multiple accept=".txt,.pdf,.docx,.odt" onChange={handleFileChange} />
       <button onClick={importFiles}>Import Files</button>
       <p>Status: {status}</p>
@@ -122,6 +160,7 @@ const Importer = (): JSX.Element => {
         {storedFiles.map(file => (
           <li key={file.id}>{file.filename} - {(file.size / (1024 * 1024)).toFixed(2)} Mb
             <button onClick={() => viewing(file.id)}>View</button>
+            <button onClick={() => pyodideProcessFile(file.id)}>Process</button>
             <button onClick={() => deleteFile(file.id)}>Delete</button>
             
           </li> 
@@ -131,4 +170,4 @@ const Importer = (): JSX.Element => {
   )
 };
 
-export default Importer;
+export default FileManager;
