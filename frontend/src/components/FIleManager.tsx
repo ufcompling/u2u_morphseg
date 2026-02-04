@@ -15,7 +15,7 @@ class FileDB extends Dexie {
     });
   }
 }
-const Importer = (): JSX.Element => {
+const FileManager = (): JSX.Element => {
   const [db, setDb] = useState<FileDB | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<string>('');
@@ -170,4 +170,4 @@ const Importer = (): JSX.Element => {
   )
 };
 
-export default Importer;
+export default FileManager;
