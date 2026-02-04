@@ -1,68 +1,68 @@
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@import "tailwindcss";
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
+@layer base {
   :root {
-    color: #213547;
-    background-color: #ffffff;
+    /* Pine Teal #344e41 - darkest, for background */
+    --background: #344e41;
+    /* Dust Grey - light warm neutral for text */
+    --foreground: #dad7cd;
+    /* Hunter Green #3a5a40 - card background */
+    --card: #3a5a40;
+    --card-foreground: #dad7cd;
+    --popover: #3a5a40;
+    --popover-foreground: #dad7cd;
+    /* Dry Sage #a3b18a - primary accent */
+    --primary: #a3b18a;
+    --primary-foreground: #344e41;
+    /* Fern #588157 - secondary */
+    --secondary: #588157;
+    --secondary-foreground: #dad7cd;
+    --muted: #588157;
+    --muted-foreground: #a3b18a;
+    --accent: #a3b18a;
+    --accent-foreground: #344e41;
+    --destructive: oklch(0.577 0.245 27.325);
+    --destructive-foreground: #dad7cd;
+    --border: #588157;
+    --input: #3a5a40;
+    --ring: #a3b18a;
+    --chart-1: #a3b18a;
+    --chart-2: #588157;
+    --chart-3: #3a5a40;
+    --chart-4: #344e41;
+    --chart-5: #dad7cd;
+    --radius: 0.5rem;
   }
-  a:hover {
-    color: #747bff;
+
+  * {
+    border-color: var(--border);
   }
-  button {
-    background-color: #f9f9f9;
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: system-ui, -apple-system, sans-serif;
   }
+}
+
+@layer utilities {
+  .bg-background { background-color: var(--background); }
+  .bg-foreground { background-color: var(--foreground); }
+  .bg-card { background-color: var(--card); }
+  .bg-primary { background-color: var(--primary); }
+  .bg-secondary { background-color: var(--secondary); }
+  .bg-muted { background-color: var(--muted); }
+  .bg-accent { background-color: var(--accent); }
+  .bg-destructive { background-color: var(--destructive); }
+  
+  .text-foreground { color: var(--foreground); }
+  .text-card-foreground { color: var(--card-foreground); }
+  .text-primary { color: var(--primary); }
+  .text-primary-foreground { color: var(--primary-foreground); }
+  .text-secondary-foreground { color: var(--secondary-foreground); }
+  .text-muted-foreground { color: var(--muted-foreground); }
+  .text-accent-foreground { color: var(--accent-foreground); }
+  
+  .border-border { border-color: var(--border); }
+  .ring-ring { --tw-ring-color: var(--ring); }
 }
