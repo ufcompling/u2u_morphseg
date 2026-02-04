@@ -125,7 +125,7 @@ const FileManager = (): JSX.Element => {
     const result = pyodide.runPython(pythonCode);
 
     await db.files.add({
-      filename: `processed_${file.filename}`,
+      filename: `${file.filename}`,
       content: result,
       size: result.length,
       type: 'text/plain'
