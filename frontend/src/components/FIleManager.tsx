@@ -151,7 +151,7 @@ const FileManager = (): JSX.Element => {
   // Render component, feel free to change
   return (
     <div>
-      <h2>Importer</h2>
+      <h2>File Manager</h2>
       <input type="file" multiple accept=".txt,.pdf,.docx,.odt" onChange={handleFileChange} />
       <button onClick={importFiles}>Import Files</button>
       <p>Status: {status}</p>
