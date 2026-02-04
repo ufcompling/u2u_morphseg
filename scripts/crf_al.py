@@ -52,6 +52,7 @@ def main() -> None:
 	args: argparse.Namespace = parse_arguments()
 	sub_datadir: str = setup_datadirs(args)
 
+	# Define file paths
 	PATHS: dict[str, str] = {
 		# Data gathering file paths
 		'TRAIN_TGT': f'{sub_datadir}/train.{args.initial_size}.tgt',
@@ -96,7 +97,7 @@ def main() -> None:
 	print(f'  Average Recall: {average_recall}')
 	print(f'  Average F1 Score: {average_f1}')
 
-# TODO: Remove and replace with method of receiving these values from frontend!!!
+### Parsing Arguments ###
 def parse_arguments() -> argparse.Namespace:
 	parser: argparse.ArgumentParser = argparse.ArgumentParser()
 	parser.add_argument('--datadir', type = str, default = 'data', help = 'path to data')
@@ -154,20 +155,20 @@ def get_line_morphs(line: str) -> tuple[Word, MorphList]:
 	return word, morphs
 
 def get_bmes_labels(morphs: MorphList) -> str:
-	label: str = ''
+	label: list = []
 
 	for morph in morphs:
 		if len(morph) == 1:
-			label += 'S'
+			label.append('S')
 		else:
-			label += 'B'
+			label.append('B')
 
 			for _ in range(len(morph)-2):
-				label += 'M'
+				label.append('M')
 
-			label += 'E'
+			label.append('E')
 
-	return label
+	return ''.join(label)
 
 def load_file_data(file_path: str | None) -> tuple[list[Word], list[MorphList], BMESDict]:
 	words: list[Word] = []
