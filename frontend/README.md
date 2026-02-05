@@ -22,6 +22,12 @@ source ~/.bashrc
 # Verify with: bun --version
 ```
 
+
+#### 2.5 Install Tailwind
+```
+bun add -D tailwindcss postcss autoprefixer
+```
+
 #### 3. Running the app
 ```
 cd frontend
