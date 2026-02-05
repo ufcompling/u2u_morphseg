@@ -1,9 +1,13 @@
+/* =============================================================================
+ * NOT NEEDED ANYMORE
+ * ============================================================================= */
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Dexie from 'dexie';
-import { mapData, type rawData, type fileData } from '../hooks/dataHelpers';
-import { TurtleLogo } from './turtle-logo';
-import { TurtleShellBackground } from './turtle-background';
-import { CopyIcon, CheckIcon, DownloadIcon } from './icons';
+import { mapData, type rawData, type fileData } from '../services/database/dataHelpers';
+import { TurtleLogo } from './ui/turtle-logo';
+import { TurtleShellBackground } from '../layouts/turtle-background';
+import { CopyIcon, CheckIcon, DownloadIcon } from './ui/icons';
 
 /* =============================================================================
  * DATABASE CONFIGURATION
