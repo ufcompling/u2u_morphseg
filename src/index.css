@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+:root {
+  /* Pine Teal #344e41 - darkest, for background */
+  --background: 52 73 65;
+  /* Dust Grey #dad7cd - light warm neutral for text */
+  --foreground: 218 215 205;
+  /* Hunter Green #3a5a40 - card background */
+  --card: 58 90 64;
+  --card-foreground: 218 215 205;
+  --popover: 58 90 64;
+  --popover-foreground: 218 215 205;
+  /* Dry Sage #a3b18a - primary accent */
+  --primary: 163 177 138;
+  --primary-foreground: 52 73 65;
+  /* Fern #588157 - secondary */
+  --secondary: 88 129 87;
+  --secondary-foreground: 218 215 205;
+  --muted: 88 129 87;
+  --muted-foreground: 163 177 138;
+  --accent: 163 177 138;
+  --accent-foreground: 52 73 65;
+  --border: 88 129 87;
+  --input: 58 90 64;
+  --ring: 163 177 138;
+  --radius: 0.5rem;
+}
+
+@theme {
+  --color-background: rgb(var(--background));
+  --color-foreground: rgb(var(--foreground));
+  --color-card: rgb(var(--card));
+  --color-card-foreground: rgb(var(--card-foreground));
+  --color-popover: rgb(var(--popover));
+  --color-popover-foreground: rgb(var(--popover-foreground));
+  --color-primary: rgb(var(--primary));
+  --color-primary-foreground: rgb(var(--primary-foreground));
+  --color-secondary: rgb(var(--secondary));
+  --color-secondary-foreground: rgb(var(--secondary-foreground));
+  --color-muted: rgb(var(--muted));
+  --color-muted-foreground: rgb(var(--muted-foreground));
+  --color-accent: rgb(var(--accent));
+  --color-accent-foreground: rgb(var(--accent-foreground));
+  --color-border: rgb(var(--border));
+  --color-input: rgb(var(--input));
+  --color-ring: rgb(var(--ring));
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
