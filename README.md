@@ -20,6 +20,7 @@ The application allows users to perform sequence labeling using Conditional Rand
 ---
 
 ## 3. Project Architecture
+```
 .
 ├── public/                           # Static assets served directly by the browser.
 │   └── scripts/                      # Python logic (CRF & analysis)
@@ -46,7 +47,7 @@ The application allows users to perform sequence labeling using Conditional Rand
 ├── index.html                        # Entry point (loads Pyodide CDN)
 ├── package.json                      # Dependencies and scripts
 └── vite.config.ts                    # Vite bundler configuration
-
+```
 ---
 
 ## 4. Prerequisites
@@ -79,14 +80,24 @@ source ~/.bashrc
 
 ## 7. Running the app
 
-# Install dependencies
+Install dependencies
+```
 bun install
+```
 
-# Create production build
+Create production build
+```
 bun run build
+```
 
-# Launch the preview
+Launch the preview
+```
 bun run preview
+```
+
+Run the development server (it allows to make changes to the code with instant updates.)
+```
+bun run dev
 ```
 
 ---
@@ -95,7 +106,4 @@ bun run preview
 Open your browser to: http://localhost:4173/
 
 ---
-
-## 9. Note.
-Use bun run dev if you want to make changes to the code with instant updates.
 
