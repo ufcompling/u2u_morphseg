@@ -2,7 +2,7 @@ name: Deploy React + Pyodide to Pages
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main" , "bug/CICD_bug_fix"]
   workflow_dispatch:
 
 permissions:
