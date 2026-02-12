@@ -201,7 +201,7 @@ export function AnalyzerModule() {
       pyodide.globals.set('file_content', file.content);
       
       // Execute the Python code and get the result
-      const result = await runPythonCode(pyodide, file.content, '/scripts/pycode.py', 'process_data');
+      const result = await runPythonCode(pyodide, file.content, './scripts/pycode.py', 'process_data');
 
       // Store the processed result back in the database
       // This way users can view both original and processed versions
