@@ -3,7 +3,7 @@
  * ============================================================================= */
 
 import { DragHandle, FileTypeIcon, ViewIcon, DeleteIcon, SpinnerIcon, ProcessIcon } from "../../../components/ui/icons";
-import type { fileData } from "../../../services/database/dataHelpers";
+import type { fileData } from "../../../services/database/helpers/dataHelpers";
 
 interface FileCardProps {
   file: fileData;
@@ -54,7 +54,7 @@ export function FileCard({
     return name.split(".").pop()?.toLowerCase() || "txt";
   };
 
-  const extension = getFileExtension(file.filename);
+  const extension = getFileExtension(file.fileName);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Render
@@ -95,17 +95,17 @@ export function FileCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2.5">
             <p className="font-mono text-sm font-medium text-foreground truncate">
-              {file.filename}
+              {file.fileName}
             </p>
             {/* "DONE" badge if file has been processed */}
-            {file.processedContent && (
+            {file.processedFileContent && (
               <span className="px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 font-mono text-[8px] text-primary font-semibold uppercase tracking-widest">
                 done
               </span>
             )}
           </div>
           <p className="font-mono text-[11px] text-muted-foreground/40 mt-1">
-            {formatSize(file.size)}
+            {formatSize(file.fileSize ?? 0)}
           </p>
         </div>
 

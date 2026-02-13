@@ -3,22 +3,22 @@
  * ============================================================================= */
 
 import { useState, useRef } from "react";
-import type { fileData } from "../../../services/database/dataHelpers";
+import type { fileData } from "../../../services/database/helpers/dataHelpers";
 import { FileIcon } from "../../../components/ui/icons";
 import { FileCard } from "./FileCard";
 
 interface FileListSectionProps {
   files: fileData[];
-  processingFileId: number | null;
-  onView: (id: number) => void;
-  onProcess: (id: number) => void;
-  onDelete: (id: number) => void;
+  processingFileName: string | null;
+  onView: (fileName: string | undefined) => void;
+  onProcess: (fileName: string | undefined) => void;
+  onDelete: (fileName: string | undefined) => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
 }
 
 export function FileListSection({
   files,
-  processingFileId,
+  processingFileName,
   onView,
   onProcess,
   onDelete,
@@ -107,15 +107,15 @@ export function FileListSection({
       <div className="grid gap-2 p-4">
         {files.map((file, index) => (
           <FileCard
-            key={file.id}
+            key={file.fileName}
             file={file}
             index={index}
-            isProcessing={processingFileId === file.id}
+            isProcessing={processingFileName === file.fileName}
             isDragging={draggedIndex === index}
             isDragOver={dragOverIndex === index}
-            onView={() => file.id && onView(file.id)}
-            onProcess={() => file.id && onProcess(file.id)}
-            onDelete={() => file.id && onDelete(file.id)}
+            onView={() => file.fileName && onView(file.fileName)}
+            onProcess={() => file.fileName && onProcess(file.fileName)}
+            onDelete={() => file.fileName && onDelete(file.fileName)}
             onDragStart={() => handleDragStart(index)}
             onDragEnter={() => handleDragEnter(index)}
             onDragLeave={handleDragLeave}

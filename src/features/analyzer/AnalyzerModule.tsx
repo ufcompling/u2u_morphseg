@@ -1,11 +1,15 @@
 import { useState, useEffect } from "react";
-import { mapData, type rawData, type fileData } from "../../services/database/dataHelpers";
+import { type fileData } from "../../services/database/helpers/dataHelpers";
 import { FileListSection } from "./components/FileListSection";
 import { FileViewer } from "./components/FileViewer";
 import { Header } from "./components/Header";
 import { UploadSection } from "./components/UploadSection";
-import { db } from '../../services/database/db';
-import { initPyodide, runPythonCode } from "../../services/pyodide/pyodideService";
+import { initPyodide } from "../../services/pyodide/pyodideService";
+import { loadFiles } from "../../services/database/helpers/loadFiles";
+import { importFiles } from "../../services/database/helpers/importFiles";
+import { saveFile } from "../../services/database/helpers/saveFile";
+import { readFile } from "../../services/database/helpers/readFile";
+import { deleteFile } from "../../services/database/helpers/deleteFile";
 
 
 /* =============================================================================
@@ -31,7 +35,7 @@ export function AnalyzerModule() {
   const [isUploading, setIsUploading] = useState(false);
   
   // Which file is currently being processed (null = none)
-  const [processingFileId, setProcessingFileId] = useState<number | null>(null);
+  const [processingFileName, setProcessingFileName] = useState<string | null>(null);
   
   // Pyodide runtime instance - this is the Python interpreter running in the browser
   const [pyodide, setPyodide] = useState<any>(null);
@@ -48,31 +52,17 @@ export function AnalyzerModule() {
   // 1. Open the IndexedDB connection
   // 2. Load Pyodide (Python in the browser) from CDN
   // Both are async and take a few seconds, so we show loading indicators
-  useEffect(() => {
-    const initDB = async () => {
-      try {
-        // Step 1: Initialize IndexedDB
-        await db.open();
-        setIndexedDBReady(true);
-        
-        setStatus('Loading Pyodide...');
-        
-        // Step 2: Load Pyodide runtime from CDN
-        // This downloads ~6MB of WebAssembly, so it takes 2-3 seconds on first load
-        // After that it's cached by the browser
-        const pyodideModule = await initPyodide();
-        setPyodide(pyodideModule);
+    useEffect(() => {
+      const initDB = async () => {
+        setStatus('Loading database...');
+        const pyodideInstance = await initPyodide();
+        setPyodide(pyodideInstance);
         setPyodideReady(true);
-        
+        setIndexedDBReady(true);
         setStatus('Ready to import');
-      } catch (error) {
-        console.error('Initialization error:', error);
-        setStatus('Initialization failed');
       }
-    };
-    
-    initDB();
-  }, []); // Empty deps array = run once on mount
+      initDB();
+    }, []); 
 
   // ─────────────────────────────────────────────────────────────────────────
   // Load Files from Database
@@ -81,27 +71,18 @@ export function AnalyzerModule() {
   // Whenever the database connection changes, reload the file list
   // This also runs after uploads, deletes, and processing
   useEffect(() => {
-    if (indexedDBReady) {
-      loadFiles();
-    }
-  }, [indexedDBReady]);
+    if (!pyodide) return;
 
-  // Pull all files from IndexedDB and sort by newest first
-  // We do this instead of maintaining state because multiple tabs could modify the database
-  const loadFiles = async () => {
-    if (!indexedDBReady) return;
-    
-    try {
-      const allFiles = await db.files.toArray();
-      
-      // Sort newest first - this makes the UI feel more responsive
-      // since users typically care about their most recent uploads
-      allFiles.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-      setFiles(allFiles);
-    } catch (error) {
-      console.error('Error loading files:', error);
-    }
-  };
+    (async () => {
+      try {
+        const loadedFiles = await loadFiles(pyodide);
+        setFiles(loadedFiles);
+      } catch (error) {
+        console.error('Error loading files:', error);
+        setFiles([]);
+      }
+    })();
+  }, [pyodide]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // File Upload Handler
@@ -110,59 +91,23 @@ export function AnalyzerModule() {
   // Handles files from both drag-and-drop and file picker
   // We read each file, check for duplicates, then bulk insert into IndexedDB
   const handleUpload = async (fileList: FileList | null) => {
-    if (!indexedDBReady || !fileList || fileList.length === 0) return;
+    if (!fileList || fileList.length === 0) return;
+
+    // Defensive check for pyodide
+    if (!pyodide || !pyodideReady) {
+      setStatus('Python environment not ready. Please wait...');
+      return;
+    }
 
     setIsUploading(true);
     setStatus('Importing files...');
 
     try {
-      const rawDataArray: rawData[] = [];
-      
-      // Check for duplicates by filename - we don't want users accidentally uploading
-      // the same file twice and ending up with duplicate training data
-      const existingFilenames = new Set(files.map(f => f.filename));
-      const duplicates: string[] = [];
+      await importFiles(pyodide, fileList, setStatus);
+      setStatus('Files imported successfully');
+      const updatedFiles = await loadFiles(pyodide);
+      setFiles(updatedFiles);
 
-      for (const file of Array.from(fileList)) {
-        if (existingFilenames.has(file.name)) {
-          duplicates.push(file.name);
-          continue;
-        }
-
-        // Read file content - we handle text and binary differently
-        // Text files are easier to work with as strings
-        // Binary files (PDF, DOCX) need to be stored as Uint8Array
-        let content: string | Uint8Array;
-        if (file.type.startsWith('text/') || file.type === 'application/json') {
-          content = await file.text();
-        } else {
-          const arrayBuffer = await file.arrayBuffer();
-          content = new Uint8Array(arrayBuffer);
-        }
-
-        rawDataArray.push({
-          filename: file.name,
-          content,
-          size: file.size,
-          type: file.type || 'text/plain',
-        });
-      }
-
-      // If any duplicates were found, abort and tell the user
-      if (duplicates.length > 0) {
-        setStatus(`Import failed: Duplicate files - ${duplicates.join(', ')}`);
-        setIsUploading(false);
-        return;
-      }
-
-      // Map the raw data to our database schema (adds timestamps, etc.)
-      const mappedData = mapData(rawDataArray);
-      
-      // Bulk insert is much faster than inserting one at a time
-      await db.files.bulkAdd(mappedData);
-      
-      setStatus(`Import completed: ${mappedData.length} file(s) added`);
-      await loadFiles();
     } catch (error) {
       console.error('Upload error:', error);
       setStatus('Import failed');
@@ -178,50 +123,45 @@ export function AnalyzerModule() {
   // This is where the magic happens - we run Python code on the file content
   // Currently just a demo (reverse + uppercase), but this will eventually call
   // the CRF model for morphological segmentation
-  const handleProcess = async (id: number | undefined) => {
-    if (!indexedDBReady || id === undefined || !pyodide) {
-      setStatus('Processing unavailable');
-      return;
-    }
-
-    const file = await db.files.get(id);
-    if (!file || typeof file.content !== 'string') {
-      setStatus('File not found or unsupported content type');
-      return;
-    }
-
-    setProcessingFileId(id);
-    setStatus(`Processing file: ${file.filename}`);
+  const handleProcess = async (fileName: string | undefined) => {
+    const files = await loadFiles(pyodide);
+    const file = files.find((f) => f.fileName === fileName);
+    if (!file) return;
+    setProcessingFileName(file.fileName);
+    setStatus(`Processing file: ${file.fileName}`);
 
     try {
       // TODO: Replace this demo code with actual CRF morphological segmentation
       // For now, this just reverses and uppercases each line to prove the pipeline works
+      const pythonCode = `
+text: str = file_content
+lines: list[str] = text.split('\\n')
+'\\n'.join([line[::-1].upper() for line in lines])
+      `;
 
       // Pass the file content into Python's global scope
-      pyodide.globals.set('file_content', file.content);
+      pyodide.globals.set('file_content', file.fileContent);
       
       // Execute the Python code and get the result
-      const result = await runPythonCode(pyodide, file.content, './scripts/pycode.py', 'process_data');
+      const result = pyodide.runPython(pythonCode);
 
       // Store the processed result back in the database
       // This way users can view both original and processed versions
-      await db.files.update(id, {
-        processedContent: result
-      });
+      await saveFile(pyodide, `processed_${file.fileName}`, result);
 
-      setStatus(`Processing completed for: ${file.filename}`);
-      await loadFiles();
+      setStatus(`Processing completed for: ${file.fileName}`);
+      await loadFiles(pyodide);
       
       // If the user has this file open in the viewer, refresh it
-      if (selectedFile?.id === id) {
-        const updated = await db.files.get(id);
-        setSelectedFile(updated || null);
+      if (selectedFile?.fileName === file.fileName) {
+        const updated = await loadFiles(pyodide);
+        setSelectedFile(updated.find(f => f.fileName === file.fileName) || null);
       }
     } catch (error) {
       console.error('Processing error:', error);
       setStatus('Processing failed');
     } finally {
-      setProcessingFileId(null);
+      setProcessingFileName(null);
     }
   };
 
@@ -231,18 +171,19 @@ export function AnalyzerModule() {
   
   // Remove a file from IndexedDB
   // If the file is currently open in the viewer, close the viewer
-  const handleDelete = async (id: number | undefined) => {
-    if (!indexedDBReady || id === undefined) return;
-    
+  const handleDelete = async (fileName: string | undefined) => {
+    if (!pyodideReady || !fileName) return;
     try {
-      await db.files.delete(id);
-      await loadFiles();
+      await deleteFile(pyodide, fileName);
+      try {        await deleteFile(pyodide, `processed_${fileName}`); } catch {} // Ignore if processed version doesn't exist
+      const updatedFiles = await loadFiles(pyodide);
+      setFiles(updatedFiles);
       
       // Close the viewer if we just deleted the file being viewed
-      if (selectedFile?.id === id) {
+      if (selectedFile?.fileName === fileName) {
         setSelectedFile(null);
       }
-      
+
       setStatus('File deleted');
     } catch (error) {
       console.error('Delete error:', error);
@@ -255,16 +196,38 @@ export function AnalyzerModule() {
   // ─────────────────────────────────────────────────────────────────────────
   
   // Open the file viewer modal for a specific file
-  const handleView = async (id: number | undefined) => {
-    if (!indexedDBReady || id === undefined) return;
-    
-    try {
-      const file = await db.files.get(id);
-      setSelectedFile(file || null);
-    } catch (error) {
-      console.error('View error:', error);
+const handleView = async (fileName: string | undefined) => {
+  if (!fileName || !pyodide) return;
+  try {
+    const contentObj = await readFile(pyodide, fileName);
+    if (!contentObj) {
+      setStatus('Failed to load file');
+      return;
     }
-  };
+    const metaData = files.find(f => f.fileName === fileName);
+    if (!metaData) {
+      // Fallback: minimal fileData (assume text)
+      setSelectedFile({
+        fileName,
+        fileContent: contentObj.fileContent,
+        fileType: 'text',
+      } as fileData);
+      return;
+    }
+    const fileData: fileData = {
+      fileName: metaData.fileName,
+      fileContent: contentObj.fileContent,
+      fileType: metaData.fileType,
+      fileSize: metaData.fileSize,
+      createdAt: metaData.createdAt,
+      processedFileContent: metaData.processedFileContent,
+    };
+    setSelectedFile(fileData);
+  } catch (error) {
+    console.error('Error loading file for viewing:', error);
+    setStatus('Failed to load file');
+  }
+};
 
   // Close the file viewer modal
   const handleCloseViewer = () => {
@@ -307,7 +270,7 @@ export function AnalyzerModule() {
 
           <FileListSection
             files={files}
-            processingFileId={processingFileId}
+            processingFileName={processingFileName}
             onView={handleView}
             onProcess={handleProcess}
             onDelete={handleDelete}
