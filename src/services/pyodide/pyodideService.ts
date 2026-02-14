@@ -9,7 +9,8 @@ export const initPyodide = async () => {
 
   // Load micropip and install packages
   await pyodideInstance.loadPackage('micropip');
-
+  
+  // Install python-crfsuite from whl and sklearn-crfsuite from PyPI
   await pyodideInstance.runPythonAsync(`
     import micropip
     await micropip.install('${window.location.origin}/u2u_morphseg/wheels/python_crfsuite-0.9.12-cp312-cp312-pyodide_2024_0_wasm32.whl')
