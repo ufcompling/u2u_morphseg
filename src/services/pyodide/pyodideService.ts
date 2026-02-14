@@ -4,8 +4,16 @@ export const initPyodide = async () => {
   if (pyodideInstance) return pyodideInstance;
 
   pyodideInstance = await (window as any).loadPyodide({
-    indexURL: "https://cdn.jsdelivr.net/pyodide/v0.24.1/full/"
+    indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.4/full/"
   });
+
+  // Load micropip and install packages
+  await pyodideInstance.loadPackage('micropip');
+  const micropip = pyodideInstance.pyImport('micropip');
+
+  // Install python-crfsuite from whl and sklearn-crfsuite from PyPI
+  await micropip.install('/wheels/python_crfsuite-0.9.12-cp312-cp312-pyodide_2024_0_wasm32.whl')
+  await micropip.install('sklearn-crfsuite');
 
   return pyodideInstance;
 };
