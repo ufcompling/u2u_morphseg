@@ -1,13 +1,32 @@
 let pyodideInstance: any = null;
+let initPromise: Promise<any> | null = null;
 
 export const initPyodide = async () => {
   if (pyodideInstance) return pyodideInstance;
+  if (initPromise) return initPromise;
 
-  pyodideInstance = await (window as any).loadPyodide({
-    indexURL: "https://cdn.jsdelivr.net/pyodide/v0.24.1/full/"
-  });
+  // Prevent race conditions by caching the initPromise to prevent concurrent calls from creating multiple different Pyodide instances
+  initPromise = (async () => {
+    pyodideInstance = await (window as any).loadPyodide({
+      indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.4/full/"
+    });
 
-  return pyodideInstance;
+    // Load micropip and install packages
+    await pyodideInstance.loadPackage('micropip');
+    
+    // Install python-crfsuite from whl and sklearn-crfsuite from PyPI
+    await pyodideInstance.runPythonAsync(`
+      import micropip
+      await micropip.install('${window.location.origin}/u2u_morphseg/wheels/python_crfsuite-0.9.12-cp312-cp312-pyodide_2024_0_wasm32.whl')
+      await micropip.install('sklearn-crfsuite')
+    `);
+
+    initPromise = null;
+    return pyodideInstance;
+  })();
+
+  return initPromise;
+  
 };
 
 export const getPyodide = () => {
