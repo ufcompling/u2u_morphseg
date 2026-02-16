@@ -45,7 +45,7 @@ jobs:
           git clone --depth 1 --branch ${{ env.CRFSUITE_VERSION }} --recursive https://github.com/scrapinghub/python-crfsuite.git temp-crfsuite
           pyodide build temp-crfsuite/
           mkdir -p public/wheels
-          mv temp-crfsuite/dist/*.whl public/wheels/
+          mv dist/*.whl public/wheels/
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

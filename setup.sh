@@ -46,7 +46,7 @@ else
 
     echo "========================== Moving wheel to React public folder =========================="
     mkdir -p public/wheels
-    mv temp-crfsuite/dist/*.whl public/wheels/
+    mv dist/*.whl public/wheels/
 fi
 
 echo "========================== DONE! Your environment is ready. =========================="
