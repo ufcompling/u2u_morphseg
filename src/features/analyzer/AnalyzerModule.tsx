@@ -132,12 +132,6 @@ export function AnalyzerModule() {
     try {
       // TODO: Replace this demo code with actual CRF morphological segmentation
       // For now, this just reverses and uppercases each line to prove the pipeline works
-      const pythonCode = `
-text: str = file_content
-lines: list[str] = text.split('\\n')
-'\\n'.join([line[::-1].upper() for line in lines])
-      `;
-
       // Pass the file content into Python's global scope
       pyodide.globals.set('file_content', file.fileContent);
       
@@ -271,7 +265,7 @@ const handleView = async (fileName: string | undefined) => {
 
           <FileListSection
             files={files}
-            processingFileId={processingFileId}
+            processingFileName={processingFileName}
             onView={handleView}
             onProcess={handleProcess}
             onDelete={handleDelete}

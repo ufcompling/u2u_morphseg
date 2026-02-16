@@ -1,10 +1,10 @@
 /* =============================================================================
- * FILE VIEWER MODAL - Full-Screen File Content Viewer
+ * FILE VIEWER MODAL - Full-Screen File fileContent Viewer
  * ============================================================================= */
 
 import { useState } from "react";
 import { FileTypeIcon, CloseIcon, CheckIcon, CopyIcon, DownloadIcon } from "../../../components/ui/icons";
-import type { fileData } from "../../../services/database/dataHelpers";
+import type { fileData } from "../../../services/database/helpers/dataHelpers";
 
 interface FileViewerProps {
   file: fileData;
@@ -13,15 +13,15 @@ interface FileViewerProps {
 
 export function FileViewer({ file, onClose }: FileViewerProps) {
   
-  // Show processed content by default if it exists
-  const [showProcessed, setShowProcessed] = useState(!!file.processedContent);
+  // Show processed fileContent by default if it exists
+  const [showProcessed, setShowProcessed] = useState(!!file.processedFileContent);
   const [copied, setCopied] = useState(false);
   
-  // Determine which content to display
-  const content =
-    showProcessed && file.processedContent
-      ? file.processedContent
-      : file.content;
+  // Determine which fileContent to display
+  const fileContent =
+    showProcessed && file.processedFileContent
+      ? file.processedFileContent
+      : file.fileContent;
 
   // ─────────────────────────────────────────────────────────────────────────
   // File Stats Calculation
@@ -31,30 +31,30 @@ export function FileViewer({ file, onClose }: FileViewerProps) {
     return name.split(".").pop()?.toLowerCase() || "";
   };
 
-  const extension = getFileExtension(file.filename);
-  const lines = content.split("\n");
+  const extension = getFileExtension(file.fileName);
+  const lines = fileContent.split("\n");
   const lineCount = lines.length;
-  const charCount = content.length;
-  const wordCount = content.split(/\s+/).filter(Boolean).length;
+  const charCount = fileContent.length;
+  const wordCount = fileContent.split(/\s+/).filter(Boolean).length;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Actions
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Copy content to clipboard
+  // Copy fileContent to clipboard
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(content);
+    await navigator.clipboard.writeText(fileContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Download file with processed_ prefix if viewing processed content
+  // Download file with processed_ prefix if viewing processed fileContent
   const handleDownload = () => {
-    const blob = new Blob([content], { type: "text/plain" });
+    const blob = new Blob([fileContent], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = showProcessed ? `processed_${file.filename}` : file.filename;
+    a.download = showProcessed ? `processed_${file.fileName}` : file.fileName;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -71,7 +71,7 @@ export function FileViewer({ file, onClose }: FileViewerProps) {
         onClick={onClose}
       />
 
-      {/* Modal Content */}
+      {/* Modal fileContent */}
       <div className="relative w-full max-w-5xl max-h-[90vh] bg-card/98 backdrop-blur-xl border border-border/30 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-300">
         
         {/* Header - File info and close button */}
@@ -81,7 +81,7 @@ export function FileViewer({ file, onClose }: FileViewerProps) {
               <FileTypeIcon extension={extension} />
               <div>
                 <h2 className="font-mono text-base font-semibold text-foreground">
-                  {file.filename}
+                  {file.fileName}
                 </h2>
                 {/* File statistics */}
                 <div className="flex items-center gap-3 mt-1">
@@ -114,7 +114,7 @@ export function FileViewer({ file, onClose }: FileViewerProps) {
         <div className="px-6 py-3 border-b border-border/10 flex items-center justify-between bg-secondary/3 shrink-0">
           <div className="flex items-center gap-2">
             {/* Only show toggle if file has been processed */}
-            {file.processedContent && (
+            {file.processedFileContent && (
               <div className="flex items-center bg-secondary/20 rounded-lg p-0.5">
                 <button
                   onClick={() => setShowProcessed(false)}
@@ -159,7 +159,7 @@ export function FileViewer({ file, onClose }: FileViewerProps) {
           </div>
         </div>
 
-        {/* Content area - Line numbers + code */}
+        {/* fileContent area - Line numbers + code */}
         <div className="flex-1 overflow-auto bg-background/30">
           <div className="flex min-h-full">
             {/* Line numbers column */}
@@ -174,7 +174,7 @@ export function FileViewer({ file, onClose }: FileViewerProps) {
               ))}
             </div>
 
-            {/* Content column */}
+            {/* fileContent column */}
             <div className="flex-1 py-5 px-6 overflow-x-auto">
               <pre className="font-mono text-[13px] text-foreground/90 leading-7 whitespace-pre">
                 {lines.map((line, i) => (
@@ -197,7 +197,7 @@ export function FileViewer({ file, onClose }: FileViewerProps) {
               <span className="font-mono text-[10px] text-muted-foreground/40 uppercase tracking-wider">
                 {extension || "txt"}
               </span>
-              {showProcessed && file.processedContent && (
+              {showProcessed && file.processedFileContent && (
                 <span className="px-2 py-0.5 rounded bg-primary/15 font-mono text-[9px] text-primary uppercase tracking-wider">
                   viewing processed
                 </span>
