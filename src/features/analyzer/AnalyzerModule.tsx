@@ -197,16 +197,38 @@ lines: list[str] = text.split('\\n')
   // ─────────────────────────────────────────────────────────────────────────
   
   // Open the file viewer modal for a specific file
-  const handleView = async (id: number | undefined) => {
-    if (!indexedDBReady || id === undefined) return;
-    
-    try {
-      const file = await db.files.get(id);
-      setSelectedFile(file || null);
-    } catch (error) {
-      console.error('View error:', error);
+const handleView = async (fileName: string | undefined) => {
+  if (!fileName || !pyodide) return;
+  try {
+    const contentObj = await readFile(pyodide, fileName);
+    if (!contentObj) {
+      setStatus('Failed to load file');
+      return;
     }
-  };
+    const metaData = files.find(f => f.fileName === fileName);
+    if (!metaData) {
+      // Fallback: minimal fileData (assume text)
+      setSelectedFile({
+        fileName,
+        fileContent: contentObj.fileContent,
+        fileType: 'text',
+      } as fileData);
+      return;
+    }
+    const fileData: fileData = {
+      fileName: metaData.fileName,
+      fileContent: contentObj.fileContent,
+      fileType: metaData.fileType,
+      fileSize: metaData.fileSize,
+      createdAt: metaData.createdAt,
+      processedFileContent: metaData.processedFileContent,
+    };
+    setSelectedFile(fileData);
+  } catch (error) {
+    console.error('Error loading file for viewing:', error);
+    setStatus('Failed to load file');
+  }
+};
 
   // Close the file viewer modal
   const handleCloseViewer = () => {
