@@ -170,18 +170,21 @@ lines: list[str] = text.split('\\n')
   
   // Remove a file from IndexedDB
   // If the file is currently open in the viewer, close the viewer
-  const handleDelete = async (id: number | undefined) => {
-    if (!indexedDBReady || id === undefined) return;
-    
+  // Remove a file from IndexedDB
+  // If the file is currently open in the viewer, close the viewer
+  const handleDelete = async (fileName: string | undefined) => {
+    if (!pyodideReady || !fileName) return;
     try {
-      await db.files.delete(id);
-      await loadFiles();
+      await deleteFile(pyodide, fileName);
+      try {        await deleteFile(pyodide, `processed_${fileName}`); } catch {} // Ignore if processed version doesn't exist
+      const updatedFiles = await loadFiles(pyodide);
+      setFiles(updatedFiles);
       
       // Close the viewer if we just deleted the file being viewed
-      if (selectedFile?.id === id) {
+      if (selectedFile?.fileName === fileName) {
         setSelectedFile(null);
       }
-      
+
       setStatus('File deleted');
     } catch (error) {
       console.error('Delete error:', error);
