@@ -34,7 +34,7 @@ export function AnalyzerModule() {
   const [isUploading, setIsUploading] = useState(false);
   
   // Which file is currently being processed (null = none)
-  const [processingFileId, setProcessingFileId] = useState<number | null>(null);
+  const [processingFileName, setProcessingFileName] = useState<string | null>(null);
   
   // Pyodide runtime instance - this is the Python interpreter running in the browser
   const [pyodide, setPyodide] = useState<any>(null);
@@ -122,50 +122,45 @@ export function AnalyzerModule() {
   // This is where the magic happens - we run Python code on the file content
   // Currently just a demo (reverse + uppercase), but this will eventually call
   // the CRF model for morphological segmentation
-  const handleProcess = async (id: number | undefined) => {
-    if (!indexedDBReady || id === undefined || !pyodide) {
-      setStatus('Processing unavailable');
-      return;
-    }
-
-    const file = await db.files.get(id);
-    if (!file || typeof file.content !== 'string') {
-      setStatus('File not found or unsupported content type');
-      return;
-    }
-
-    setProcessingFileId(id);
-    setStatus(`Processing file: ${file.filename}`);
+  const handleProcess = async (fileName: string | undefined) => {
+    const files = await loadFiles(pyodide);
+    const file = files.find((f) => f.fileName === fileName);
+    if (!file) return;
+    setProcessingFileName(file.fileName);
+    setStatus(`Processing file: ${file.fileName}`);
 
     try {
       // TODO: Replace this demo code with actual CRF morphological segmentation
       // For now, this just reverses and uppercases each line to prove the pipeline works
+      const pythonCode = `
+text: str = file_content
+lines: list[str] = text.split('\\n')
+'\\n'.join([line[::-1].upper() for line in lines])
+      `;
 
       // Pass the file content into Python's global scope
-      pyodide.globals.set('file_content', file.content);
+      pyodide.globals.set('file_content', file.fileContent);
       
       // Execute the Python code and get the result
-      const result = await runPythonCode(pyodide, file.content, './scripts/pycode.py', 'process_data');
+      const result = await runPythonCode(pyodide, file.fileContent, '', 'process_data');
 
       // Store the processed result back in the database
       // This way users can view both original and processed versions
-      await db.files.update(id, {
-        processedContent: result
-      });
+      await saveFile(pyodide, file.fileName, result);
 
-      setStatus(`Processing completed for: ${file.filename}`);
-      await loadFiles();
+      setStatus(`Processing completed for: ${file.fileName}`);
+      await loadFiles(pyodide);
       
       // If the user has this file open in the viewer, refresh it
-      if (selectedFile?.id === id) {
-        const updated = await db.files.get(id);
-        setSelectedFile(updated || null);
+      if (selectedFile?.fileName === file.fileName) {
+        const updated = await loadFiles(pyodide);
+        setSelectedFile(updated.find(f => f.fileName === file.fileName) || null);
       }
     } catch (error) {
       console.error('Processing error:', error);
       setStatus('Processing failed');
     } finally {
-      setProcessingFileId(null);
+      setProcessingFileName(null);
     }
   };
 
