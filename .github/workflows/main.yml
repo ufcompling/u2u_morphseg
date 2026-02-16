@@ -2,7 +2,7 @@ name: Deploy React + Pyodide to Pages
 
 on:
   push:
-    branches: ["main", "set-env-pyodide"]
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
@@ -31,6 +31,7 @@ jobs:
         run: |
           pip install -r requirements-dev.txt
 
+      # Custom wheel is cached, so it doesn't build for every CI.
       - name: Cache Pyodide Wheel
         id: cache-wheel
         uses: actions/cache@v4
