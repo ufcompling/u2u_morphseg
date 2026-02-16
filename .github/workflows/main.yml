@@ -2,7 +2,7 @@ name: Deploy React + Pyodide to Pages
 
 on:
   push:
-    branches: [ "main"]
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
@@ -11,14 +11,48 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      CRFSUITE_VERSION: '0.9.12'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12' # Must match Pyodide's Python version
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.58
+
+      - name: Install Build Tools
+        run: |
+          pip install -r requirements-dev.txt
+
+      # Custom wheel is cached, so it doesn't build for every CI.
+      - name: Cache Pyodide Wheel
+        id: cache-wheel
+        uses: actions/cache@v4
+        with:
+          path: public/wheels/python_crfsuite*.whl
+          # hashFiles to auto-update if if the compiler tools or CRFSUITE_VERSION changes.
+          key: ${{ runner.os }}-build-${{ env.CRFSUITE_VERSION }}-${{ hashFiles('requirements-dev.txt') }}
+
+      - name: Build Custom Wheel (If not cached)
+        if: steps.cache-wheel.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch ${{ env.CRFSUITE_VERSION }} --recursive https://github.com/scrapinghub/python-crfsuite.git temp-crfsuite
+          pyodide build temp-crfsuite/
+          mkdir -p public/wheels
+          mv dist/*.whl public/wheels/
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+          cache: true
 
       - name: Install Dependencies
         run: bun install

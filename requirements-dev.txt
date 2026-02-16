@@ -1,0 +1,7 @@
+# Build Tools
+pyodide-build==0.27.3
+wheel<0.43
+Cython>=3.0.0
+
+# Dependencies for python-crfsuite
+setuptools>=42

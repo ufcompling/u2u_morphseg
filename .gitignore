@@ -25,3 +25,16 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Pyodide Wheels
+*.whl
+/public/wheels/*.whl
+
+# Temporary build folders
+temp-crfsuite/
+emsdk/
