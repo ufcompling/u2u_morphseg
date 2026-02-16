@@ -70,7 +70,7 @@ The application allows users to perform sequence labeling using Conditional Rand
 ## 5. Update Node.js (if needed)
 If your node version is too old, the build will fail. Use NVM to update:
 ```bash
-curl -o- [https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh](https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh) | bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
 source ~/.bashrc
 nvm install 22
 nvm use 22
@@ -80,7 +80,7 @@ nvm use 22
 
 ## 6. Install Bun.js (if needed)
 ```
-curl -fsSL [https://bun.sh/install](https://bun.sh/install) | bash
+curl -fsSL https://bun.sh/install | bash
 source ~/.bashrc
 # Verify with: bun --version
 ```
@@ -91,9 +91,9 @@ source ~/.bashrc
 Since `python-crfsuite` is not natively supported by Pyodide, we must cross-compile it to WebAssembly locally.
 This can be done manually or through the setup.sh.
 
-1. **Clone the Emscripten SDK** (Only needs to be done once):
+**Clone the Emscripten SDK** (this also can be done through the setup.sh):
 ```bash
-git clone [https://github.com/emscripten-core/emsdk.git](https://github.com/emscripten-core/emsdk.git)
+git clone https://github.com/emscripten-core/emsdk.git
 cd emsdk && ./emsdk install 3.1.58 && ./emsdk activate 3.1.58 && cd ..
 ```
 
@@ -104,6 +104,11 @@ This script creates a virtual environment, installs build tools, clones the CRF 
 ```
 source setup.sh
 ```
+
+**Note for Windows Users**: Please run all setup and build commands inside Git Bash.
+1. Right-click in your project folder.
+2. Select "Git Bash Here."
+3. Run source setup.sh.
 
 ---
 
@@ -133,8 +138,9 @@ bun run dev
 ---
 
 ## 8. Access the Site
-Preview: http://localhost:4173/u2u_morphseg/
-Development: http://localhost:5173/u2u_morphseg/
-Github Pages: https://ufcompling.github.io/u2u_morphseg/
+- Preview: http://localhost:4173/u2u_morphseg/
+- Development: http://localhost:5173/u2u_morphseg/
+- Github Pages: https://ufcompling.github.io/u2u_morphseg/
+
 ---
 
