@@ -103,7 +103,7 @@ bun run dev
 ---
 
 ## 8. Access the Site
-Open your browser to: http://localhost:4173/
-
+Preview: http://localhost:4173/u2u_morphseg/
+Development: http://localhost:5173/u2u_morphseg/
 ---
 
