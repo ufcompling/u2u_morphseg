@@ -4,13 +4,12 @@ import { FileListSection } from "./components/FileListSection";
 import { FileViewer } from "./components/FileViewer";
 import { Header } from "./components/Header";
 import { UploadSection } from "./components/UploadSection";
-import { initPyodide, runPythonCode } from "../../services/pyodide/pyodideService";
+import { initPyodide, getPyodide, runPythonCode } from "../../services/pyodide/pyodideService";
 import { loadFiles } from "../../services/database/helpers/loadFiles";
 import { importFiles } from "../../services/database/helpers/importFiles";
 import { saveFile } from "../../services/database/helpers/saveFile";
 import { readFile } from "../../services/database/helpers/readFile";
 import { deleteFile } from "../../services/database/helpers/deleteFile";
-
 
 /* =============================================================================
  * MAIN FILE MANAGER COMPONENT (AnalyzerModule)
@@ -55,8 +54,8 @@ export function AnalyzerModule() {
   useEffect(() => {
     const initDB = async () => {
       setStatus('Loading database...');
-      const pyodideInstance = await initPyodide();
-      setPyodide(pyodideInstance);
+      await initPyodide();
+      setPyodide(getPyodide());
       setPyodideReady(true);
         setIndexedDBReady(true);
         setStatus('Ready to import');
@@ -71,27 +70,18 @@ export function AnalyzerModule() {
   // Whenever the database connection changes, reload the file list
   // This also runs after uploads, deletes, and processing
   useEffect(() => {
-    if (indexedDBReady) {
-      loadFiles();
-    }
-  }, [indexedDBReady]);
+    if (!pyodide) return;
 
-  // Pull all files from IndexedDB and sort by newest first
-  // We do this instead of maintaining state because multiple tabs could modify the database
-  const loadFiles = async () => {
-    if (!indexedDBReady) return;
-    
-    try {
-      const allFiles = await db.files.toArray();
-      
-      // Sort newest first - this makes the UI feel more responsive
-      // since users typically care about their most recent uploads
-      allFiles.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-      setFiles(allFiles);
-    } catch (error) {
-      console.error('Error loading files:', error);
-    }
-  };
+    (async () => {
+      try {
+        const loadedFiles = await loadFiles(pyodide);
+        setFiles(loadedFiles);
+      } catch (error) {
+        console.error('Error loading files:', error);
+        setFiles([]);
+      }
+    })();
+  }, [pyodide]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // File Upload Handler
@@ -100,59 +90,23 @@ export function AnalyzerModule() {
   // Handles files from both drag-and-drop and file picker
   // We read each file, check for duplicates, then bulk insert into IndexedDB
   const handleUpload = async (fileList: FileList | null) => {
-    if (!indexedDBReady || !fileList || fileList.length === 0) return;
+    if (!fileList || fileList.length === 0) return;
+
+    // Defensive check for pyodide
+    if (!pyodide || !pyodideReady) {
+      setStatus('Python environment not ready. Please wait...');
+      return;
+    }
 
     setIsUploading(true);
     setStatus('Importing files...');
 
     try {
-      const rawDataArray: rawData[] = [];
-      
-      // Check for duplicates by filename - we don't want users accidentally uploading
-      // the same file twice and ending up with duplicate training data
-      const existingFilenames = new Set(files.map(f => f.filename));
-      const duplicates: string[] = [];
+      await importFiles(pyodide, fileList, setStatus);
+      setStatus('Files imported successfully');
+      const updatedFiles = await loadFiles(pyodide);
+      setFiles(updatedFiles);
 
-      for (const file of Array.from(fileList)) {
-        if (existingFilenames.has(file.name)) {
-          duplicates.push(file.name);
-          continue;
-        }
-
-        // Read file content - we handle text and binary differently
-        // Text files are easier to work with as strings
-        // Binary files (PDF, DOCX) need to be stored as Uint8Array
-        let content: string | Uint8Array;
-        if (file.type.startsWith('text/') || file.type === 'application/json') {
-          content = await file.text();
-        } else {
-          const arrayBuffer = await file.arrayBuffer();
-          content = new Uint8Array(arrayBuffer);
-        }
-
-        rawDataArray.push({
-          filename: file.name,
-          content,
-          size: file.size,
-          type: file.type || 'text/plain',
-        });
-      }
-
-      // If any duplicates were found, abort and tell the user
-      if (duplicates.length > 0) {
-        setStatus(`Import failed: Duplicate files - ${duplicates.join(', ')}`);
-        setIsUploading(false);
-        return;
-      }
-
-      // Map the raw data to our database schema (adds timestamps, etc.)
-      const mappedData = mapData(rawDataArray);
-      
-      // Bulk insert is much faster than inserting one at a time
-      await db.files.bulkAdd(mappedData);
-      
-      setStatus(`Import completed: ${mappedData.length} file(s) added`);
-      await loadFiles();
     } catch (error) {
       console.error('Upload error:', error);
       setStatus('Import failed');
