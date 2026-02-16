@@ -1,11 +1,15 @@
 import { useState, useEffect } from "react";
-import { mapData, type rawData, type fileData } from "../../services/database/dataHelpers";
+import { type fileData } from "../../services/database/helpers/dataHelpers";
 import { FileListSection } from "./components/FileListSection";
 import { FileViewer } from "./components/FileViewer";
 import { Header } from "./components/Header";
 import { UploadSection } from "./components/UploadSection";
-import { db } from '../../services/database/db';
 import { initPyodide, runPythonCode } from "../../services/pyodide/pyodideService";
+import { loadFiles } from "../../services/database/helpers/loadFiles";
+import { importFiles } from "../../services/database/helpers/importFiles";
+import { saveFile } from "../../services/database/helpers/saveFile";
+import { readFile } from "../../services/database/helpers/readFile";
+import { deleteFile } from "../../services/database/helpers/deleteFile";
 
 
 /* =============================================================================
@@ -50,29 +54,15 @@ export function AnalyzerModule() {
   // Both are async and take a few seconds, so we show loading indicators
   useEffect(() => {
     const initDB = async () => {
-      try {
-        // Step 1: Initialize IndexedDB
-        await db.open();
+      setStatus('Loading database...');
+      const pyodideInstance = await initPyodide();
+      setPyodide(pyodideInstance);
+      setPyodideReady(true);
         setIndexedDBReady(true);
-        
-        setStatus('Loading Pyodide...');
-        
-        // Step 2: Load Pyodide runtime from CDN
-        // This downloads ~6MB of WebAssembly, so it takes 2-3 seconds on first load
-        // After that it's cached by the browser
-        const pyodideModule = await initPyodide();
-        setPyodide(pyodideModule);
-        setPyodideReady(true);
-        
         setStatus('Ready to import');
-      } catch (error) {
-        console.error('Initialization error:', error);
-        setStatus('Initialization failed');
       }
-    };
-    
-    initDB();
-  }, []); // Empty deps array = run once on mount
+      initDB();
+    }, []); // Empty deps array = run once on mount
 
   // ─────────────────────────────────────────────────────────────────────────
   // Load Files from Database
