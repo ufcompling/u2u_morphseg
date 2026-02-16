@@ -23,6 +23,8 @@ The application allows users to perform sequence labeling using Conditional Rand
 ```
 .
 ├── public/                           # Static assets served directly by the browser.
+│   ├── wheels/                       # Compiled .whl files (Don't delete!)
+│   ├── requirements.txt              # Browser-side Python dependencies
 │   └── scripts/                      # Python logic (CRF & analysis)
 ├── src/
 │   ├── components/                   
@@ -46,15 +48,22 @@ The application allows users to perform sequence labeling using Conditional Rand
 │   └── services/                     # Database and engine tests
 ├── index.html                        # Entry point (loads Pyodide CDN)
 ├── package.json                      # Dependencies and scripts
+├── requirements-dev.txt              # Local build tools (pyodide-build, etc.)
+├── setup.sh                          # Environment & Wasm build script
 └── vite.config.ts                    # Vite bundler configuration
 ```
 ---
 
 ## 4. Prerequisites
-To run this project locally, ensure you have the following installed:
-- Node.js (v20.19.0+ or v22.12.0+)
-- Bun.js
-- Modern Browser: Chrome, Firefox, or Edge (required for WebAssembly/Pyodide support).
+- **Node.js** (v20+) & **Bun.js**
+- **Python 3.12** (Must match Pyodide's environment)
+- **Git** (with submodules support)
+- **C++ Compiler**: 
+  - *macOS*: `xcode-select --install`
+  - *Linux*: `sudo apt install build-essential`
+  - *Windows*: Visual Studio Build Tools 2022 (C++ workload)
+- **Emscripten SDK**: (Will be managed by `setup.sh` or manual clone)
+- **Modern Browser** (Chrome/Firefox/Edge for Wasm support)
 
 ---
 
@@ -69,7 +78,7 @@ nvm use 22
 
 ---
 
-## 6. Install Bun.js
+## 6. Install Bun.js (if needed)
 ```
 curl -fsSL [https://bun.sh/install](https://bun.sh/install) | bash
 source ~/.bashrc
@@ -77,6 +86,27 @@ source ~/.bashrc
 ```
 
 ---
+
+## 7. Python & Wasm Setup (manual clone)
+Since `python-crfsuite` is not natively supported by Pyodide, we must cross-compile it to WebAssembly locally.
+This can be done manually or through the setup.sh.
+
+1. **Clone the Emscripten SDK** (Only needs to be done once):
+```bash
+git clone [https://github.com/emscripten-core/emsdk.git](https://github.com/emscripten-core/emsdk.git)
+cd emsdk && ./emsdk install 3.1.58 && ./emsdk activate 3.1.58 && cd ..
+```
+
+---
+
+## 8. Run the Automated Setup:
+This script creates a virtual environment, installs build tools, clones the CRF source, and builds the .whl file.
+```
+source setup.sh
+```
+
+---
+
 
 ## 7. Running the app
 
@@ -105,5 +135,6 @@ bun run dev
 ## 8. Access the Site
 Preview: http://localhost:4173/u2u_morphseg/
 Development: http://localhost:5173/u2u_morphseg/
+Github Pages: https://ufcompling.github.io/u2u_morphseg/
 ---
 

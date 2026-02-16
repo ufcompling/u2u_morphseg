@@ -31,6 +31,10 @@ dist-ssr
 venv/
 ENV/
 
-# Pyodide Wheels (The heavy binary files)
+# Pyodide Wheels
 *.whl
 /public/wheels/*.whl
+
+# Temporary build folders
+temp-crfsuite/
+emsdk/

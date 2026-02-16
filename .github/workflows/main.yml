@@ -11,6 +11,8 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      CRFSUITE_VERSION: '0.9.12'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,20 +29,20 @@ jobs:
 
       - name: Install Build Tools
         run: |
-          pip install pyodide-build==0.27.3
-          pip install 'wheel<0.43'     
+          pip install -r requirements-dev.txt
 
       - name: Cache Pyodide Wheel
         id: cache-wheel
         uses: actions/cache@v4
         with:
           path: public/wheels/python_crfsuite*.whl
-          key: ${{ runner.os }}-crfsuite-0.9.12
-      
+          # hashFiles to auto-update if if the compiler tools or CRFSUITE_VERSION changes.
+          key: ${{ runner.os }}-build-${{ env.CRFSUITE_VERSION }}-${{ hashFiles('requirements-dev.txt') }}
+
       - name: Build Custom Wheel (If not cached)
         if: steps.cache-wheel.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 --recursive https://github.com/scrapinghub/python-crfsuite.git temp-crfsuite
+          git clone --depth 1 --branch ${{ env.CRFSUITE_VERSION }} --recursive https://github.com/scrapinghub/python-crfsuite.git temp-crfsuite
           pyodide build temp-crfsuite/
           mkdir -p public/wheels
           mv temp-crfsuite/dist/*.whl public/wheels/
