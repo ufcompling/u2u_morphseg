@@ -38,3 +38,6 @@ ENV/
 # Temporary build folders
 temp-crfsuite/
 emsdk/
+
+# Pyodide build environments
+.pyodide-xbuildenv*
