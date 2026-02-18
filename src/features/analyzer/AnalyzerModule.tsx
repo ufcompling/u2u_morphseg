@@ -55,13 +55,24 @@ export function AnalyzerModule() {
     const initDB = async () => {
       setStatus('Loading database...');
       await initPyodide();
-      setPyodide(getPyodide());
+      const pyodideInstance = getPyodide();
+      await new Promise((resolve, reject) => {
+        pyodideInstance.FS.syncfs(true, (err: any) => {
+          if (err) {
+            console.error('Error syncing filesystem:', err);
+            reject(err);
+          } else {
+            resolve(null);
+          }
+        });
+      });
+      setPyodide(pyodideInstance);
       setPyodideReady(true);
-        setIndexedDBReady(true);
-        setStatus('Ready to import');
-      }
-      initDB();
-    }, []); // Empty deps array = run once on mount
+      setIndexedDBReady(true);
+      setStatus('Ready to import');
+    }
+    initDB();
+  }, []); // Empty deps array = run once on mount
 
   // ─────────────────────────────────────────────────────────────────────────
   // Load Files from Database
@@ -130,21 +141,16 @@ export function AnalyzerModule() {
     setStatus(`Processing file: ${file.fileName}`);
 
     try {
-      // TODO: Replace this demo code with actual CRF morphological segmentation
-      // For now, this just reverses and uppercases each line to prove the pipeline works
-      // Pass the file content into Python's global scope
-      pyodide.globals.set('file_content', file.fileContent);
-      
-      // Execute the Python code and get the result
-      const result = await runPythonCode(pyodide, file.fileContent, '', 'process_data');
+      // Run pycode.py from public/scripts/ using runPythonCode
+      const pycodePath = '/u2u_morphseg/scripts/pycode.py';
+      const result = await runPythonCode(pyodide, file.fileContent, pycodePath, 'process_data');
 
       // Store the processed result back in the database
-      // This way users can view both original and processed versions
       await saveFile(pyodide, file.fileName, result);
 
       setStatus(`Processing completed for: ${file.fileName}`);
       await loadFiles(pyodide);
-      
+
       // If the user has this file open in the viewer, refresh it
       if (selectedFile?.fileName === file.fileName) {
         const updated = await loadFiles(pyodide);
