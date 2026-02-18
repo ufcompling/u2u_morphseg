@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type { AnnotationWord } from "../../lib/types";
 
 // ============================================================
@@ -8,7 +8,55 @@ import type { AnnotationWord } from "../../lib/types";
 // One-word-at-a-time focused annotation interface.
 // Shows a single word card with boundary editing, plus a
 // progress rail and context about why these words were selected.
+//
+// Dev/testing feature: "Load Gold File" parses a gold-standard
+// .tgt file and auto-fills boundaries for matching words so you
+// can blast through annotation cycles during testing.
 // ============================================================
+
+/**
+ * Parse a gold .tgt file into a lookup map of word → boundary indices.
+ * Handles both formats:
+ *   - "un!happy"           (raw annotated)
+ *   - "u n ! h a p p y"   (space-separated .tgt)
+ *
+ * :param content: Raw text content of the gold file
+ * :returns: Map where key = surface word, value = boundary index array
+ */
+function parseGoldFile(content: string): Map<string, number[]> {
+  const lookup = new Map<string, number[]>();
+
+  for (const rawLine of content.split("\n")) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+
+    // Detect format: space-separated chars vs compact morphemes
+    let morphemes: string[];
+    if (line.includes(" ")) {
+      // Space-separated .tgt: "u n ! h a p p y" → join → "un!happy" → split by !
+      const joined = line.replace(/\s+/g, "");
+      morphemes = joined.split("!");
+    } else {
+      // Compact: "un!happy"
+      morphemes = line.split("!");
+    }
+
+    const word = morphemes.join("");
+    if (!word) continue;
+
+    // Convert morpheme list to boundary indices (index of char AFTER which split occurs)
+    const boundaries: number[] = [];
+    let offset = 0;
+    for (let i = 0; i < morphemes.length - 1; i++) {
+      offset += morphemes[i].length;
+      boundaries.push(offset - 1);
+    }
+
+    lookup.set(word.toLowerCase(), boundaries);
+  }
+
+  return lookup;
+}
 
 interface AnnotationWorkspaceProps {
   words: AnnotationWord[];
@@ -34,6 +82,11 @@ export function AnnotationWorkspaceStage({
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
   const [annotatedSet, setAnnotatedSet] = useState<Set<string>>(new Set());
 
+  // Dev/testing: gold file auto-annotation
+  const goldInputRef = useRef<HTMLInputElement>(null);
+  const [goldMatchCount, setGoldMatchCount] = useState<number | null>(null);
+  const [showDevTools, setShowDevTools] = useState(false);
+
   const currentWord = words[focusIndex] ?? null;
   const annotatedCount = annotatedSet.size;
   const allDone = annotatedCount === totalWords && totalWords > 0;
@@ -57,6 +110,50 @@ export function AnnotationWorkspaceStage({
   const handleNext = useCallback(() => {
     if (focusIndex < words.length - 1) setFocusIndex((prev) => prev + 1);
   }, [focusIndex, words.length]);
+
+  /**
+   * Load a gold-standard file and auto-fill boundaries for all matching words.
+   * Accepts .tgt or plain annotated format (e.g. "un!happy" or "u n ! h a p p y").
+   */
+  const handleGoldFile = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const content = reader.result as string;
+        const goldLookup = parseGoldFile(content);
+
+        let matched = 0;
+        const newAnnotated = new Set(annotatedSet);
+
+        for (const w of words) {
+          const key = w.word.toLowerCase();
+          const goldBoundaries = goldLookup.get(key);
+          if (goldBoundaries !== undefined) {
+            onUpdateBoundaries(w.id, goldBoundaries);
+            newAnnotated.add(w.id);
+            matched++;
+          }
+        }
+
+        setAnnotatedSet(newAnnotated);
+        setGoldMatchCount(matched);
+      };
+      reader.readAsText(file);
+
+      // Reset so the same file can be re-selected if needed
+      e.target.value = "";
+    },
+    [words, annotatedSet, onUpdateBoundaries]
+  );
+
+  /** Confirm all words at once — useful when model predictions are already correct. */
+  const handleConfirmAll = useCallback(() => {
+    const all = new Set(words.map((w) => w.id));
+    setAnnotatedSet(all);
+  }, [words]);
 
   return (
     <div className="flex flex-col gap-0">
@@ -100,6 +197,58 @@ export function AnnotationWorkspaceStage({
             <p className="font-mono text-[10px] text-muted-foreground/50 mt-2">
               Late iteration -- the model has stabilized. Errors should be fewer and more subtle.
             </p>
+          )}
+        </div>
+
+        {/* ── Dev/Testing Tools ── */}
+        <div className="mt-3">
+          <button
+            onClick={() => setShowDevTools((prev) => !prev)}
+            className="font-mono text-[10px] text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors"
+          >
+            {showDevTools ? "▾ Hide testing tools" : "▸ Testing tools"}
+          </button>
+
+          {showDevTools && (
+            <div className="mt-2 px-4 py-3 rounded-lg bg-secondary/10 border border-dashed border-border/20">
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Gold file auto-annotate */}
+                <input
+                  ref={goldInputRef}
+                  type="file"
+                  accept=".tgt,.txt"
+                  onChange={handleGoldFile}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => goldInputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary/20 border border-border/20 font-mono text-[10px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/30 transition-all"
+                >
+                  <UploadIcon />
+                  <span>Load Gold File</span>
+                </button>
+
+                {/* Confirm all as-is */}
+                <button
+                  onClick={handleConfirmAll}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary/20 border border-border/20 font-mono text-[10px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/30 transition-all"
+                >
+                  <CheckAllIcon />
+                  <span>Confirm All As-Is</span>
+                </button>
+
+                {/* Status message */}
+                {goldMatchCount !== null && (
+                  <span className="font-mono text-[10px] text-primary/70">
+                    ✓ {goldMatchCount}/{totalWords} words matched from gold file
+                  </span>
+                )}
+              </div>
+              <p className="font-mono text-[9px] text-muted-foreground/30 mt-2">
+                Gold file sets correct boundaries and auto-confirms matched words.
+                Confirm All marks every word as done without changing boundaries.
+              </p>
+            </div>
           )}
         </div>
       </div>
@@ -355,6 +504,22 @@ function ArrowIcon() {
   return (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
+function UploadIcon() {
+  return (
+    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5m0 0l5 5m-5-5v12" />
+    </svg>
+  );
+}
+
+function CheckAllIcon() {
+  return (
+    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   );
 }

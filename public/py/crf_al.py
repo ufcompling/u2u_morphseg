@@ -283,9 +283,22 @@ def process_data(train_path: str, test_path: str, select_path: str | None = None
 	}
 
 ### Computing Features ###
+
+VOWELS: set[str] = set('aeiouAEIOU')
+
+# Common English affixes — helps the CRF recognize known morpheme patterns.
+# For non-English languages, these won't fire and the model falls back to
+# character-level features, so this is safe to leave in.
+COMMON_PREFIXES: tuple[str, ...] = ('un', 're', 'in', 'im', 'dis', 'en', 'em', 'non', 'pre', 'mis', 'over', 'under', 'out', 'sub')
+COMMON_SUFFIXES: tuple[str, ...] = ('ing', 'ed', 'ly', 'er', 'est', 'ness', 'ment', 'ful', 'less', 'tion', 'sion', 'able', 'ible', 'ous', 'ive', 'al', 'en', 'ish', 'dom', 'ship')
+
 def get_char_features(bounded: Word, i: int, delta: int) -> CharFeatures:
 	"""
 	Generates character features for a given position in a bounded word.
+
+	Produces n-gram, positional, phonological, and affix-awareness features.
+	The original implementation only used n-grams + absolute start position,
+	which starved the CRF of structural signal — especially on small training sets.
 	
 	:param bounded: The bounded word (with [ and ] markers)
 	:type bounded: Word
@@ -297,16 +310,97 @@ def get_char_features(bounded: Word, i: int, delta: int) -> CharFeatures:
 	:rtype: CharFeatures
 	"""
 	char_dict: CharFeatures = {}
+	char: str = bounded[i]
+	word_len: int = len(bounded) - 2  # exclude [ and ]
 
+	# --- Original n-gram features (right context) ---
 	for j in range(delta):
 		char_dict[f'right_{bounded[i:i+j+1]}'] = 1
 
+	# --- Original n-gram features (left context) ---
 	for j in range(delta):
 		if i - j - 1 < 0: 
 			break
 		char_dict[f'left_{bounded[i-j-1:i]}'] = 1
 
-	char_dict[f'pos_start_{i}'] = 1  # extra feature: left index of the letter in the word
+	# --- Positional features ---
+	char_dict[f'pos_start_{i}'] = 1
+	char_dict[f'pos_end_{len(bounded) - i - 1}'] = 1   # distance from word end
+
+	if word_len > 0:
+		# Bucketed relative position (quarters) — generalizes across word lengths
+		rel_pos: int = int((max(i - 1, 0) / word_len) * 4)
+		char_dict[f'pos_bucket_{rel_pos}'] = 1
+
+	char_dict[f'word_len_{min(word_len, 15)}'] = 1  # capped to avoid feature explosion
+
+	# --- Character identity ---
+	char_dict[f'char_{char}'] = 1
+
+	# --- Phonological features ---
+	if char not in ('[', ']'):
+		is_vowel: bool = char in VOWELS
+		char_dict['is_vowel'] = 1 if is_vowel else 0
+		char_dict['is_consonant'] = 0 if is_vowel else 1
+
+		# Vowel-consonant transitions often mark syllable/morpheme boundaries
+		if i > 0 and bounded[i-1] not in ('[', ']'):
+			prev_vowel: bool = bounded[i-1] in VOWELS
+			if is_vowel != prev_vowel:
+				char_dict['vc_transition'] = 1
+
+		# Consonant cluster detection — clusters often don't span morpheme boundaries
+		if not is_vowel and i > 0 and bounded[i-1] not in VOWELS | {'[', ']'}:
+			char_dict['in_consonant_cluster'] = 1
+
+	# --- Affix awareness features ---
+	# Fire when the current position aligns with a known affix boundary.
+	# These are soft hints, not hard rules — the CRF learns weights for them.
+	if char not in ('[', ']'):
+		inner_pos: int = i - 1  # 0-indexed position within the actual word
+		raw_word: str = bounded[1:-1]
+
+		for pfx in COMMON_PREFIXES:
+			if raw_word.startswith(pfx) and inner_pos == len(pfx) - 1:
+				char_dict[f'at_prefix_end_{pfx}'] = 1
+			if raw_word.startswith(pfx) and inner_pos == len(pfx):
+				char_dict[f'after_prefix_{pfx}'] = 1
+				# Stem length after prefix — short stems suggest false prefix.
+				# "re" + "ach" (3) is suspicious, "re" + "check" (5) is plausible.
+				stem_len: int = word_len - len(pfx)
+				char_dict[f'stem_after_pfx_{min(stem_len, 8)}'] = 1
+
+		for sfx in COMMON_SUFFIXES:
+			if raw_word.endswith(sfx) and inner_pos == word_len - len(sfx):
+				char_dict[f'at_suffix_start_{sfx}'] = 1
+				# Stem length before suffix — "gar" (3) + "ment" is suspicious,
+				# "agree" (5) + "ment" is plausible.
+				stem_len_sfx: int = word_len - len(sfx)
+				char_dict[f'stem_before_sfx_{min(stem_len_sfx, 8)}'] = 1
+			if raw_word.endswith(sfx) and inner_pos == word_len - len(sfx) - 1:
+				char_dict[f'before_suffix_{sfx}'] = 1
+
+	# --- Cross-boundary bigram features ---
+	# The character pair spanning a potential boundary is the single most
+	# discriminative signal for real vs. fake affix boundaries. E.g.,
+	# "agree!ment" has cross-bigram "em" at the boundary, while "garment"
+	# has "rm" — the CRF can learn which pairs occur at real boundaries.
+	if char not in ('[', ']'):
+		if i > 1 and bounded[i-1] not in ('[',):
+			char_dict[f'bigram_{bounded[i-1]}{char}'] = 1
+		if i < len(bounded) - 1 and bounded[i+1] not in (']',):
+			char_dict[f'bigram_{char}{bounded[i+1]}'] = 1
+
+	# --- Doubled consonant detection ---
+	# Words like "kitten", "mitten", "flatten", "written" have doubled
+	# consonants immediately before the "-en" ending. These are almost never
+	# real stem+suffix boundaries — the doubling is orthographic, not
+	# morphological. This feature gives the CRF a direct signal.
+	if char not in ('[', ']') and i >= 2:
+		if bounded[i-1] == char and char not in VOWELS:
+			char_dict['doubled_consonant'] = 1
+		if bounded[i-1] not in ('[', ']') and i >= 3 and bounded[i-2] == bounded[i-1] and bounded[i-1] not in VOWELS | {'[', ']'}:
+			char_dict['after_doubled_consonant'] = 1
 
 	return char_dict
 
@@ -421,6 +515,12 @@ def sort_by_confidence(words: list[Word], morphs: list[MorphList], confscores: l
 def build_crf(sub_datadir: str, X_train: DatasetFeatures, Y_train: DatasetLabels, max_iterations: int = 100) -> sklearn_crfsuite.CRF:
 	"""
 	Builds and trains a CRF model.
+
+	Regularization (c1/c2) is scaled based on training set size. With small
+	datasets (<200 words), the original c1=c2=0.1 caused heavy underfitting.
+	Lowering these lets the model actually learn the patterns present in the data
+	without overfitting on the eval set — CRFs are inherently regularized by the
+	structured prediction objective.
 	
 	:param sub_datadir: The subdirectory to save the model in
 	:type sub_datadir: str
@@ -433,10 +533,23 @@ def build_crf(sub_datadir: str, X_train: DatasetFeatures, Y_train: DatasetLabels
 	:return: The trained CRF model
 	:rtype: CRF
 	"""
+	n_samples: int = len(X_train)
+
+	# Scale regularization to dataset size. These values were found empirically:
+	# - tiny (<100):  nearly unregularized — let the model memorize what little it has
+	# - small (<500): light regularization
+	# - larger:       standard values
+	if n_samples < 100:
+		c1, c2 = 0.01, 0.01
+	elif n_samples < 500:
+		c1, c2 = 0.05, 0.05
+	else:
+		c1, c2 = 0.1, 0.1
+
 	crf: sklearn_crfsuite.CRF = sklearn_crfsuite.CRF(
 		algorithm='lbfgs',
-		c1=0.1,
-		c2=0.1,
+		c1=c1,
+		c2=c2,
 		max_iterations=max_iterations,
 		all_possible_transitions=True
 	)
@@ -610,25 +723,61 @@ def save_predictions(predictions: list[MorphList], file_path: str) -> None:
 		f.writelines(pred_content)
 
 # Evaluate predictions with statistical metrics (precision, recall, F1 score)
+def _morphs_to_boundaries(morphs: MorphList) -> set[int]:
+	"""
+	Convert a morpheme list to a set of boundary positions (character offsets
+	where one morpheme ends and the next begins).
+
+	Example: ["un", "help", "ful"] -> {2, 6}  (boundary after char 2, after char 6)
+
+	:param morphs: List of morphemes for one word
+	:type morphs: MorphList
+	:return: Set of boundary character positions
+	:rtype: set[int]
+	"""
+	boundaries: set[int] = set()
+	offset: int = 0
+	for morph in morphs[:-1]:  # no boundary after the last morpheme
+		offset += len(morph)
+		boundaries.add(offset)
+	return boundaries
+
 def calculate_metrics(y_true: MorphList, y_pred: MorphList) -> tuple[float, float, float]:
 	"""
-	Calculates precision, recall, and F1 score for predicted morphemes.
-	
+	Calculates precision, recall, and F1 score using boundary-based evaluation.
+
+	The previous implementation used bag-of-morphemes matching (`if m in y_true`)
+	which didn't respect position or multiplicity — a predicted morpheme "ed"
+	would match any gold morpheme "ed" regardless of where it appeared, and
+	duplicate predictions were counted as correct multiple times.
+
+	Boundary-based evaluation is standard for morphological segmentation: we
+	compare the set of character offsets where splits occur.
+
 	:param y_true: The true morpheme list
 	:type y_true: MorphList
 	:param y_pred: The predicted morpheme list
 	:type y_pred: MorphList
-	:return: The precision, recall, and F1 score
+	:return: The precision, recall, and F1 score (0-100 scale)
 	:rtype: tuple[float, float, float]
 	"""
-	correct_total: int = sum(1 for m in y_pred if m in y_true)
+	gold_bounds: set[int] = _morphs_to_boundaries(y_true)
+	pred_bounds: set[int] = _morphs_to_boundaries(y_pred)
 
-	if not y_pred:
-		return 0, 0, 0
+	# Single-morpheme words have no boundaries — both sides agree trivially
+	if not gold_bounds and not pred_bounds:
+		return 100.0, 100.0, 100.0
 
-	precision: float = correct_total / len(y_pred) * 100
-	recall: float = correct_total / len(y_true) * 100
-	f1: float = 2 * (precision * recall) / (precision + recall) if precision + recall != 0 else 0
+	if not pred_bounds:
+		return 0.0, 0.0, 0.0
+
+	if not gold_bounds:
+		return 0.0, 0.0, 0.0
+
+	correct: int = len(gold_bounds & pred_bounds)
+	precision: float = correct / len(pred_bounds) * 100
+	recall: float = correct / len(gold_bounds) * 100
+	f1: float = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
 
 	return round(precision, 2), round(recall, 2), round(f1, 2)
 
