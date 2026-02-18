@@ -1,3 +1,30 @@
+/**
+ * use-turtleshell.ts
+ * Location: src/hooks/use-turtleshell.ts
+ *
+ * Purpose:
+ *   Central state machine for the TurtleShell active learning workflow.
+ *   Owns UI state (stage navigation, training steps, annotation focus) and
+ *   coordinates between two subsystem hooks:
+ *     - useProjectDB()      → IndexedDB persistence (files, cycles, annotations)
+ *     - usePyodideWorker()  → CRF training/inference via Web Worker + WASM
+ *
+ * Cycle data flow (the critical part):
+ *   Cycle N trains on [original annotated + all prior user annotations].
+ *   It selects from the residual pool (NOT the original unannotated file).
+ *   After the user submits annotations:
+ *     1. Their boundary decisions are converted to .tgt format lines
+ *     2. Those lines are appended to the "annotated" file's content in IndexedDB
+ *     3. The "unannotated" file's content is replaced with the residual
+ *   So the next cycle naturally reads the grown training set and shrunken pool.
+ *
+ * Author: Joshua / Evan / Yumandy
+ * Created: 2026-02-17
+ * Version: 3.0.0
+ *
+ * Dependencies: react 18+, useProjectDB, usePyodideWorker
+ */
+
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
@@ -83,7 +110,7 @@ function deriveCompletedStages(current: WorkflowStage): WorkflowStage[] {
 
 export function useTurtleshell() {
   const projectDB = useProjectDB();
-  const { pyodideReady, pyodideLoading, pyodideError, runCycle, runInference } = usePyodideWorker();
+  const { pyodideReady, pyodideLoading, pyodideError, modelRestored, runCycle, runInference, wipeVfs } = usePyodideWorker();
   const hasRestored = useRef(false);
 
   // ── Workflow navigation ──────────────────────────────────────────────────
@@ -234,9 +261,9 @@ export function useTurtleshell() {
   const [trainingSteps, setTrainingSteps] = useState<TrainingStep[]>(INITIAL_TRAINING_STEPS);
   const [isTrainingComplete, setIsTrainingComplete] = useState(false);
 
-  // When set to true, a useEffect on the NEXT render will call handleStartTraining.
-  // This exists because handleNewCycle needs to set currentIteration before training
-  // starts, but handleStartTraining's closure captures the old value until re-render.
+  // Set to true by handleNewCycle to trigger training on the NEXT render.
+  // Can't call handleStartTraining directly because its closure would still
+  // capture the stale currentIteration before React flushes the update.
   const [autoStartTraining, setAutoStartTraining] = useState(false);
 
   const updateStep = useCallback(
@@ -486,10 +513,6 @@ export function useTurtleshell() {
       currentStage: "training",
     });
     goToStage("training");
-
-    // Trigger training on the next render — can't call handleStartTraining
-    // directly because it would capture the stale currentIteration from
-    // before setCurrentIteration flushes.
     setAutoStartTraining(true);
   }, [goToStage, currentIteration, projectDB]);
 
@@ -517,8 +540,10 @@ export function useTurtleshell() {
 
     await projectDB.clearAll();
     await projectDB.initProject();
+    // Wipe the Pyodide VFS (crf.model + artifacts) from both memory and IDBFS
+    wipeVfs().catch((err) => console.warn('[useTurtleshell] VFS wipe failed:', err));
     hasRestored.current = true;
-  }, [projectDB]);
+  }, [projectDB, wipeVfs]);
 
   // ── Return (same shape — no breaking changes to consumers) ─────────────
 
@@ -532,6 +557,7 @@ export function useTurtleshell() {
     pyodideReady,
     pyodideLoading,
     pyodideError,
+    modelRestored,
     indexedDBReady,
 
     // Files

@@ -1,18 +1,24 @@
 /**
- * pyodide.worker.ts
- * Location: src/workers/pyodide.worker.ts
+ * pyodide_worker.ts
+ * Location: src/services/pyodide/workers/pyodide.worker.ts
  *
  * Purpose:
  *   Runs Pyodide (Python/WASM) in a Web Worker so CRF training never blocks
- *   the UI thread. Handles the full lifecycle: load â†’ install deps â†’ run cycle.
+ *   the UI thread. Handles the full lifecycle: load → install deps → run cycle.
+ *
+ *   IDBFS Persistence:
+ *     The Emscripten IDBFS filesystem is mounted at /persist. All model artifacts
+ *     (crf.model, training files) are written to /persist/turtleshell so they
+ *     survive page refresh. FS.syncfs() is called after every cycle and can be
+ *     triggered manually via the SYNC_VFS message.
  *
  * Message Protocol:
- *   Incoming (from main thread) â€” WorkerInMessage
- *   Outgoing (to main thread)  â€” WorkerOutMessage
+ *   Incoming (from main thread) – WorkerInMessage
+ *   Outgoing (to main thread)  – WorkerOutMessage
  *
- * Author: Evan
+ * Author: Evan / Joshua
  * Created: 2026-02-17
- * Version: 0.1.0
+ * Version: 0.2.0
  *
  * Dependencies: Pyodide 0.27.4, micropip, sklearn-crfsuite, python-crfsuite (whl)
  */
@@ -21,7 +27,7 @@
 
 console.log('[pyodide-worker] ===== WORKER SCRIPT STARTING =====');
 
-// â”€â”€â”€ Inline Types (avoid module imports in workers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Inline Types (avoid module imports in workers) ──────────────────────────
 
 interface MorphemeBoundary {
   index: number;
@@ -47,7 +53,7 @@ interface TrainingCycleConfig {
 }
 
 interface TrainingCycleResult {
-  precision: number;       // 0-1 range (normalized from Python's 0-100)
+  precision: number;
   recall: number;
   f1: number;
   incrementWords: AnnotationWord[];
@@ -57,25 +63,29 @@ interface TrainingCycleResult {
   evaluationContent: string;
 }
 
-// â”€â”€â”€ Message shapes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Message shapes ──────────────────────────────────────────────────────────
 
 export type WorkerInMessage =
   | { type: 'INIT' }
   | { type: 'RUN_CYCLE'; payload: TrainingCycleConfig }
-  | { type: 'RUN_INFERENCE'; payload: { residualTgt: string; delta?: number; workDir?: string } };
+  | { type: 'RUN_INFERENCE'; payload: { residualTgt: string; delta?: number; workDir?: string } }
+  | { type: 'SYNC_VFS' }
+  | { type: 'WIPE_VFS' };
 
 export type WorkerOutMessage =
   | { type: 'INIT_PROGRESS'; step: string }
-  | { type: 'INIT_DONE' }
+  | { type: 'INIT_DONE'; modelExists: boolean }
   | { type: 'INIT_ERROR'; error: string }
   | { type: 'STEP_START'; stepId: string }
   | { type: 'STEP_DONE'; stepId: string; detail?: string }
   | { type: 'CYCLE_DONE'; result: TrainingCycleResult }
   | { type: 'CYCLE_ERROR'; error: string }
   | { type: 'INFERENCE_DONE'; result: { predictionsContent: string; totalWords: number } }
-  | { type: 'INFERENCE_ERROR'; error: string };
+  | { type: 'INFERENCE_ERROR'; error: string }
+  | { type: 'VFS_SYNCED' }
+  | { type: 'VFS_WIPED' };
 
-// â”€â”€â”€ Globals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Globals ─────────────────────────────────────────────────────────────────
 
 declare const loadPyodide: (opts: { indexURL: string }) => Promise<any>;
 
@@ -83,35 +93,81 @@ let pyodide: any = null;
 let initPromise: Promise<void> | null = null;
 
 const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v0.27.4/full/';
-// Path to the python-crfsuite wheel - put this file in public/wheels/
 const CRFSUITE_WHL = `${self.location.origin}/u2u_morphseg/wheels/python_crfsuite-0.9.12-cp312-cp312-pyodide_2024_0_wasm32.whl`;
 
-// â”€â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/** Persistent workDir — everything under /persist is backed by IDBFS. */
+const PERSIST_ROOT = '/persist';
+const DEFAULT_WORK_DIR = `${PERSIST_ROOT}/turtleshell`;
+const MODEL_FILENAME = 'crf.model';
+
+// ── IDBFS helpers ───────────────────────────────────────────────────────────
 
 /**
- * Load Pyodide and install Python deps. Idempotent â€” multiple callers share
- * the same initPromise so we never double-load.
+ * Sync Emscripten FS ↔ IndexedDB.
+ * @param populate  true = read FROM IndexedDB into VFS (restore)
+ *                  false = write FROM VFS into IndexedDB (persist)
  */
+async function idbfsSync(populate: boolean): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    pyodide.FS.syncfs(populate, (err: any) => {
+      if (err) {
+        console.warn(`[pyodide-worker] IDBFS sync (populate=${populate}) warning:`, err);
+        // Non-fatal on first run — there's nothing to restore yet
+        resolve();
+      } else {
+        console.log(`[pyodide-worker] IDBFS sync (populate=${populate}) complete`);
+        resolve();
+      }
+    });
+  });
+}
+
+/** Persist current VFS state to IndexedDB. */
+async function syncVfsToIDB(): Promise<void> {
+  await idbfsSync(false);
+}
+
+/** Restore VFS state from IndexedDB. */
+async function restoreVfsFromIDB(): Promise<void> {
+  await idbfsSync(true);
+}
+
+/** Check whether a trained model file exists at the default workDir. */
+function modelExists(): boolean {
+  try {
+    pyodide.FS.stat(`${DEFAULT_WORK_DIR}/${MODEL_FILENAME}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Ensure a directory exists, no-op if it already does. */
+function ensureDir(path: string): void {
+  try {
+    pyodide.FS.mkdir(path);
+  } catch {
+    // EEXIST — directory already exists (e.g., restored from IDBFS)
+  }
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
+
 async function initPyodide(): Promise<void> {
   if (pyodide) return;
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
     console.log('[pyodide-worker] Starting initialization...');
-    post({ type: 'INIT_PROGRESS', step: 'Loading Pyodide runtimeâ€¦' });
+    post({ type: 'INIT_PROGRESS', step: 'Loading Pyodide runtime…' });
 
     console.log(`[pyodide-worker] Loading Pyodide from ${PYODIDE_CDN}`);
-    
     try {
-      // Module workers can't use importScripts, must use dynamic import
-      // Load the pyodide module from the CDN
       const pyodideModule = await import(/* @vite-ignore */ `${PYODIDE_CDN}pyodide.mjs`);
       const loadPyodideFunc = pyodideModule.loadPyodide;
-      
       if (!loadPyodideFunc) {
         throw new Error('loadPyodide function not found in pyodide.mjs');
       }
-
       console.log('[pyodide-worker] Calling loadPyodide...');
       pyodide = await loadPyodideFunc({ indexURL: PYODIDE_CDN });
       console.log('[pyodide-worker] Pyodide loaded successfully');
@@ -120,58 +176,69 @@ async function initPyodide(): Promise<void> {
       throw new Error(`Failed to load Pyodide: ${err}`);
     }
 
-    post({ type: 'INIT_PROGRESS', step: 'Installing micropipâ€¦' });
+    // ── Mount IDBFS for persistent model storage ──────────────────────────
+    post({ type: 'INIT_PROGRESS', step: 'Mounting persistent filesystem…' });
+    try {
+      ensureDir(PERSIST_ROOT);
+      pyodide.FS.mount(pyodide.FS.filesystems.IDBFS, {}, PERSIST_ROOT);
+      await restoreVfsFromIDB();
+      ensureDir(DEFAULT_WORK_DIR);
+      const restored = modelExists();
+      console.log(`[pyodide-worker] IDBFS mounted at ${PERSIST_ROOT}, model restored: ${restored}`);
+    } catch (err) {
+      // IDBFS failure is non-fatal — training still works, just won't persist
+      console.warn('[pyodide-worker] IDBFS mount failed (non-fatal):', err);
+      ensureDir(DEFAULT_WORK_DIR);
+    }
+
+    // ── Install Python packages ───────────────────────────────────────────
+    post({ type: 'INIT_PROGRESS', step: 'Installing micropip…' });
     console.log('[pyodide-worker] Loading micropip package...');
     await pyodide.loadPackage('micropip');
 
-    post({ type: 'INIT_PROGRESS', step: 'Installing Python packagesâ€¦' });
-    
-    // CRITICAL: Install python-crfsuite FIRST (from local wheel)
-    // sklearn-crfsuite depends on it, so we must install it before sklearn-crfsuite
+    post({ type: 'INIT_PROGRESS', step: 'Installing Python packages…' });
+
     console.log(`[pyodide-worker] Installing python-crfsuite from ${CRFSUITE_WHL}`);
     try {
       const whlResponse = await fetch(CRFSUITE_WHL);
       console.log(`[pyodide-worker] Wheel fetch status: ${whlResponse.status}`);
-      
       if (!whlResponse.ok) {
         throw new Error(`Wheel file not found at ${CRFSUITE_WHL} (HTTP ${whlResponse.status})`);
       }
-      
       const contentType = whlResponse.headers.get('content-type') || '';
       if (contentType.includes('text/html')) {
         throw new Error(`Wheel URL returned HTML instead of .whl file. Check that the file exists at ${CRFSUITE_WHL}`);
       }
-      
       console.log('[pyodide-worker] Installing python-crfsuite from local wheel...');
       await pyodide.runPythonAsync(`
 import micropip
 await micropip.install('${CRFSUITE_WHL}')
 `);
-      console.log('[pyodide-worker] âœ… python-crfsuite installed successfully');
+      console.log('[pyodide-worker] ✅ python-crfsuite installed successfully');
     } catch (err) {
       console.error('[pyodide-worker] Failed to install python-crfsuite wheel:', err);
       throw new Error(`Failed to install python-crfsuite: ${err}`);
     }
 
-    // Now install sklearn-crfsuite (which depends on python-crfsuite we just installed)
     console.log('[pyodide-worker] Installing sklearn-crfsuite from PyPI...');
     try {
       await pyodide.runPythonAsync(`
 import micropip
 await micropip.install('sklearn-crfsuite')
 `);
-      console.log('[pyodide-worker] âœ… sklearn-crfsuite installed successfully');
+      console.log('[pyodide-worker] ✅ sklearn-crfsuite installed successfully');
     } catch (err) {
       console.error('[pyodide-worker] Failed to install sklearn-crfsuite:', err);
       throw new Error(`Failed to install sklearn-crfsuite: ${err}`);
     }
 
-    post({ type: 'INIT_PROGRESS', step: 'Loading CRF pipeline scriptsâ€¦' });
+    post({ type: 'INIT_PROGRESS', step: 'Loading CRF pipeline scripts…' });
     console.log('[pyodide-worker] Fetching Python scripts...');
     await loadPythonScripts();
 
-    console.log('[pyodide-worker] Initialization complete!');
-    post({ type: 'INIT_DONE' });
+    const hasModel = modelExists();
+    console.log(`[pyodide-worker] Initialization complete! Model exists: ${hasModel}`);
+    post({ type: 'INIT_DONE', modelExists: hasModel });
   })().catch((err) => {
     initPromise = null;
     pyodide = null;
@@ -187,7 +254,6 @@ await micropip.install('sklearn-crfsuite')
  * /tmp so that `import crf_al` works in the bridge script.
  */
 async function loadPythonScripts(): Promise<void> {
-  // Both scripts are served as static assets from the public directory
   console.log('[pyodide-worker] Fetching /u2u_morphseg/py/crf_al.py');
   const crfAlResp = await fetch('/u2u_morphseg/py/crf_al.py');
   if (!crfAlResp.ok) {
@@ -208,7 +274,6 @@ async function loadPythonScripts(): Promise<void> {
   pyodide.FS.writeFile('/tmp/crf_al.py', crfAlText);
   pyodide.FS.writeFile('/tmp/crf_bridge.py', bridgeText);
 
-  // Import the bridge module so run_training_cycle is available in globals
   console.log('[pyodide-worker] Executing crf_bridge.py...');
   await pyodide.runPythonAsync(`
 import sys
@@ -218,45 +283,35 @@ exec(open('/tmp/crf_bridge.py').read())
   console.log('[pyodide-worker] Python scripts loaded successfully');
 }
 
-// â”€â”€â”€ Training cycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Training cycle ──────────────────────────────────────────────────────────
 
-/**
- * Run one active-learning cycle. Emits STEP_START/STEP_DONE for each
- * pipeline stage so the UI progress indicator stays in sync.
- *
- * @param config - Dataset content + model params from the main thread
- */
 async function runCycle(config: TrainingCycleConfig): Promise<void> {
-  const stepIds = ['init', 'train', 'predict', 'select'] as const;
+  // Override workDir to use the IDBFS-backed persistent path.
+  // The caller doesn't need to know about IDBFS internals.
+  const effectiveConfig = { ...config, workDir: DEFAULT_WORK_DIR };
 
   console.log('[pyodide-worker] Starting training cycle with config:', {
-    trainTgtLines: config.trainTgt.split('\n').length,
-    testTgtLines: config.testTgt.split('\n').length,
-    selectTgtLines: config.selectTgt.split('\n').length,
-    incrementSize: config.incrementSize,
-    selectSize: config.selectSize,
+    trainTgtLines: effectiveConfig.trainTgt.split('\n').length,
+    testTgtLines: effectiveConfig.testTgt.split('\n').length,
+    selectTgtLines: effectiveConfig.selectTgt.split('\n').length,
+    incrementSize: effectiveConfig.incrementSize,
+    selectSize: effectiveConfig.selectSize,
+    workDir: effectiveConfig.workDir,
   });
 
-  step('init', 'Setting up virtual filesystemâ€¦');
-  // Config is passed as a JSON string so Pyodide doesn't need to unpack a
-  // JS proxy â€” plain string round-trips safely across the WASM boundary.
-  const configJson = JSON.stringify(config);
-  console.log('[pyodide-worker] Config JSON length:', configJson.length);
+  step('init', 'Setting up virtual filesystem…');
+  const configJson = JSON.stringify(effectiveConfig);
   pyodide.globals.set('_config_json', configJson);
   stepDone('init', 'VFS ready');
 
-  step('train', 'Training CRF modelâ€¦');
+  step('train', 'Training CRF model…');
   console.log('[pyodide-worker] Calling run_training_cycle...');
-  // run_training_cycle does feature extraction + crf.fit internally and
-  // writes increment/residual files to the VFS before returning.
-  // This is the slow call â€” typically 5-30 s depending on dataset size.
   const resultJson: string = await pyodide.runPythonAsync(`
 run_training_cycle(_config_json)
 `);
   console.log('[pyodide-worker] Training complete, result JSON length:', resultJson.length);
   stepDone('train', 'Model trained');
 
-  // Parse here so we can emit per-step status before returning everything
   console.log('[pyodide-worker] Parsing result JSON...');
   const raw = JSON.parse(resultJson) as {
     precision: number;
@@ -289,16 +344,23 @@ run_training_cycle(_config_json)
     residualCount: raw.residualCount,
   });
 
-  step('predict', 'Reading predictionsâ€¦');
+  step('predict', 'Reading predictions…');
   stepDone('predict', `${raw.incrementWords.length} words selected`);
 
-  step('select', 'Ranking by confidenceâ€¦');
+  step('select', 'Ranking by confidence…');
   stepDone('select', `${raw.residualCount} words remain in pool`);
 
-  // Clean up VFS build artifacts to keep IDBFS sync small
-  // TODO: trigger IDBFS sync here once IndexedDB persistence is wired up
+  // Clean build artifacts but preserve the model file
   console.log('[pyodide-worker] Cleaning VFS...');
-  cleanVfs(config.workDir ?? '/tmp/turtleshell');
+  cleanVfs(effectiveConfig.workDir);
+
+  // Persist VFS (including crf.model) to IndexedDB so it survives refresh
+  console.log('[pyodide-worker] Syncing VFS to IndexedDB...');
+  try {
+    await syncVfsToIDB();
+  } catch (err) {
+    console.warn('[pyodide-worker] Post-cycle IDBFS sync failed (non-fatal):', err);
+  }
 
   console.log('[pyodide-worker] Cycle complete!');
   post({
@@ -317,8 +379,11 @@ run_training_cycle(_config_json)
 }
 
 async function runInference(config: { residualTgt: string; delta?: number; workDir?: string }): Promise<void> {
+  // Override workDir to match training's persistent path
+  const effectiveConfig = { ...config, workDir: DEFAULT_WORK_DIR };
+
   console.log('[pyodide-worker] Starting inference over residual...');
-  const configJson = JSON.stringify(config);
+  const configJson = JSON.stringify(effectiveConfig);
   pyodide.globals.set('_inference_config_json', configJson);
 
   const resultJson: string = await pyodide.runPythonAsync(`run_inference(_inference_config_json)`);
@@ -338,7 +403,10 @@ async function runInference(config: { residualTgt: string; delta?: number; workD
   post({ type: 'INFERENCE_DONE', result: { predictionsContent: raw.predictionsContent, totalWords: raw.totalWords } });
 }
 
-/** Delete .pyc files and __pycache__ dirs to keep the VFS lean. */
+/**
+ * Delete .pyc files and __pycache__ dirs to keep the VFS lean.
+ * Preserves .model files — these are the trained CRF weights we need to keep.
+ */
 function cleanVfs(workDir: string): void {
   try {
     pyodide.runPython(`
@@ -355,15 +423,36 @@ for d in ['/tmp/__pycache__']:
         shutil.rmtree(d)
 `);
   } catch {
-    // Non-fatal â€” don't break the cycle result over cleanup
+    // Non-fatal — don't break the cycle result over cleanup
   }
 }
 
-// â”€â”€â”€ Message handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/**
+ * Wipe all persisted VFS data — called by handleStartOver.
+ * Removes the entire workDir contents then syncs the empty state to IndexedDB.
+ */
+async function wipeVfs(): Promise<void> {
+  try {
+    pyodide.runPython(`
+import os, shutil
+work_dir = '${DEFAULT_WORK_DIR}'
+if os.path.exists(work_dir):
+    shutil.rmtree(work_dir)
+    os.makedirs(work_dir)
+`);
+    await syncVfsToIDB();
+    console.log('[pyodide-worker] VFS wiped and synced');
+  } catch (err) {
+    console.warn('[pyodide-worker] VFS wipe failed (non-fatal):', err);
+  }
+  post({ type: 'VFS_WIPED' });
+}
+
+// ── Message handler ─────────────────────────────────────────────────────────
 
 try {
   console.log('[pyodide-worker] Worker script loaded, setting up message handler...');
-  
+
   self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
     const msg = event.data;
     console.log('[pyodide-worker] Received message:', msg.type);
@@ -374,7 +463,6 @@ try {
           await initPyodide();
         } catch (err) {
           console.error('[pyodide-worker] Init failed:', err);
-          // Error already posted inside initPyodide
         }
         break;
 
@@ -400,25 +488,44 @@ try {
           post({ type: 'INFERENCE_ERROR', error: String(err) });
         }
         break;
+
+      case 'SYNC_VFS':
+        try {
+          if (pyodide) await syncVfsToIDB();
+          post({ type: 'VFS_SYNCED' });
+        } catch (err) {
+          console.warn('[pyodide-worker] Manual sync failed:', err);
+          post({ type: 'VFS_SYNCED' }); // Still ack so caller isn't stuck
+        }
+        break;
+
+      case 'WIPE_VFS':
+        try {
+          if (pyodide) await wipeVfs();
+          else post({ type: 'VFS_WIPED' });
+        } catch (err) {
+          console.warn('[pyodide-worker] Wipe failed:', err);
+          post({ type: 'VFS_WIPED' });
+        }
+        break;
     }
   };
 
   console.log('[pyodide-worker] Message handler ready');
-  
+
 } catch (err) {
   console.error('[pyodide-worker] FATAL: Failed to set up worker:', err);
-  // Try to post error back to main thread
   try {
-    (self as unknown as Worker).postMessage({ 
-      type: 'INIT_ERROR', 
-      error: `Worker setup failed: ${err}` 
+    (self as unknown as Worker).postMessage({
+      type: 'INIT_ERROR',
+      error: `Worker setup failed: ${err}`
     });
   } catch {
-    // Can't even post messages - worker is completely broken
+    // Can't even post messages — worker is completely broken
   }
 }
 
-// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 function post(msg: WorkerOutMessage): void {
   (self as unknown as Worker).postMessage(msg);

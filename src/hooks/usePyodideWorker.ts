@@ -4,28 +4,21 @@
  *
  * Purpose:
  *   Manages the Pyodide Web Worker lifecycle and exposes a clean async API
- *   for initialisation state and training cycle execution.
+ *   for initialisation state, training cycle execution, and VFS persistence.
  *
  *   The worker is spawned once (lazy, on first use), kept alive across cycles,
  *   and terminated on component unmount. Step progress messages are forwarded
  *   as callbacks so useTurtleshell can update the TrainingStep UI in real time.
  *
- * Key Exports:
- *   usePyodideWorker()   — React hook
+ *   IDBFS sync is handled internally by the worker after each cycle. This hook
+ *   exposes wipeVfs() for the "start over" flow and modelRestored to indicate
+ *   whether a trained model was found in IndexedDB on init.
  *
- * Author: Evan
+ * Author: Evan / Joshua
  * Created: 2026-02-17
- * Version: 0.1.0
+ * Version: 0.2.0
  *
  * Dependencies: React 18+, pyodide.worker.ts
- *
- * Test Scenarios:
- *   - Worker not yet spawned: pyodideReady === false, pyodideError === null
- *   - Init in progress: pyodideLoading === true
- *   - Init complete: pyodideReady === true
- *   - Init fails (whl 404): pyodideError === "..."
- *   - runCycle() resolves with TrainingCycleResult on success
- *   - runCycle() rejects with Error on CYCLE_ERROR message
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -38,6 +31,8 @@ export interface UsePyodideWorkerReturn {
   pyodideReady: boolean;
   pyodideLoading: boolean;
   pyodideError: string | null;
+  /** True if IDBFS restored a crf.model file from a previous session. */
+  modelRestored: boolean;
   /** Kick off a training cycle. Resolves when CYCLE_DONE is received. */
   runCycle: (
     config: TrainingCycleConfig,
@@ -45,6 +40,8 @@ export interface UsePyodideWorkerReturn {
   ) => Promise<TrainingCycleResult>;
   /** Run the trained model over all residual words. No retraining. */
   runInference: (config: InferenceConfig) => Promise<InferenceResult>;
+  /** Wipe all persisted VFS data (model, artifacts). Used by "start over". */
+  wipeVfs: () => Promise<void>;
 }
 
 export function usePyodideWorker(): UsePyodideWorkerReturn {
@@ -53,6 +50,7 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
   const [pyodideReady, setPyodideReady] = useState(false);
   const [pyodideLoading, setPyodideLoading] = useState(false);
   const [pyodideError, setPyodideError] = useState<string | null>(null);
+  const [modelRestored, setModelRestored] = useState(false);
 
   // One pending cycle at a time — store its resolve/reject + step callback here
   const pendingCycle = useRef<{
@@ -66,19 +64,18 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
     reject: (e: Error) => void;
   } | null>(null);
 
-  // ── Spawn worker once ────────────────────────────────────────────────────────
+  const pendingWipe = useRef<{
+    resolve: () => void;
+    reject: (e: Error) => void;
+  } | null>(null);
+
+  // ── Spawn worker once ──────────────────────────────────────────────────────
   const getWorker = useCallback((): Worker => {
     if (workerRef.current) return workerRef.current;
 
     console.log('[usePyodideWorker] Spawning worker...');
-    
-    // Vite handles Web Worker imports via `?worker` suffix or new Worker with URL constructor
-    // Using the URL constructor pattern for module workers
     let worker: Worker;
     try {
-      // This hook is at: src/hooks/usePyodideWorker.ts
-      // Worker is at: src/services/pyodide/workers/pyodide.worker.ts
-      // Relative path: ../services/pyodide/workers/pyodide.worker.ts
       worker = new Worker(
         new URL('../services/pyodide/workers/pyodide.worker.ts', import.meta.url),
         { type: 'module' }
@@ -95,14 +92,14 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
 
       switch (msg.type) {
         case 'INIT_PROGRESS':
-          // Could surface this in a loading toast — for now just console
           console.log('[usePyodideWorker] Init progress:', msg.step);
           break;
 
         case 'INIT_DONE':
-          console.log('[usePyodideWorker] Pyodide ready!');
+          console.log('[usePyodideWorker] Pyodide ready! Model restored:', msg.modelExists);
           setPyodideLoading(false);
           setPyodideReady(true);
+          setModelRestored(msg.modelExists);
           break;
 
         case 'INIT_ERROR':
@@ -112,17 +109,16 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
           break;
 
         case 'STEP_START':
-          console.log('[usePyodideWorker] Step start:', msg.stepId);
           pendingCycle.current?.onStep(msg.stepId, false);
           break;
 
         case 'STEP_DONE':
-          console.log('[usePyodideWorker] Step done:', msg.stepId, msg.detail);
           pendingCycle.current?.onStep(msg.stepId, true, msg.detail);
           break;
 
         case 'CYCLE_DONE':
-          console.log('[usePyodideWorker] Cycle complete');
+          console.log('[usePyodideWorker] Cycle complete (VFS synced to IndexedDB)');
+          setModelRestored(true); // Model now definitely exists
           pendingCycle.current?.resolve(msg.result);
           pendingCycle.current = null;
           break;
@@ -144,6 +140,17 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
           pendingInference.current?.reject(new Error(msg.error));
           pendingInference.current = null;
           break;
+
+        case 'VFS_SYNCED':
+          console.log('[usePyodideWorker] VFS synced');
+          break;
+
+        case 'VFS_WIPED':
+          console.log('[usePyodideWorker] VFS wiped');
+          setModelRestored(false);
+          pendingWipe.current?.resolve();
+          pendingWipe.current = null;
+          break;
       }
     };
 
@@ -159,7 +166,7 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
     return worker;
   }, []);
 
-  // ── Auto-init on mount ───────────────────────────────────────────────────────
+  // ── Auto-init on mount ─────────────────────────────────────────────────────
   useEffect(() => {
     console.log('[usePyodideWorker] Component mounted, starting init...');
     setPyodideLoading(true);
@@ -174,12 +181,12 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Public API ────────────────────────────────────────────────────────────────
+  // ── Public API ─────────────────────────────────────────────────────────────
+
   const runCycle = useCallback(
     (config: TrainingCycleConfig, onStepProgress: StepProgressCallback): Promise<TrainingCycleResult> => {
       return new Promise((resolve, reject) => {
         if (pendingCycle.current) {
-          console.warn('[usePyodideWorker] Cycle already running, rejecting new request');
           reject(new Error('A training cycle is already running'));
           return;
         }
@@ -197,7 +204,6 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
     [getWorker]
   );
 
-  
   const runInference = useCallback(
     (config: InferenceConfig): Promise<InferenceResult> => {
       return new Promise((resolve, reject) => {
@@ -212,5 +218,24 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
     [getWorker]
   );
 
-  return { pyodideReady, pyodideLoading, pyodideError, runCycle, runInference };
+  const wipeVfs = useCallback((): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (!workerRef.current) {
+        resolve(); // Nothing to wipe
+        return;
+      }
+      pendingWipe.current = { resolve, reject };
+      getWorker().postMessage({ type: 'WIPE_VFS' });
+    });
+  }, [getWorker]);
+
+  return {
+    pyodideReady,
+    pyodideLoading,
+    pyodideError,
+    modelRestored,
+    runCycle,
+    runInference,
+    wipeVfs,
+  };
 }

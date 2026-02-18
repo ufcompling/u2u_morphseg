@@ -68,3 +68,13 @@ react
 remain
 dark!en
 soft!en
+enjoy!ment
+amaze!ment
+equip!ment
+red!ish
+odd!ish
+clown!ish
+re!start
+un!wrap
+reform
+relax
