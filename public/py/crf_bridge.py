@@ -1,22 +1,39 @@
 """
 File: crf_bridge.py
+Location: public/py/crf_bridge.py
+
+Purpose:
+    Bridge between the Pyodide Web Worker (JS) and crf_al.py (Python).
+    Translates JSON configs from the frontend into crf_al function calls,
+    runs training/inference cycles, and returns JSON results.
+
+    crf_al.py is written into /tmp/crf_al.py by the worker before this
+    script is exec'd, so the import below resolves at runtime.
+
+Key functions:
+    run_training_cycle(config_json) - Train CRF, evaluate, select increment
+    run_inference(config_json)      - Segment residual pool with saved model
+
+Author: Evan / Joshua
+Created: 2026-02-17
+Version: 1.0.0
+
+Dependencies: crf_al.py, sklearn-crfsuite, pickle, json
 """
 
 import json
 import os
 import sys
-import shutil
 import pickle
 
-# crf_al.py is written into /tmp/crf_al.py by the worker before calling us
 sys.path.insert(0, '/tmp')
 import crf_al
 
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Public entry point called from JS:
+# ──────────────────────────────────────────────────────────────────────────────
+# Public entry point: training cycle
 #   result_json = await pyodide.runPythonAsync("run_training_cycle(config_json)")
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ──────────────────────────────────────────────────────────────────────────────
 
 def run_training_cycle(config_json: str) -> str:
     """
@@ -26,7 +43,7 @@ def run_training_cycle(config_json: str) -> str:
         - trainTgt: str          annotated training data (.tgt format)
         - testTgt: str           evaluation data (.tgt format)
         - selectTgt: str         unannotated pool (.tgt format)
-        - selectSrc: str         unannotated pool (.src format) â€” used by crf_al for residual
+        - selectSrc: str         unannotated pool (.src format)
         - incrementSize: int     how many words to pull into increment (select_interval)
         - delta: int             context window for features (default 4)
         - maxIterations: int     CRF training iterations (default 100)
@@ -34,11 +51,14 @@ def run_training_cycle(config_json: str) -> str:
         - workDir: str           base VFS path (e.g. '/tmp/turtleshell')
     :type config_json: str
     :return: JSON string with fields:
-        - precision: float
+        - precision: float       (0–1 range, normalized from crf_al's 0–100)
         - recall: float
         - f1: float
-        - incrementWords: list[{word, boundaries, confidence}]
+        - incrementWords: list[{id, word, confidence, boundaries}]
         - residualCount: int
+        - incrementContent: str  raw .tgt content for the increment
+        - residualContent: str   raw .tgt content for the residual
+        - evaluationContent: str per-word eval report as TSV
         - error: str | null
     :rtype: str
     """
@@ -47,18 +67,17 @@ def run_training_cycle(config_json: str) -> str:
         work_dir = config.get('workDir', '/tmp/turtleshell')
         paths = _setup_vfs(config, work_dir)
 
-        # â”€â”€ Build args namespace to match crf_al's internal API â”€â”€
-        import argparse
-
-        # Cap increment to pool size - 1 so there's always a residual for the next cycle.
-        # If pool <= 1 we just take everything (final cycle).
-        pool_size = 0
-        if os.path.exists(paths['select_tgt']):
-            with open(paths['select_tgt'], encoding='utf-8') as _f:
-                pool_size = sum(1 for ln in _f if ln.strip())
+        # Cap increment to pool size - 1 so there's always a residual for the
+        # next cycle. If pool <= 1 we take everything (final cycle).
+        pool_size = _count_lines(paths['select_tgt'])
         raw_increment = config.get('incrementSize', 50)
-        safe_increment = min(raw_increment, max(pool_size - 1, 0)) if pool_size > 1 else pool_size
+        if pool_size > 1:
+            safe_increment = min(raw_increment, pool_size - 1)
+        else:
+            safe_increment = pool_size
 
+        # Build an argparse.Namespace that crf_al.output_crf expects
+        import argparse
         args = argparse.Namespace(
             datadir=work_dir,
             lang='dataset',
@@ -72,91 +91,49 @@ def run_training_cycle(config_json: str) -> str:
             i=config.get('maxIterations', 100),
         )
 
-        # â”€â”€ Process data from VFS â”€â”€
+        # Load and process data from VFS files
         data = crf_al.process_data(
             paths['train_tgt'],
             paths['test_tgt'],
-            paths['select_tgt'] if os.path.exists(paths['select_tgt']) else None
+            paths['select_tgt'] if os.path.exists(paths['select_tgt']) else None,
         )
 
-        # â”€â”€ Train + predict â”€â”€
-        X_train, Y_train, _ = crf_al.get_features(data['train']['words'], data['train']['bmes'], args.d)
-        X_test, _, _ = crf_al.get_features(data['test']['words'], data['test']['bmes'], args.d)
-
-        # Balance poly/mono ratio to prevent over-segmentation
-        X_train, Y_train = crf_al.balance_training_data(X_train, Y_train)
-
-        crf = crf_al.self_train(
-            work_dir, X_train, Y_train,
-            data['select']['words'], data['select']['bmes'], args.d,
-            max_iterations=args.i,
+        # Extract features
+        X_train, Y_train, _ = crf_al.get_features(
+            data['train']['words'], data['train']['bmes'], args.d,
         )
+        X_test, _, _ = crf_al.get_features(
+            data['test']['words'], data['test']['bmes'], args.d,
+        )
+
+        # Train CRF
+        crf = crf_al.build_crf(work_dir, X_train, Y_train, max_iterations=args.i)
+
+        # Predict on test + select, write increment/residual files
         Y_test_predict, _ = crf_al.output_crf(crf, work_dir, args, data, X_test)
 
-        # -- (v4.1) Post-process: suppress low-confidence false boundaries --
-        test_marginals = crf.predict_marginals(X_test)
-        n_train = len(data['train']['words'])
-        Y_test_processed = crf_al.postprocess_predictions(
-            Y_test_predict, test_marginals, data['test']['words'],
-            n_train=n_train,
+        # Evaluate against gold test set
+        test_predictions = crf_al.reconstruct_predictions(Y_test_predict, data['test']['words'])
+        precision, recall, f1 = crf_al.evaluate_predictions(
+            data['test']['morphs'], test_predictions,
         )
 
-        # Save n_train so inference can use the same adaptive threshold
-        with open(os.path.join(work_dir, 'n_train.txt'), 'w') as _f:
-            _f.write(str(n_train))
-
-        # -- Evaluate (using post-processed predictions) --
-        test_predictions = crf_al.reconstruct_predictions(Y_test_processed, data['test']['words'])
-        precision, recall, f1 = crf_al.evaluate_predictions(data['test']['morphs'], test_predictions)
-
-        # -- (v4.1) Diagnostics: print error analysis to console --
-        diag = crf_al.get_cycle_diagnostics(
-            crf, data['test']['words'], Y_test_predict, test_marginals,
-            data['test']['morphs'], data['train']['words'], data['train']['bmes'],
-        )
-        print("\n=== CYCLE DIAGNOSTICS ===")
-        # Postprocess threshold info
-        if n_train < 150:
-            pp_thresh = 0.70
-        elif n_train < 300:
-            pp_thresh = 0.60
-        else:
-            pp_thresh = 0.55
-        print(f"Postprocess: threshold={pp_thresh} max_stem=5 (n_train={n_train})")
-        if diag.get('error_analysis'):
-            print(f"Errors ({len(diag['error_analysis'])} words):")
-            for err in diag['error_analysis']:
-                print(f"  {err['word']}: gold={err['gold']} pred={err['predicted']}")
-                for bd in err['boundaries']:
-                    status = "CORRECT" if bd['correct'] else "FALSE"
-                    print(f"    pos {bd['position']}: P(B)={bd['prob_B']:.3f} P(M)={bd['prob_M']:.3f} {status}")
-        cov = diag.get('training_coverage', {})
-        if cov:
-            print(f"Training: {cov.get('total_words',0)} words "
-                  f"({cov.get('polymorphemic',0)} poly, {cov.get('monomorphemic',0)} mono)")
-            if cov.get('suffix_patterns_missing'):
-                print(f"  Missing suffix patterns: {cov['suffix_patterns_missing']}")
-        print("=== END DIAGNOSTICS ===\n")
-
-        # â”€â”€ Read increment words for annotation â”€â”€
+        # Read back the increment/residual files output_crf wrote
         increment_path = os.path.join(work_dir, 'increment.tgt')
         residual_path = os.path.join(work_dir, 'residual.tgt')
-        increment_words = _parse_increment_for_annotation(increment_path, crf, data, args.d)
+        increment_words = _parse_increment_for_annotation(increment_path, crf, args.d)
         residual_count = _count_lines(residual_path)
 
-        # Build exportable file contents
         increment_content = _read_file(increment_path)
         residual_content = _read_file(residual_path)
         evaluation_content = _build_evaluation_content(
             data['test']['words'],
             data['test']['morphs'],
             test_predictions,
-            precision,
-            recall,
-            f1,
+            precision, recall, f1,
         )
 
-        # Normalize metrics from 0-100 (crf_al) to 0-1 (JS convention)
+        # crf_al metrics are 0–100; JS expects 0–1
         return json.dumps({
             'precision': round(precision / 100, 4),
             'recall': round(recall / 100, 4),
@@ -169,7 +146,7 @@ def run_training_cycle(config_json: str) -> str:
             'error': None,
         })
 
-    except Exception as exc:
+    except Exception:
         import traceback
         return json.dumps({
             'precision': 0.0,
@@ -177,33 +154,136 @@ def run_training_cycle(config_json: str) -> str:
             'f1': 0.0,
             'incrementWords': [],
             'residualCount': 0,
+            'incrementContent': '',
+            'residualContent': '',
+            'evaluationContent': '',
             'error': traceback.format_exc(),
         })
 
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ──────────────────────────────────────────────────────────────────────────────
+# Public entry point: inference
+#   result_json = await pyodide.runPythonAsync("run_inference(config_json)")
+# ──────────────────────────────────────────────────────────────────────────────
+
+def run_inference(config_json: str) -> str:
+    """
+    Run the trained CRF model over residual words without retraining.
+    Loads crf.model from the VFS written during the last training cycle.
+
+    :param config_json: JSON string with fields:
+        - residualTgt: str   residual pool content (.tgt format)
+        - delta: int         context window for features (default 4)
+        - workDir: str       VFS directory where crf.model lives
+    :type config_json: str
+    :return: JSON string with fields:
+        - predictions: list[{word, segmentation}]
+        - predictionsContent: str   full .tgt file content for download
+        - totalWords: int
+        - error: str | null
+    :rtype: str
+    """
+    try:
+        config = json.loads(config_json)
+        work_dir = config.get('workDir', '/tmp/turtleshell')
+        model_path = os.path.join(work_dir, 'crf.model')
+        delta = config.get('delta', 4)
+
+        if not os.path.exists(model_path):
+            return json.dumps({
+                'predictions': [],
+                'predictionsContent': '',
+                'totalWords': 0,
+                'error': 'No trained model found. Run at least one training cycle first.',
+            })
+
+        with open(model_path, 'rb') as f:
+            crf = pickle.load(f)
+
+        residual_content = config.get('residualTgt', '')
+        if not residual_content.strip():
+            return json.dumps({
+                'predictions': [],
+                'predictionsContent': '',
+                'totalWords': 0,
+                'error': None,
+            })
+
+        # Parse surface words from .tgt lines (space-separated chars with ! boundaries)
+        words = []
+        for line in residual_content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            word = ''.join(line.split()).replace('!', '')
+            words.append(word)
+
+        if not words:
+            return json.dumps({
+                'predictions': [],
+                'predictionsContent': '',
+                'totalWords': 0,
+                'error': None,
+            })
+
+        # Dummy BMES labels — get_features needs a bmes dict but the labels
+        # aren't used for prediction, only for building the Y_train ground truth.
+        # We use single-char 'S' labels as placeholders.
+        dummy_bmes = {w: 'S' * len(w) for w in words}
+        X, _, _ = crf_al.get_features(words, dummy_bmes, delta)
+        Y_predict = crf.predict(X)
+
+        predicted_morphs = crf_al.reconstruct_predictions(Y_predict, words)
+
+        predictions = []
+        tgt_lines = []
+        for word, morphs in zip(words, predicted_morphs):
+            seg = '!'.join(morphs)
+            predictions.append({'word': word, 'segmentation': seg})
+            tgt_lines.append(seg)
+
+        predictions_content = '\n'.join(tgt_lines) + '\n'
+
+        return json.dumps({
+            'predictions': predictions,
+            'predictionsContent': predictions_content,
+            'totalWords': len(words),
+            'error': None,
+        })
+
+    except Exception:
+        import traceback
+        return json.dumps({
+            'predictions': [],
+            'predictionsContent': '',
+            'totalWords': 0,
+            'error': traceback.format_exc(),
+        })
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Helpers
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ──────────────────────────────────────────────────────────────────────────────
 
 def _setup_vfs(config: dict, work_dir: str) -> dict:
     """
-    Write JS-provided file content strings into the Pyodide VFS and return paths.
+    Write JS-provided file content strings into the Pyodide VFS.
 
     :param config: Decoded config dict from JS
     :param work_dir: Base directory to write files into
-    :return: Dict of resolved file paths
+    :return: Dict of resolved file paths keyed by role
     """
     os.makedirs(work_dir, exist_ok=True)
 
     paths = {
-        'train_tgt': os.path.join(work_dir, 'train.train.tgt'),
-        'test_tgt':  os.path.join(work_dir, 'test.full.tgt'),
+        'train_tgt':  os.path.join(work_dir, 'train.train.tgt'),
+        'test_tgt':   os.path.join(work_dir, 'test.full.tgt'),
         'select_tgt': os.path.join(work_dir, 'select.train.tgt'),
         'select_src': os.path.join(work_dir, 'select.train.src'),
     }
 
     _write_if_present(paths['train_tgt'], config.get('trainTgt', ''))
-    _write_if_present(paths['test_tgt'], config.get('testTgt', ''))
+    _write_if_present(paths['test_tgt'],  config.get('testTgt', ''))
     _write_if_present(paths['select_tgt'], config.get('selectTgt', ''))
     _write_if_present(paths['select_src'], config.get('selectSrc', ''))
 
@@ -216,16 +296,15 @@ def _write_if_present(path: str, content: str) -> None:
             f.write(content)
 
 
-def _parse_increment_for_annotation(increment_tgt_path: str, crf, data: dict, delta: int) -> list:
+def _parse_increment_for_annotation(increment_tgt_path: str, crf, delta: int) -> list:
     """
     Read increment.tgt and pair each word with the model's confidence score
-    and predicted boundary indices so JS can drive the annotation UI.
+    and predicted boundary indices for the annotation UI.
 
     :param increment_tgt_path: Path to increment.tgt written by output_crf
     :param crf: Trained CRF model (for marginals on increment words)
-    :param data: Full DataDict â€” we pull select bmes from here for features
     :param delta: Feature window size
-    :return: List of dicts suitable for AnnotationWord in the frontend
+    :return: List of dicts matching AnnotationWord shape in the frontend
     """
     if not os.path.exists(increment_tgt_path):
         return []
@@ -234,7 +313,7 @@ def _parse_increment_for_annotation(increment_tgt_path: str, crf, data: dict, de
     if not words:
         return []
 
-    X, Y_labels, _ = crf_al.get_features(words, bmes, delta)
+    X, _, _ = crf_al.get_features(words, bmes, delta)
     Y_predict = crf.predict(X)
     marginals = crf.predict_marginals(X)
     conf_scores = crf_al.get_confidence_scores(words, Y_predict, marginals)
@@ -254,18 +333,16 @@ def _parse_increment_for_annotation(increment_tgt_path: str, crf, data: dict, de
 
 def _labels_to_boundary_indices(word: str, pred_labels: list) -> list:
     """
-    Convert BMES label sequence to boundary indices (after which char a split occurs).
-    Labels include the '[' and ']' boundary markers added by crf_al, so strip them.
+    Convert BMES label sequence to boundary indices (char index after which
+    a morpheme split occurs). Strips the '['/']' markers crf_al wraps words with.
 
-    :param word: The surface form of the word
+    :param word: Surface form of the word
     :param pred_labels: Full label list including '[' and ']'
-    :return: List of character indices where morpheme boundaries occur
+    :return: List of character indices where morpheme boundaries fall
     """
-    # strip the outer [ ] markers that crf_al wraps every word with
-    inner = pred_labels[1:-1]
+    inner = pred_labels[1:-1]  # strip [ and ]
     boundaries = []
     for i, label in enumerate(inner):
-        # E = End of morpheme, S = Single-char morpheme -> boundary after this char
         if label in ('E', 'S') and i < len(word) - 1:
             boundaries.append(i)
     return boundaries
@@ -279,7 +356,6 @@ def _count_lines(path: str) -> int:
 
 
 def _read_file(path: str) -> str:
-    """Read a VFS file and return its content, or empty string if missing."""
     if not os.path.exists(path):
         return ''
     with open(path, encoding='utf-8') as f:
@@ -296,6 +372,7 @@ def _build_evaluation_content(
 ) -> str:
     """
     Build a human-readable evaluation report as a TSV string.
+    Metrics here are in crf_al's 0–100 scale (pre-normalization).
 
     :return: Report with summary header and per-word rows (word | gold | predicted)
     """
@@ -310,119 +387,3 @@ def _build_evaluation_content(
         pred_seg = '!'.join(pred)
         lines.append(f'{word}\t{gold_seg}\t{pred_seg}')
     return '\n'.join(lines) + '\n'
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Inference-only entry point
-# ──────────────────────────────────────────────────────────────────────────────
-
-def run_inference(config_json: str) -> str:
-    """
-    Run the trained CRF model over all words in the residual pool and return
-    predicted segmentations. Does not retrain — loads crf.model from the VFS.
-
-    Called from JS after the user is satisfied with their F1 score and wants to
-    segment the entire remaining unannotated corpus.
-
-    :param config_json: JSON string with fields:
-        - residualTgt: str   residual pool content (.tgt format, boundary markers ignored)
-        - delta: int         context window for features (default 4)
-        - workDir: str       VFS directory where crf.model was saved (default /tmp/turtleshell)
-    :return: JSON string with:
-        - predictions: list[{word, segmentation}]  e.g. {word: "unhappy", segmentation: "un!happy"}
-        - predictionsContent: str                  full .tgt file content for download
-        - totalWords: int
-        - error: str | null
-    :rtype: str
-    """
-    try:
-        config = json.loads(config_json)
-        work_dir = config.get('workDir', '/tmp/turtleshell')
-        model_path = os.path.join(work_dir, 'crf.model')
-        delta = config.get('delta', 4)
-
-        if not os.path.exists(model_path):
-            return json.dumps({
-                'predictions': [],
-                'predictionsContent': '',
-                'totalWords': 0,
-                'error': 'No trained model found. Run at least one training cycle first.',
-            })
-
-        # Load the pickled model from the last training cycle
-        with open(model_path, 'rb') as f:
-            crf = pickle.load(f)
-
-        # Parse the residual words — strip boundary markers to get surface forms
-        residual_content = config.get('residualTgt', '')
-        if not residual_content.strip():
-            return json.dumps({
-                'predictions': [],
-                'predictionsContent': '',
-                'totalWords': 0,
-                'error': None,
-            })
-
-        words = []
-        for line in residual_content.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            # .tgt lines are space-separated chars with ! for boundaries
-            # Strip boundaries to get the surface word for feature extraction
-            word = ''.join(line.split()).replace('!', '')
-            words.append(word)
-
-        if not words:
-            return json.dumps({
-                'predictions': [],
-                'predictionsContent': '',
-                'totalWords': 0,
-                'error': None,
-            })
-
-        # Build features and predict — no gold labels needed
-        import argparse
-        dummy_bmes = {w: 'B' * len(w) for w in words}  # placeholder, not used in get_features
-        X, _, _ = crf_al.get_features(words, dummy_bmes, delta)
-        Y_predict = crf.predict(X)
-
-        # (v4.1) Post-process: suppress low-confidence false boundaries
-        # Read n_train saved during training to use the same adaptive threshold
-        n_train_path = os.path.join(work_dir, 'n_train.txt')
-        try:
-            with open(n_train_path) as _f:
-                inf_n_train = int(_f.read().strip())
-        except (FileNotFoundError, ValueError):
-            inf_n_train = 9999  # fallback: conservative threshold
-        inf_marginals = crf.predict_marginals(X)
-        Y_processed = crf_al.postprocess_predictions(Y_predict, inf_marginals, words, n_train=inf_n_train)
-
-        # Reconstruct predicted morpheme sequences from BMES labels
-        predicted_morphs = crf_al.reconstruct_predictions(Y_processed, words)
-
-        # Build output structures
-        predictions = []
-        tgt_lines = []
-        for word, morphs in zip(words, predicted_morphs):
-            seg = '!'.join(morphs)
-            predictions.append({'word': word, 'segmentation': seg})
-            tgt_lines.append(seg)
-
-        predictions_content = '\n'.join(tgt_lines) + '\n'
-
-        return json.dumps({
-            'predictions': predictions,
-            'predictionsContent': predictions_content,
-            'totalWords': len(words),
-            'error': None,
-        })
-
-    except Exception as exc:
-        import traceback
-        return json.dumps({
-            'predictions': [],
-            'predictionsContent': '',
-            'totalWords': 0,
-            'error': traceback.format_exc(),
-        })

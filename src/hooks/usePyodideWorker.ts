@@ -23,7 +23,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { TrainingCycleConfig, TrainingCycleResult, InferenceConfig, InferenceResult } from '../lib/types';
-import type { WorkerOutMessage } from '../services/pyodide/workers/pyodide.worker';
+import type { WorkerOutMessage } from '../lib/worker-protocol';
 
 export type StepProgressCallback = (stepId: string, done: boolean, detail?: string) => void;
 
@@ -52,7 +52,7 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
   const [pyodideError, setPyodideError] = useState<string | null>(null);
   const [modelRestored, setModelRestored] = useState(false);
 
-  // One pending cycle at a time — store its resolve/reject + step callback here
+  // One pending cycle at a time â€” store its resolve/reject + step callback here
   const pendingCycle = useRef<{
     resolve: (r: TrainingCycleResult) => void;
     reject: (e: Error) => void;
@@ -69,7 +69,7 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
     reject: (e: Error) => void;
   } | null>(null);
 
-  // ── Spawn worker once ──────────────────────────────────────────────────────
+  // â”€â”€ Spawn worker once â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const getWorker = useCallback((): Worker => {
     if (workerRef.current) return workerRef.current;
 
@@ -166,7 +166,7 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
     return worker;
   }, []);
 
-  // ── Auto-init on mount ─────────────────────────────────────────────────────
+  // â”€â”€ Auto-init on mount â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     console.log('[usePyodideWorker] Component mounted, starting init...');
     setPyodideLoading(true);
@@ -181,7 +181,7 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Public API ─────────────────────────────────────────────────────────────
+  // â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const runCycle = useCallback(
     (config: TrainingCycleConfig, onStepProgress: StepProgressCallback): Promise<TrainingCycleResult> => {

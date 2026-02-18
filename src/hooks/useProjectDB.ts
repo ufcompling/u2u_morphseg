@@ -41,6 +41,7 @@ export interface UseProjectDBReturn {
   saveFiles: (files: Omit<StoredFile, "id">[]) => Promise<StoredFile[]>;
   updateFileRole: (fileId: string, role: FileRole) => Promise<void>;
   updateFileContent: (fileId: string, content: string) => Promise<void>;
+  updateFileValidation: (fileId: string, status: "valid" | "invalid" | "pending") => Promise<void>;
   removeFile: (fileId: string) => Promise<void>;
 
   // ── Cycles ──
@@ -227,6 +228,14 @@ export function useProjectDB(): UseProjectDBReturn {
     );
   }, []);
 
+  const updateFileValidation = useCallback(async (fileId: string, status: "valid" | "invalid" | "pending") => {
+    const numericId = Number(fileId);
+    await db.files.update(numericId, { validationStatus: status });
+    setFiles((prev) =>
+      prev.map((f) => (f.id === fileId ? { ...f, validationStatus: status } : f))
+    );
+  }, []);
+
   const removeFile = useCallback(async (fileId: string) => {
     const numericId = Number(fileId);
     await db.files.delete(numericId);
@@ -370,6 +379,7 @@ export function useProjectDB(): UseProjectDBReturn {
     saveFiles,
     updateFileRole,
     updateFileContent,
+    updateFileValidation,
     removeFile,
     saveCycle,
     getCycleContent,
