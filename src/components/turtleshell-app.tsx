@@ -3,7 +3,7 @@
 
 "use client";
 
-import { useTurtleshell } from "../hooks/use-turtleshell";
+import { useTurtleshell } from "../hooks/useTurtleShell";
 import { TurtleLogo } from "../components/turtle-logo";
 import { StatusIndicator } from "./ui/status-indicator";
 import { StepIndicator } from "../components/step-indicator";
