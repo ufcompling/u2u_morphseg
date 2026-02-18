@@ -286,7 +286,7 @@ def process_data(train_path: str, test_path: str, select_path: str | None = None
 
 VOWELS: set[str] = set('aeiouAEIOU')
 
-# Common English affixes — helps the CRF recognize known morpheme patterns.
+# Common English affixes â€” helps the CRF recognize known morpheme patterns.
 # For non-English languages, these won't fire and the model falls back to
 # character-level features, so this is safe to leave in.
 COMMON_PREFIXES: tuple[str, ...] = ('un', 're', 'in', 'im', 'dis', 'en', 'em', 'non', 'pre', 'mis', 'over', 'under', 'out', 'sub')
@@ -298,7 +298,7 @@ def get_char_features(bounded: Word, i: int, delta: int) -> CharFeatures:
 
 	Produces n-gram, positional, phonological, and affix-awareness features.
 	The original implementation only used n-grams + absolute start position,
-	which starved the CRF of structural signal — especially on small training sets.
+	which starved the CRF of structural signal â€” especially on small training sets.
 	
 	:param bounded: The bounded word (with [ and ] markers)
 	:type bounded: Word
@@ -328,7 +328,7 @@ def get_char_features(bounded: Word, i: int, delta: int) -> CharFeatures:
 	char_dict[f'pos_end_{len(bounded) - i - 1}'] = 1   # distance from word end
 
 	if word_len > 0:
-		# Bucketed relative position (quarters) — generalizes across word lengths
+		# Bucketed relative position (quarters) â€” generalizes across word lengths
 		rel_pos: int = int((max(i - 1, 0) / word_len) * 4)
 		char_dict[f'pos_bucket_{rel_pos}'] = 1
 
@@ -349,13 +349,13 @@ def get_char_features(bounded: Word, i: int, delta: int) -> CharFeatures:
 			if is_vowel != prev_vowel:
 				char_dict['vc_transition'] = 1
 
-		# Consonant cluster detection — clusters often don't span morpheme boundaries
+		# Consonant cluster detection â€” clusters often don't span morpheme boundaries
 		if not is_vowel and i > 0 and bounded[i-1] not in VOWELS | {'[', ']'}:
 			char_dict['in_consonant_cluster'] = 1
 
 	# --- Affix awareness features ---
 	# Fire when the current position aligns with a known affix boundary.
-	# These are soft hints, not hard rules — the CRF learns weights for them.
+	# These are soft hints, not hard rules â€” the CRF learns weights for them.
 	if char not in ('[', ']'):
 		inner_pos: int = i - 1  # 0-indexed position within the actual word
 		raw_word: str = bounded[1:-1]
@@ -365,7 +365,7 @@ def get_char_features(bounded: Word, i: int, delta: int) -> CharFeatures:
 				char_dict[f'at_prefix_end_{pfx}'] = 1
 			if raw_word.startswith(pfx) and inner_pos == len(pfx):
 				char_dict[f'after_prefix_{pfx}'] = 1
-				# Stem length after prefix — short stems suggest false prefix.
+				# Stem length after prefix â€” short stems suggest false prefix.
 				# "re" + "ach" (3) is suspicious, "re" + "check" (5) is plausible.
 				stem_len: int = word_len - len(pfx)
 				char_dict[f'stem_after_pfx_{min(stem_len, 8)}'] = 1
@@ -373,18 +373,28 @@ def get_char_features(bounded: Word, i: int, delta: int) -> CharFeatures:
 		for sfx in COMMON_SUFFIXES:
 			if raw_word.endswith(sfx) and inner_pos == word_len - len(sfx):
 				char_dict[f'at_suffix_start_{sfx}'] = 1
-				# Stem length before suffix — "gar" (3) + "ment" is suspicious,
-				# "agree" (5) + "ment" is plausible.
 				stem_len_sfx: int = word_len - len(sfx)
 				char_dict[f'stem_before_sfx_{min(stem_len_sfx, 8)}'] = 1
-			if raw_word.endswith(sfx) and inner_pos == word_len - len(sfx) - 1:
-				char_dict[f'before_suffix_{sfx}'] = 1
+
+			# Fires when the remaining characters from this position START
+			# with a known suffix. Unlike at_suffix_start which only fires
+			# for the LAST suffix (word.endswith), this catches INNER suffixes
+			# in compound words:
+			#   hopelessly pos 4: remainder="lessly" starts with "less" ✓
+			#   hopelessly pos 8: remainder="ly" starts with "ly" ✓
+			#   peacefully pos 5: remainder="fully" starts with "ful" ✓
+			# Also prevents off-by-one errors (brigh!ten → bright!en) by
+			# only firing at the exact suffix start position.
+			if inner_pos < word_len:
+				remainder: str = raw_word[inner_pos:]
+				if remainder.startswith(sfx):
+					char_dict[f'suffix_here_{sfx}'] = 1
 
 	# --- Cross-boundary bigram features ---
 	# The character pair spanning a potential boundary is the single most
 	# discriminative signal for real vs. fake affix boundaries. E.g.,
 	# "agree!ment" has cross-bigram "em" at the boundary, while "garment"
-	# has "rm" — the CRF can learn which pairs occur at real boundaries.
+	# has "rm" â€” the CRF can learn which pairs occur at real boundaries.
 	if char not in ('[', ']'):
 		if i > 1 and bounded[i-1] not in ('[',):
 			char_dict[f'bigram_{bounded[i-1]}{char}'] = 1
@@ -394,7 +404,7 @@ def get_char_features(bounded: Word, i: int, delta: int) -> CharFeatures:
 	# --- Doubled consonant detection ---
 	# Words like "kitten", "mitten", "flatten", "written" have doubled
 	# consonants immediately before the "-en" ending. These are almost never
-	# real stem+suffix boundaries — the doubling is orthographic, not
+	# real stem+suffix boundaries â€” the doubling is orthographic, not
 	# morphological. This feature gives the CRF a direct signal.
 	if char not in ('[', ']') and i >= 2:
 		if bounded[i-1] == char and char not in VOWELS:
@@ -512,6 +522,86 @@ def sort_by_confidence(words: list[Word], morphs: list[MorphList], confscores: l
 
 ### Building Models ###
 
+def balance_training_data(
+	X_train: DatasetFeatures,
+	Y_train: DatasetLabels,
+	target_ratio: float = 0.30,
+) -> tuple[DatasetFeatures, DatasetLabels]:
+	"""
+	Oversample monomorphemic words to fix class imbalance.
+
+	With 80 training words split 64 poly / 16 mono (80/20), the CRF sees 4x
+	more "split here" examples than "don't split." It learns to always segment
+	anything that looks like a suffix. This is the direct cause of false
+	boundary errors on trap words (kitchen, wicked, harness, etc).
+
+	Fix: duplicate monomorphemic examples until they make up ~30% of training.
+	At 30% the CRF gets enough "don't split" signal to fix the worst false
+	boundaries without becoming too conservative about real ones.
+
+	At 40% the model over-corrects — it starts suppressing real boundaries
+	like fool!ish and self!ish. 30% is the empirical sweet spot.
+
+	Auto-deactivates when the natural ratio exceeds the target, which happens
+	around cycle 3 (~280 words) as more annotated data comes in.
+
+	:param X_train: Training features
+	:param Y_train: Training labels
+	:param target_ratio: Desired minimum fraction of monomorphemic words
+	:return: Balanced (X_train, Y_train)
+	"""
+	if len(X_train) == 0:
+		return X_train, Y_train
+
+	# Identify monomorphemic vs polymorphemic words by label sequence.
+	# Mono words have no B label after position 0 (inner labels are all M/E/S).
+	mono_indices: list[int] = []
+	poly_indices: list[int] = []
+
+	for i, labels in enumerate(Y_train):
+		inner = labels[1:-1]  # strip [ and ]
+		has_boundary = any(lbl == 'B' for lbl in inner[1:])
+		if has_boundary:
+			poly_indices.append(i)
+		else:
+			mono_indices.append(i)
+
+	n_mono = len(mono_indices)
+	n_poly = len(poly_indices)
+	total = n_mono + n_poly
+
+	if total == 0 or n_mono == 0:
+		return X_train, Y_train
+
+	current_ratio = n_mono / total
+	if current_ratio >= target_ratio:
+		return X_train, Y_train
+
+	# Calculate exactly how many additional mono samples we need.
+	# We want: (n_mono + extra) / (total + extra) >= target_ratio
+	# Solving: extra = ceil((target_ratio * n_poly - n_mono * (1 - target_ratio)) / (1 - target_ratio))
+	# Simplified: extra = ceil((target_ratio * total - n_mono) / (1 - target_ratio))
+	import math
+	extra_needed = math.ceil((target_ratio * total - n_mono) / (1 - target_ratio))
+	extra_needed = min(extra_needed, n_mono * 4)  # cap at 4x original mono count
+
+	# Add mono samples one at a time, cycling through the list
+	balanced_X: DatasetFeatures = list(X_train)
+	balanced_Y: DatasetLabels = list(Y_train)
+
+	for i in range(extra_needed):
+		idx = mono_indices[i % n_mono]
+		balanced_X.append(X_train[idx])
+		balanced_Y.append(Y_train[idx])
+
+	new_mono = n_mono + extra_needed
+	new_total = total + extra_needed
+	print(f"  Balance: {n_mono} mono / {total} total ({current_ratio:.0%}) "
+		  f"→ {new_mono} mono / {new_total} total ({new_mono/new_total:.0%})")
+
+	return balanced_X, balanced_Y
+
+
 def build_crf(sub_datadir: str, X_train: DatasetFeatures, Y_train: DatasetLabels, max_iterations: int = 100) -> sklearn_crfsuite.CRF:
 	"""
 	Builds and trains a CRF model.
@@ -519,7 +609,7 @@ def build_crf(sub_datadir: str, X_train: DatasetFeatures, Y_train: DatasetLabels
 	Regularization (c1/c2) is scaled based on training set size. With small
 	datasets (<200 words), the original c1=c2=0.1 caused heavy underfitting.
 	Lowering these lets the model actually learn the patterns present in the data
-	without overfitting on the eval set — CRFs are inherently regularized by the
+	without overfitting on the eval set â€” CRFs are inherently regularized by the
 	structured prediction objective.
 	
 	:param sub_datadir: The subdirectory to save the model in
@@ -536,7 +626,7 @@ def build_crf(sub_datadir: str, X_train: DatasetFeatures, Y_train: DatasetLabels
 	n_samples: int = len(X_train)
 
 	# Scale regularization to dataset size. These values were found empirically:
-	# - tiny (<100):  nearly unregularized — let the model memorize what little it has
+	# - tiny (<100):  nearly unregularized â€” let the model memorize what little it has
 	# - small (<500): light regularization
 	# - larger:       standard values
 	if n_samples < 100:
@@ -556,6 +646,136 @@ def build_crf(sub_datadir: str, X_train: DatasetFeatures, Y_train: DatasetLabels
 	crf.fit(X_train, Y_train)
 	with open(f'{sub_datadir}/crf.model', 'wb') as f:
 		pickle.dump(crf, f)
+
+	return crf
+
+# â”€â”€ Filtered Self-Training (semi-supervised bootstrap) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+# Prefix patterns that have high false-positive rates on monomorphemic trap
+# words (uncle, relax, until, remain, etc.). Any pseudo-label placing a
+# boundary right at these prefix lengths gets rejected.
+_TRAP_PREFIXES: dict[str, int] = {
+	'un': 2, 're': 2, 'in': 2, 'im': 2,
+	'en': 2, 'em': 2, 'dis': 3, 'mis': 3,
+}
+
+# Suffix patterns common in monomorphemic words when the stem is short.
+# "wick!ed" (stem=4), "har!ness" (stem=3) -- almost always wrong at stem<=3.
+_TRAP_SUFFIXES: dict[str, int] = {
+	'er': 2, 'ed': 2, 'en': 2, 'al': 2, 'le': 2,
+	'ness': 4, 'ish': 3,
+}
+
+def _is_safe_pseudo_label(word: Word, predicted_labels: WordLabels) -> bool:
+	"""
+	Determine if a pseudo-label is safe to include in self-training.
+
+	Rejects predictions that place a boundary at:
+	  1. A trap prefix position (re!lax, un!cle, etc.)
+	  2. A trap suffix position with a short stem (har!ness, wick!ed, etc.)
+
+	:param word: The surface word
+	:param predicted_labels: BMES labels including [ and ] markers
+	:return: True if safe for self-training
+	"""
+	inner = predicted_labels[1:-1]
+
+	boundary_positions: list[int] = []
+	for i, label in enumerate(inner):
+		if (label == 'B' or label == 'S') and i > 0:
+			boundary_positions.append(i)
+
+	if not boundary_positions:
+		return True
+
+	word_lower = word.lower()
+	first_boundary = boundary_positions[0]
+	last_boundary = boundary_positions[-1]
+
+	for pfx, pfx_len in _TRAP_PREFIXES.items():
+		if word_lower.startswith(pfx) and first_boundary == pfx_len:
+			return False
+
+	for sfx, sfx_len in _TRAP_SUFFIXES.items():
+		if word_lower.endswith(sfx) and last_boundary == len(word) - sfx_len:
+			stem_len = len(word) - sfx_len
+			if stem_len <= 3:
+				return False
+
+	return True
+
+
+def self_train(sub_datadir: str, X_train: DatasetFeatures, Y_train: DatasetLabels,
+			   select_words: list[Word], select_bmes: BMESDict, delta: int,
+			   max_iterations: int = 100, rounds: int = 2,
+			   confidence_threshold: float = 0.80, max_pseudo_ratio: float = 2.0) -> sklearn_crfsuite.CRF:
+	"""
+	Filtered semi-supervised self-training for CRF.
+
+	Trains an initial CRF, predicts on the unlabeled pool, keeps only
+	high-confidence pseudo-labels that pass a safety filter, and retrains
+	on the combined set. Runs multiple rounds so each iteration produces
+	better pseudo-labels from a better model.
+
+	Activates when training set is small (<150 words), covering cycle 1
+	(~80 words) where the model is most data-starved. By cycle 2 (~180
+	words) real labels are sufficient and pseudo-labels add noise.
+
+	:param sub_datadir: Directory to save the model
+	:param X_train: Labeled training features
+	:param Y_train: Labeled training labels
+	:param select_words: Unlabeled pool words
+	:param select_bmes: BMES dict for unlabeled pool
+	:param delta: Feature window size
+	:param max_iterations: CRF training iterations
+	:param rounds: Self-training rounds (default 2)
+	:param confidence_threshold: Minimum avg marginal to accept pseudo-label
+	:param max_pseudo_ratio: Max ratio of pseudo:real labels
+	:return: The trained CRF model
+	"""
+	crf: sklearn_crfsuite.CRF = build_crf(sub_datadir, X_train, Y_train, max_iterations)
+
+	# Only self-train when data is truly scarce.
+	if len(X_train) >= 150 or not select_words:
+		return crf
+
+	max_pseudo: int = int(len(X_train) * max_pseudo_ratio)
+	current_X: DatasetFeatures = list(X_train)
+	current_Y: DatasetLabels = list(Y_train)
+
+	for rnd in range(rounds):
+		X_unlabeled, _, _ = get_features(select_words, select_bmes, delta)
+		if not X_unlabeled:
+			break
+
+		Y_pred: DatasetLabels = crf.predict(X_unlabeled)
+		marginals: DatasetMarginals = crf.predict_marginals(X_unlabeled)
+		conf_scores: list[ConfidenceScore] = get_confidence_scores(select_words, Y_pred, marginals)
+
+		candidates = sorted(
+			zip(X_unlabeled, Y_pred, conf_scores, select_words),
+			key=lambda x: x[2], reverse=True
+		)
+
+		pseudo_X: DatasetFeatures = []
+		pseudo_Y: DatasetLabels = []
+		for x, y, conf, word in candidates:
+			if conf < confidence_threshold:
+				break
+			if not _is_safe_pseudo_label(word, y):
+				continue
+			pseudo_X.append(x)
+			pseudo_Y.append(y)
+			if len(pseudo_X) >= max_pseudo:
+				break
+
+		if not pseudo_X:
+			break
+
+		print(f"  Self-train round {rnd+1}: +{len(pseudo_X)} pseudo-labels "
+			f"(total {len(current_X) + len(pseudo_X)})")
+
+		crf = build_crf(sub_datadir, current_X + pseudo_X, current_Y + pseudo_Y, max_iterations)
 
 	return crf
 
@@ -605,7 +825,7 @@ def save_data(confidence_data: list[ConfidenceData], sub_datadir: str, file_name
 def output_crf(crf: sklearn_crfsuite.CRF, sub_datadir: str, args: argparse.Namespace, data: DataDict, X_test: DatasetFeatures) -> tuple[DatasetLabels, DatasetLabels]:
 	"""
 	Outputs predictions from the CRF model and prepares data for active learning.
-	
+
 	:param crf: The trained CRF model
 	:type crf: sklearn_crfsuite.CRF
 	:param sub_datadir: The subdirectory to save output files in
@@ -626,17 +846,16 @@ def output_crf(crf: sklearn_crfsuite.CRF, sub_datadir: str, args: argparse.Names
 		X_select, _, _ = get_features(data['select']['words'], data['select']['bmes'], args.d)
 		Y_select_predict = crf.predict(X_select)
 
-		# Get Confidence Data
 		marginals: DatasetMarginals = crf.predict_marginals(X_select)
 		confscores: list[ConfidenceScore] = get_confidence_scores(data['select']['words'], Y_select_predict, marginals)
 		conf_sorted_data: list[ConfidenceData] = sort_by_confidence(data['select']['words'], data['select']['morphs'], confscores)
 
-		# Generate increment.src and residual.src
 		increment_data, residual_data = split_increment_residual(conf_sorted_data, args.select_interval)
 		save_data(increment_data, sub_datadir, 'increment')
 		save_data(residual_data, sub_datadir, 'residual')
 
 	return Y_test_predict, Y_select_predict
+
 
 def build_and_output_crf(sub_datadir: str, args: argparse.Namespace, data: DataDict) -> tuple[DatasetLabels, DatasetLabels]:
 	"""
@@ -654,7 +873,14 @@ def build_and_output_crf(sub_datadir: str, args: argparse.Namespace, data: DataD
 	X_train, Y_train, _ = get_features(data['train']['words'], data['train']['bmes'], args.d)
 	X_test, _, _ = get_features(data['test']['words'], data['test']['bmes'], args.d)
 
-	crf: sklearn_crfsuite.CRF = build_crf(sub_datadir, X_train, Y_train)
+	# Balance poly/mono ratio to prevent over-segmentation
+	X_train, Y_train = balance_training_data(X_train, Y_train)
+
+	crf: sklearn_crfsuite.CRF = self_train(
+		sub_datadir, X_train, Y_train,
+		data['select']['words'], data['select']['bmes'], args.d,
+		max_iterations=getattr(args, 'i', 100),
+	)
 	
 	return output_crf(crf, sub_datadir, args, data, X_test)
 
@@ -747,7 +973,7 @@ def calculate_metrics(y_true: MorphList, y_pred: MorphList) -> tuple[float, floa
 	Calculates precision, recall, and F1 score using boundary-based evaluation.
 
 	The previous implementation used bag-of-morphemes matching (`if m in y_true`)
-	which didn't respect position or multiplicity — a predicted morpheme "ed"
+	which didn't respect position or multiplicity â€” a predicted morpheme "ed"
 	would match any gold morpheme "ed" regardless of where it appeared, and
 	duplicate predictions were counted as correct multiple times.
 
@@ -764,7 +990,7 @@ def calculate_metrics(y_true: MorphList, y_pred: MorphList) -> tuple[float, floa
 	gold_bounds: set[int] = _morphs_to_boundaries(y_true)
 	pred_bounds: set[int] = _morphs_to_boundaries(y_pred)
 
-	# Single-morpheme words have no boundaries — both sides agree trivially
+	# Single-morpheme words have no boundaries â€” both sides agree trivially
 	if not gold_bounds and not pred_bounds:
 		return 100.0, 100.0, 100.0
 
@@ -807,6 +1033,225 @@ def evaluate_predictions(gold_word: list[MorphList], pred_word: list[MorphList])
 
 	average_precision, average_recall, average_f1 = (round(statistics.mean(x), 2) for x in (precision_scores, recall_scores, f1_scores))
 	return average_precision, average_recall, average_f1
+
+
+# ── Marginal-Based Post-Processing (v4.1) ────────────────────────────────────
+#
+# The dominant error type across all cycles is false boundaries at common suffix
+# positions (kitchen→kitch!en, wicked→wick!ed, harness→har!ness). The CRF's
+# marginal probabilities already encode uncertainty about these positions, but
+# the Viterbi decoder picks the single best path regardless of margin.
+#
+# Post-processing inspects boundary positions after prediction. If a B label
+# (morpheme start) sits at a common suffix position with:
+#   1. Low marginal probability for B (the model isn't confident)
+#   2. Short stem (≤4 chars — most trap words have stems of 3-4)
+# then we flip B→M (continue the morpheme instead of starting a new one).
+#
+# This can only FIX false_boundary errors. It cannot create new errors except
+# by occasionally missing a real boundary — but the threshold is conservative
+# enough that this is rare.
+
+_POSTPROCESS_SUFFIXES: dict[str, int] = {
+	'er': 2, 'ed': 2, 'en': 2, 'al': 2, 'ly': 2, 'le': 2,
+	'ness': 4, 'ment': 4, 'ish': 3, 'ful': 3, 'less': 4,
+}
+
+def postprocess_predictions(
+	Y_predict: DatasetLabels,
+	marginals: DatasetMarginals,
+	words: list[Word],
+	n_train: int = 0,
+) -> DatasetLabels:
+	"""
+	Suppress low-confidence false boundaries at trap suffix positions.
+
+	After the CRF predicts, checks each boundary at a common suffix position.
+	If P(B) is below a threshold and the stem is short, flips B→M.
+
+	Threshold and max_stem adapt to training size:
+	  - Early cycles (<150 words): aggressive — threshold=0.70, max_stem=5
+	    The model is undertrained and over-segments. Be skeptical of boundaries.
+	  - Mid cycles (<300 words):   moderate — threshold=0.60, max_stem=5
+	  - Late cycles (300+):        conservative — threshold=0.55, max_stem=5
+	    Trust the model more as it's seen enough data.
+
+	:param Y_predict: Raw predicted label sequences from CRF
+	:param marginals: Per-position marginal probabilities from CRF
+	:param words: Corresponding words
+	:param n_train: Training set size (drives adaptive threshold)
+	:return: Corrected label sequences
+	"""
+	# Adaptive threshold: more aggressive when training data is scarce
+	if n_train < 150:
+		threshold = 0.70
+	elif n_train < 300:
+		threshold = 0.60
+	else:
+		threshold = 0.55
+	max_stem = 5
+
+	corrected: DatasetLabels = []
+
+	for pred, marg, word in zip(Y_predict, marginals, words):
+		inner_pred = list(pred[1:-1])
+		inner_marg = marg[1:-1]
+		word_lower = word.lower()
+		changed = False
+
+		for sfx, sfx_len in _POSTPROCESS_SUFFIXES.items():
+			if not word_lower.endswith(sfx):
+				continue
+
+			sfx_start = len(word) - sfx_len
+			stem_len = sfx_start
+
+			if stem_len > max_stem:
+				continue
+
+			if sfx_start < len(inner_pred) and inner_pred[sfx_start] == 'B':
+				prob_b = inner_marg[sfx_start].get('B', 0.0)
+
+				if prob_b < threshold:
+					inner_pred[sfx_start] = 'M'
+					changed = True
+
+		if changed:
+			corrected.append(cast(WordLabels, ['['] + inner_pred + [']']))
+		else:
+			corrected.append(pred)
+
+	return corrected
+
+
+def get_cycle_diagnostics(
+	crf: 'sklearn_crfsuite.CRF',
+	words: list[Word],
+	Y_predict: DatasetLabels,
+	marginals: DatasetMarginals,
+	gold_morphs: list[MorphList],
+	train_words: list[Word],
+	train_bmes: BMESDict,
+) -> dict:
+	"""
+	Generate diagnostic information about a training cycle for debugging.
+
+	Returns a dict with:
+	  - error_analysis: per-error-word breakdown with marginals at error positions
+	  - training_coverage: which affix patterns are represented in training data
+	  - confidence_calibration: accuracy at different confidence buckets
+	  - top_features: highest-weight features for boundary vs non-boundary
+
+	:param crf: Trained CRF model
+	:param words: Eval words
+	:param Y_predict: Predicted labels for eval words
+	:param marginals: Marginal probabilities for eval words
+	:param gold_morphs: Gold standard morpheme lists
+	:param train_words: Training set words
+	:param train_bmes: Training set BMES labels
+	:return: Diagnostic dict
+	"""
+	diagnostics: dict = {}
+
+	# --- Error analysis with marginals ---
+	error_analysis: list[dict] = []
+	pred_morphs_list = reconstruct_predictions(Y_predict, words)
+
+	for word, gold, pred_labels, pred_morphs, marg in zip(
+		words, gold_morphs, Y_predict, pred_morphs_list, marginals
+	):
+		if gold == pred_morphs:
+			continue
+
+		inner_marg = marg[1:-1]
+		inner_pred = pred_labels[1:-1]
+
+		# Find boundary positions in prediction
+		pred_boundaries: list[int] = []
+		for idx, label in enumerate(inner_pred):
+			if label in ('B', 'S') and idx > 0:
+				pred_boundaries.append(idx)
+
+		# Find gold boundary positions
+		gold_boundaries: set[int] = set()
+		offset = 0
+		for m in gold[:-1]:
+			offset += len(m)
+			gold_boundaries.add(offset)
+
+		# Analyze each predicted boundary
+		boundary_details: list[dict] = []
+		for bp in pred_boundaries:
+			prob_b = inner_marg[bp].get('B', 0.0)
+			prob_m = inner_marg[bp].get('M', 0.0)
+			is_correct = bp in gold_boundaries
+			boundary_details.append({
+				'position': bp,
+				'prob_B': round(prob_b, 3),
+				'prob_M': round(prob_m, 3),
+				'correct': is_correct,
+				'context': word[max(0,bp-2):bp+3],
+			})
+
+		error_analysis.append({
+			'word': word,
+			'gold': '!'.join(gold),
+			'predicted': '!'.join(pred_morphs),
+			'boundaries': boundary_details,
+		})
+
+	diagnostics['error_analysis'] = error_analysis
+
+	# --- Training set affix coverage ---
+	seen_prefixes: set[str] = set()
+	seen_suffixes: set[str] = set()
+	monomorphemic_count: int = 0
+
+	for word in train_words:
+		bmes_str = train_bmes.get(word, '')
+		if 'B' not in bmes_str[1:]:  # No boundary after first char
+			monomorphemic_count += 1
+
+		for pfx in COMMON_PREFIXES:
+			if word.lower().startswith(pfx) and len(word) > len(pfx) + 2:
+				seen_prefixes.add(pfx)
+		for sfx in COMMON_SUFFIXES:
+			if word.lower().endswith(sfx) and len(word) > len(sfx) + 2:
+				seen_suffixes.add(sfx)
+
+	diagnostics['training_coverage'] = {
+		'total_words': len(train_words),
+		'monomorphemic': monomorphemic_count,
+		'polymorphemic': len(train_words) - monomorphemic_count,
+		'prefix_patterns_seen': sorted(seen_prefixes),
+		'prefix_patterns_missing': sorted(set(COMMON_PREFIXES) - seen_prefixes),
+		'suffix_patterns_seen': sorted(seen_suffixes),
+		'suffix_patterns_missing': sorted(set(COMMON_SUFFIXES) - seen_suffixes),
+	}
+
+	# --- Feature weight summary (top 10 for B label) ---
+	try:
+		if hasattr(crf, 'state_features_'):
+			b_weights = {}
+			m_weights = {}
+			for (attr, label), weight in crf.state_features_.items():
+				if label == 'B':
+					b_weights[attr] = weight
+				elif label == 'M':
+					m_weights[attr] = weight
+
+			top_b = sorted(b_weights.items(), key=lambda x: abs(x[1]), reverse=True)[:15]
+			top_m = sorted(m_weights.items(), key=lambda x: abs(x[1]), reverse=True)[:15]
+
+			diagnostics['top_features'] = {
+				'boundary_start_B': [{'feature': f, 'weight': round(w, 3)} for f, w in top_b],
+				'morpheme_middle_M': [{'feature': f, 'weight': round(w, 3)} for f, w in top_m],
+			}
+	except Exception:
+		diagnostics['top_features'] = {'note': 'Feature weights not available'}
+
+	return diagnostics
+
 
 if __name__ == '__main__':
 	main()

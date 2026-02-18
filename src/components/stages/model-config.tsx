@@ -14,6 +14,25 @@ interface ModelConfigProps {
   onStartTraining: () => void;
 }
 
+const COMMON_LANGUAGES = [
+  "English",
+  "Swahili",
+  "Zulu",
+  "Amharic",
+  "Hausa",
+  "Yoruba",
+  "Turkish",
+  "Finnish",
+  "Hungarian",
+  "Korean",
+  "Japanese",
+  "Arabic",
+  "Persian",
+  "Quechua",
+  "Nahuatl",
+  "Georgian",
+];
+
 // Strategy descriptions for tooltips
 const STRATEGY_INFO: Record<QueryStrategy, { label: string; description: string }> = {
   uncertainty: {
@@ -47,6 +66,7 @@ export function ModelConfigStage({
   };
 
   const activeStrategy = STRATEGY_INFO[config.queryStrategy];
+  const canStart = config.targetLanguage.trim().length > 0;
 
   return (
     <div className="flex flex-col gap-0">
@@ -58,6 +78,40 @@ export function ModelConfigStage({
         <p className="font-mono text-[11px] text-muted-foreground/50 mt-1">
           These parameters control how the model selects data for annotation
         </p>
+      </div>
+
+      {/* Target Language */}
+      <div className="px-6 pt-6 pb-5 border-b border-border/20">
+        <fieldset className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <legend className="font-mono text-[10px] text-muted-foreground/50 uppercase tracking-widest font-semibold">
+              Target Language
+            </legend>
+            <Tooltip text="The language of your morphological data. This helps the model select appropriate features for segmentation." />
+          </div>
+          <input
+            type="text"
+            value={config.targetLanguage}
+            onChange={(e) => updateField("targetLanguage", e.target.value)}
+            placeholder="e.g. Swahili, Turkish, Zulu..."
+            className="w-full bg-[#3a5a40] border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-[#dad7cd] placeholder:text-[#dad7cd]/25 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
+          />
+          <div className="flex flex-wrap gap-1.5">
+            {COMMON_LANGUAGES.map((lang) => (
+              <button
+                key={lang}
+                onClick={() => updateField("targetLanguage", lang)}
+                className={`px-2.5 py-1 rounded-md font-mono text-[10px] transition-all border ${
+                  config.targetLanguage === lang
+                    ? "bg-primary/15 border-primary/30 text-primary font-semibold"
+                    : "bg-secondary/5 border-border/10 text-muted-foreground/35 hover:text-foreground/60 hover:border-border/20"
+                }`}
+              >
+                {lang}
+              </button>
+            ))}
+          </div>
+        </fieldset>
       </div>
 
       {/* Config form */}
@@ -162,7 +216,8 @@ export function ModelConfigStage({
         </button>
         <button
           onClick={onStartTraining}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-mono text-xs font-semibold tracking-wide transition-all hover:bg-primary/90 active:scale-[0.97]"
+          disabled={!canStart}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-mono text-xs font-semibold tracking-wide transition-all hover:bg-primary/90 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none"
         >
           <span>Start Training</span>
           <ArrowIcon />

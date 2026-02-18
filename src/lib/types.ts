@@ -45,15 +45,17 @@ export interface StoredFile {
 export type QueryStrategy = "uncertainty" | "random" | "margin";
 
 export interface ModelConfig {
+  targetLanguage: string;
   incrementSize: number;
   iterations: number;
   queryStrategy: QueryStrategy;
 }
 
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
-  incrementSize: 50,
+  incrementSize: 100,
   iterations: 5,
   queryStrategy: "uncertainty",
+  targetLanguage: "English"
 };
 
 // --- Training ---

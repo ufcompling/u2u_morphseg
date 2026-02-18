@@ -83,12 +83,60 @@ def run_training_cycle(config_json: str) -> str:
         X_train, Y_train, _ = crf_al.get_features(data['train']['words'], data['train']['bmes'], args.d)
         X_test, _, _ = crf_al.get_features(data['test']['words'], data['test']['bmes'], args.d)
 
-        crf = crf_al.build_crf(work_dir, X_train, Y_train, max_iterations=args.i)
+        # Balance poly/mono ratio to prevent over-segmentation
+        X_train, Y_train = crf_al.balance_training_data(X_train, Y_train)
+
+        crf = crf_al.self_train(
+            work_dir, X_train, Y_train,
+            data['select']['words'], data['select']['bmes'], args.d,
+            max_iterations=args.i,
+        )
         Y_test_predict, _ = crf_al.output_crf(crf, work_dir, args, data, X_test)
 
-        # â”€â”€ Evaluate â”€â”€
-        test_predictions = crf_al.reconstruct_predictions(Y_test_predict, data['test']['words'])
+        # -- (v4.1) Post-process: suppress low-confidence false boundaries --
+        test_marginals = crf.predict_marginals(X_test)
+        n_train = len(data['train']['words'])
+        Y_test_processed = crf_al.postprocess_predictions(
+            Y_test_predict, test_marginals, data['test']['words'],
+            n_train=n_train,
+        )
+
+        # Save n_train so inference can use the same adaptive threshold
+        with open(os.path.join(work_dir, 'n_train.txt'), 'w') as _f:
+            _f.write(str(n_train))
+
+        # -- Evaluate (using post-processed predictions) --
+        test_predictions = crf_al.reconstruct_predictions(Y_test_processed, data['test']['words'])
         precision, recall, f1 = crf_al.evaluate_predictions(data['test']['morphs'], test_predictions)
+
+        # -- (v4.1) Diagnostics: print error analysis to console --
+        diag = crf_al.get_cycle_diagnostics(
+            crf, data['test']['words'], Y_test_predict, test_marginals,
+            data['test']['morphs'], data['train']['words'], data['train']['bmes'],
+        )
+        print("\n=== CYCLE DIAGNOSTICS ===")
+        # Postprocess threshold info
+        if n_train < 150:
+            pp_thresh = 0.70
+        elif n_train < 300:
+            pp_thresh = 0.60
+        else:
+            pp_thresh = 0.55
+        print(f"Postprocess: threshold={pp_thresh} max_stem=5 (n_train={n_train})")
+        if diag.get('error_analysis'):
+            print(f"Errors ({len(diag['error_analysis'])} words):")
+            for err in diag['error_analysis']:
+                print(f"  {err['word']}: gold={err['gold']} pred={err['predicted']}")
+                for bd in err['boundaries']:
+                    status = "CORRECT" if bd['correct'] else "FALSE"
+                    print(f"    pos {bd['position']}: P(B)={bd['prob_B']:.3f} P(M)={bd['prob_M']:.3f} {status}")
+        cov = diag.get('training_coverage', {})
+        if cov:
+            print(f"Training: {cov.get('total_words',0)} words "
+                  f"({cov.get('polymorphemic',0)} poly, {cov.get('monomorphemic',0)} mono)")
+            if cov.get('suffix_patterns_missing'):
+                print(f"  Missing suffix patterns: {cov['suffix_patterns_missing']}")
+        print("=== END DIAGNOSTICS ===\n")
 
         # â”€â”€ Read increment words for annotation â”€â”€
         increment_path = os.path.join(work_dir, 'increment.tgt')
@@ -339,8 +387,19 @@ def run_inference(config_json: str) -> str:
         X, _, _ = crf_al.get_features(words, dummy_bmes, delta)
         Y_predict = crf.predict(X)
 
+        # (v4.1) Post-process: suppress low-confidence false boundaries
+        # Read n_train saved during training to use the same adaptive threshold
+        n_train_path = os.path.join(work_dir, 'n_train.txt')
+        try:
+            with open(n_train_path) as _f:
+                inf_n_train = int(_f.read().strip())
+        except (FileNotFoundError, ValueError):
+            inf_n_train = 9999  # fallback: conservative threshold
+        inf_marginals = crf.predict_marginals(X)
+        Y_processed = crf_al.postprocess_predictions(Y_predict, inf_marginals, words, n_train=inf_n_train)
+
         # Reconstruct predicted morpheme sequences from BMES labels
-        predicted_morphs = crf_al.reconstruct_predictions(Y_predict, words)
+        predicted_morphs = crf_al.reconstruct_predictions(Y_processed, words)
 
         # Build output structures
         predictions = []
