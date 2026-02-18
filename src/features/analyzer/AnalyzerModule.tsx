@@ -66,6 +66,7 @@ export function AnalyzerModule() {
           }
         });
       });
+      setFiles(await loadFiles(pyodideInstance));
       setPyodide(pyodideInstance);
       setPyodideReady(true);
       setIndexedDBReady(true);

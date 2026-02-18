@@ -29,10 +29,12 @@ export const initPyodide = async () => {
     } catch (e) {
       // Ignore if already exists
     }  
+    pyodideInstance.FS.mount(pyodideInstance.FS.filesystems.IDBFS, {}, '/data');
     pyodideInstance.FS.writeFile('/scripts/db_worker.py', code);
 
     await pyodideInstance.runPythonAsync("import sys; sys.path.append('/scripts')");
     await pyodideInstance.runPythonAsync("import db_worker");
+    await syncPyodideFS(pyodideInstance);
     initPromise = null;
     return pyodideInstance;
   })();
@@ -40,7 +42,19 @@ export const initPyodide = async () => {
   return initPromise;
   
 };
-
+export async function syncPyodideFS(pyodide: any): Promise<void> {
+  return new Promise((resolve, reject) => {
+    pyodide.FS.syncfs(false, (err: any) => {
+      if (err) {
+        reject(err);
+        console.error('Error syncing FS to IndexedDB:', err);
+      } else {
+        resolve();
+        console.log('FS synced to IndexedDB');
+      }
+    });
+  });
+}
 export const getPyodide = () => {
   if (!pyodideInstance) {
     throw new Error("Pyodide has not been initialized yet.");
