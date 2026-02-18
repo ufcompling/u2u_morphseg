@@ -107,3 +107,41 @@ export interface CycleSnapshot {
   f1: number;
   annotatedCount: number;
 }
+
+// --- Pyodide Worker Bridge ---
+
+/**
+ * Payload sent from the main thread to the worker for each AL cycle.
+ * File content is passed as raw strings so Python can write them to VFS.
+ */
+export interface TrainingCycleConfig {
+  /** Content of the annotated training .tgt file */
+  trainTgt: string;
+  /** Content of the evaluation .tgt file */
+  testTgt: string;
+  /** Content of the unannotated pool .tgt file (predicted morphemes) */
+  selectTgt: string;
+  /** Content of the unannotated pool .src file (character-space words) */
+  selectSrc: string;
+  /** How many low-confidence words to pull into the increment */
+  incrementSize: number;
+  /** Max CRF training iterations */
+  maxIterations: number;
+  /** Context window size for character features */
+  delta: number;
+  /** Cumulative words selected in prior cycles (0 on first run) */
+  selectSize: number;
+  /** VFS working directory — default '/tmp/turtleshell' */
+  workDir?: string;
+}
+
+/** Result returned from the worker after a successful cycle. */
+export interface TrainingCycleResult {
+  precision: number;
+  recall: number;
+  f1: number;
+  /** Low-confidence words queued for user annotation */
+  incrementWords: AnnotationWord[];
+  /** Number of words remaining in the unlabeled pool */
+  residualCount: number;
+}

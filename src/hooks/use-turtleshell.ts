@@ -1,6 +1,21 @@
+/**
+ * use-turtleshell.ts
+ * Custom hook managing all TurtleShell workflow state.
+ *
+ * Centralizes state for:
+ * - Workflow navigation (stages, completion tracking)
+ * - File management (upload, role assignment, validation)
+ * - Model configuration (AL parameters)
+ * - Training pipeline (steps, iteration tracking) — now backed by Pyodide worker
+ * - Annotation workspace (word boundaries, user edits)
+ * - Results & metrics (F1/P/R, cycle history)
+ *
+ * Backend integration points marked with TODO [BACKEND] for work not yet done.
+ */
+
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   type WorkflowStage,
   type StoredFile,
@@ -10,30 +25,37 @@ import {
   type AnnotationWord,
   type TrainingResult,
   type CycleSnapshot,
+  type TrainingCycleConfig,
   DEFAULT_MODEL_CONFIG,
   INITIAL_TRAINING_STEPS,
 } from "../lib/types";
+import { usePyodideWorker } from "./usePyodideWorker";
 
-const CYCLE_1_WORDS: AnnotationWord[] = [
-  { id: "w1", word: "running", confidence: 0.42, boundaries: [{ index: 3 }] },
-  { id: "w2", word: "unhappiness", confidence: 0.38, boundaries: [{ index: 2 }, { index: 7 }] },
-  { id: "w3", word: "rethinking", confidence: 0.55, boundaries: [{ index: 2 }, { index: 7 }] },
-  { id: "w4", word: "teachers", confidence: 0.61, boundaries: [{ index: 5 }] },
-  { id: "w5", word: "unbreakable", confidence: 0.33, boundaries: [{ index: 2 }, { index: 7 }] },
-];
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const CYCLE_N_WORDS: AnnotationWord[] = [
-  { id: "w1n", word: "preprocessing", confidence: 0.35, boundaries: [{ index: 2 }] },
-  { id: "w2n", word: "unbelievable", confidence: 0.29, boundaries: [{ index: 1 }, { index: 7 }] },
-  { id: "w3n", word: "misunderstanding", confidence: 0.41, boundaries: [{ index: 2 }, { index: 7 }] },
-  { id: "w4n", word: "carefully", confidence: 0.52, boundaries: [{ index: 4 }] },
-  { id: "w5n", word: "discontinuation", confidence: 0.27, boundaries: [{ index: 2 }, { index: 8 }] },
-  { id: "w6n", word: "overreacting", confidence: 0.44, boundaries: [{ index: 3 }, { index: 5 }] },
-  { id: "w7n", word: "thoughtfulness", confidence: 0.48, boundaries: [{ index: 6 }] },
-];
+/** Find the file assigned to a given role, return its content or empty string. */
+function getFileContent(files: StoredFile[], role: FileRole): string {
+  return files.find((f) => f.role === role)?.content ?? "";
+}
+
+/**
+ * Derive the .src content from a .tgt file (character-space representation).
+ * .tgt format: "r u n ! n i n g\n"  →  .src: "r u n n i n g\n"
+ * The src file strips the morpheme boundary markers ('!') so each line is just
+ * the space-separated characters of the word.
+ */
+function tgtToSrc(tgt: string): string {
+  return tgt
+    .split("\n")
+    .map((line) => line.replace(/!/g, "").replace(/\s+/g, " ").trim())
+    .join("\n");
+}
+
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useTurtleshell() {
-  // Workflow navigation
+  // ── Workflow navigation ───────────────────────────────────────────────────
+
   const [currentStage, setCurrentStage] = useState<WorkflowStage>("ingestion");
   const [completedStages, setCompletedStages] = useState<WorkflowStage[]>([]);
 
@@ -47,18 +69,21 @@ export function useTurtleshell() {
     [currentStage, completedStages]
   );
 
-  // Backend status
-  // TODO [BACKEND]: Replace with actual initialization states
-  const pyodideReady = false;
-  const indexedDBReady = false;
+  // ── Backend status ─────────────────────────────────────────────────────────
 
-  // File management
+  const { pyodideReady, pyodideLoading, pyodideError, runCycle } = usePyodideWorker();
+  // TODO [BACKEND]: surface pyodideLoading and pyodideError in the UI (loading overlay / toast)
+  const indexedDBReady = false; // TODO [BACKEND]: wire up Dexie.js
+
+  // ── File management ────────────────────────────────────────────────────────
+
   const [files, setFiles] = useState<StoredFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
   const handleUpload = useCallback((fileList: FileList | null) => {
     if (!fileList) return;
     setIsUploading(true);
+
     const readers = Array.from(fileList).map(
       (file) =>
         new Promise<StoredFile>((resolve) => {
@@ -77,6 +102,7 @@ export function useTurtleshell() {
           reader.readAsText(file);
         })
     );
+
     Promise.all(readers).then((newFiles) => {
       setFiles((prev) => [...prev, ...newFiles]);
       // TODO [BACKEND]: Persist to IndexedDB via Dexie.js
@@ -85,8 +111,10 @@ export function useTurtleshell() {
   }, []);
 
   const handleAssignRole = useCallback((fileId: string, role: FileRole) => {
-    setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, role } : f)));
-    // TODO [BACKEND]: Update in IndexedDB
+    setFiles((prev) =>
+      prev.map((f) => (f.id === fileId ? { ...f, role } : f))
+    );
+    // TODO [BACKEND]: Update role in IndexedDB
   }, []);
 
   const handleRemoveFile = useCallback((fileId: string) => {
@@ -94,85 +122,104 @@ export function useTurtleshell() {
     // TODO [BACKEND]: Delete from IndexedDB
   }, []);
 
-  // Model configuration
+  // ── Model configuration ────────────────────────────────────────────────────
+
   const [modelConfig, setModelConfig] = useState<ModelConfig>(DEFAULT_MODEL_CONFIG);
 
-  // Training
+  // ── Training ───────────────────────────────────────────────────────────────
+
   const [trainingSteps, setTrainingSteps] = useState<TrainingStep[]>(INITIAL_TRAINING_STEPS);
   const [currentIteration, setCurrentIteration] = useState(1);
   const [isTrainingComplete, setIsTrainingComplete] = useState(false);
 
-  // stepIndex drives the simulation via useEffect below.
-  // -1 = not running. 0-3 = currently processing that step.
-  const [stepIndex, setStepIndex] = useState(-1);
-  const pendingWordsRef = useRef<AnnotationWord[]>([]);
+  // Tracks cumulative words selected across cycles for the Python script's
+  // select_size param (controls which prev-iteration files to chain from).
+  const cumulativeSelectSize = useRef(0);
 
-  // Results
+  /**
+   * Mark a training step as active or complete in the step list.
+   * Called by the worker's onStepProgress callback.
+   */
+  const updateStep = useCallback(
+    (stepId: string, done: boolean, detail?: string) => {
+      setTrainingSteps((prev) =>
+        prev.map((s) =>
+          s.id === stepId
+            ? { ...s, status: done ? "complete" : "active", detail: detail ?? s.detail }
+            : s
+        )
+      );
+    },
+    []
+  );
+
+  const handleStartTraining = useCallback(async () => {
+    goToStage("training");
+    setTrainingSteps(INITIAL_TRAINING_STEPS);
+    setIsTrainingComplete(false);
+
+    const trainTgt = getFileContent(files, "annotated");
+    const testTgt  = getFileContent(files, "evaluation");
+    const selectTgt = getFileContent(files, "unannotated");
+
+    // Derive .src from .tgt — Python needs both but the user only uploads .tgt
+    const selectSrc = tgtToSrc(selectTgt);
+
+    const cycleConfig: TrainingCycleConfig = {
+      trainTgt,
+      testTgt,
+      selectTgt,
+      selectSrc,
+      incrementSize: modelConfig.incrementSize,
+      maxIterations: 100,
+      delta: 4,
+      selectSize: cumulativeSelectSize.current,
+    };
+
+    try {
+      const result = await runCycle(cycleConfig, (stepId, done, detail) => {
+        updateStep(stepId, done, detail);
+      });
+
+      cumulativeSelectSize.current += result.incrementWords.length;
+      setAnnotationWords(result.incrementWords);
+      setCurrentWordIndex(0);
+      setIsTrainingComplete(true);
+
+      // Stash result so handleSubmitAnnotations can use real metrics
+      setPendingCycleResult({
+        precision: result.precision,
+        recall: result.recall,
+        f1: result.f1,
+        totalWords: (selectTgt.split("\n").filter(Boolean).length + trainTgt.split("\n").filter(Boolean).length),
+        annotatedCount: cumulativeSelectSize.current,
+        iterationNumber: currentIteration,
+      });
+    } catch (err) {
+      console.error("[training] cycle failed", err);
+      // Mark any active step as errored so the UI doesn't hang
+      setTrainingSteps((prev) =>
+        prev.map((s) =>
+          s.status === "active" ? { ...s, status: "error", detail: String(err) } : s
+        )
+      );
+    }
+  }, [goToStage, files, modelConfig, runCycle, updateStep, currentIteration]);
+
+  // ── Results (declared before annotation for reference) ────────────────────
+
   const [trainingResult, setTrainingResult] = useState<TrainingResult | null>(null);
   const [previousResult, setPreviousResult] = useState<TrainingResult | null>(null);
   const [cycleHistory, setCycleHistory] = useState<CycleSnapshot[]>([]);
 
-  // Annotation
+  // Holds the real metrics from the last completed cycle until the user
+  // submits their annotations, at which point it becomes the committed result.
+  const [pendingCycleResult, setPendingCycleResult] = useState<TrainingResult | null>(null);
+
+  // ── Annotation ─────────────────────────────────────────────────────────────
+
   const [annotationWords, setAnnotationWords] = useState<AnnotationWord[]>([]);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
-
-  // TODO [BACKEND]: Replace this effect with actual Pyodide CRF training calls.
-  // Each time stepIndex changes to a valid index, this effect:
-  //   1. Marks that step active immediately
-  //   2. After 600ms marks it complete and advances to the next index
-  // useEffect cleanup cancels the timer, so StrictMode's unmount/remount
-  // cancels the first fire and only the remounted effect runs.
-  useEffect(() => {
-    if (stepIndex < 0) return;
-
-    const stepIds = INITIAL_TRAINING_STEPS.map((s) => s.id);
-    if (stepIndex >= stepIds.length) return;
-
-    // Mark this step active
-    setTrainingSteps((prev) =>
-      prev.map((s) =>
-        s.id === stepIds[stepIndex]
-          ? { ...s, status: "active" as const, detail: "Running..." }
-          : s
-      )
-    );
-
-    const timer = setTimeout(() => {
-      // Mark complete
-      setTrainingSteps((prev) =>
-        prev.map((s) =>
-          s.id === stepIds[stepIndex]
-            ? { ...s, status: "complete" as const, detail: "Done" }
-            : s
-        )
-      );
-
-      const next = stepIndex + 1;
-      if (next < stepIds.length) {
-        setStepIndex(next);
-      } else {
-        // Done
-        setStepIndex(-1);
-        setAnnotationWords(pendingWordsRef.current);
-        setCurrentWordIndex(0);
-        setIsTrainingComplete(true);
-      }
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [stepIndex]);
-
-  const startSimulation = useCallback((words: AnnotationWord[]) => {
-    pendingWordsRef.current = words;
-    setTrainingSteps(INITIAL_TRAINING_STEPS);
-    setIsTrainingComplete(false);
-    setStepIndex(0);
-  }, []);
-
-  const handleStartTraining = useCallback(() => {
-    goToStage("training");
-    startSimulation(CYCLE_1_WORDS);
-  }, [goToStage, startSimulation]);
 
   const handleUpdateBoundaries = useCallback(
     (wordId: string, boundaryIndices: number[]) => {
@@ -183,65 +230,71 @@ export function useTurtleshell() {
             : w
         )
       );
-      // TODO [BACKEND]: Persist to IndexedDB
+      // TODO [BACKEND]: Persist updated annotation to IndexedDB
     },
     []
   );
 
   const handleSubmitAnnotations = useCallback(() => {
-    // TODO [BACKEND]: Save annotations, compute metrics
-    const iteration = currentIteration;
-    const basePrecision = 0.55 + iteration * 0.07 + (Math.random() * 0.04 - 0.02);
-    const baseRecall = 0.50 + iteration * 0.06 + (Math.random() * 0.04 - 0.02);
-    const precision = Math.min(basePrecision, 0.98);
-    const recall = Math.min(baseRecall, 0.98);
-    const f1 = (2 * precision * recall) / (precision + recall);
-
-    const newResult: TrainingResult = {
-      precision,
-      recall,
-      f1,
-      totalWords: 1200 + iteration * 50,
-      annotatedCount: 50 * iteration,
-      iterationNumber: iteration,
+    const result = pendingCycleResult ?? {
+      precision: 0,
+      recall: 0,
+      f1: 0,
+      totalWords: 0,
+      annotatedCount: annotationWords.length,
+      iterationNumber: currentIteration,
     };
 
     setPreviousResult(trainingResult);
-    setTrainingResult(newResult);
+    setTrainingResult(result);
     setCycleHistory((prev) => [
       ...prev,
-      { iteration, precision, recall, f1, annotatedCount: newResult.annotatedCount },
+      {
+        iteration: result.iterationNumber,
+        precision: result.precision,
+        recall: result.recall,
+        f1: result.f1,
+        annotatedCount: result.annotatedCount,
+      },
     ]);
+
+    // TODO [BACKEND]: Persist submitted annotations + metrics to IndexedDB
     goToStage("results");
-  }, [goToStage, currentIteration, trainingResult]);
+  }, [goToStage, pendingCycleResult, trainingResult, currentIteration, annotationWords.length]);
 
   const handleSkipAnnotation = useCallback(() => {
     goToStage("results");
   }, [goToStage]);
 
-  // Results actions
+  // ── Results actions ────────────────────────────────────────────────────────
+
   const handleDownloadIncrement = useCallback(() => {
-    // TODO [BACKEND]: Generate increment file download
+    // TODO [BACKEND]: Read increment.tgt from VFS / IndexedDB and trigger download
   }, []);
 
   const handleDownloadResidual = useCallback(() => {
-    // TODO [BACKEND]: Generate residual file download
+    // TODO [BACKEND]: Read residual.tgt from VFS / IndexedDB and trigger download
   }, []);
 
   const handleDownloadEvaluation = useCallback(() => {
-    // TODO [BACKEND]: Generate evaluation file download
+    // TODO [BACKEND]: Read eval.txt from VFS and trigger download
   }, []);
 
   const handleNewCycle = useCallback(() => {
     setCurrentIteration((prev) => prev + 1);
     setAnnotationWords([]);
     setCurrentWordIndex(0);
+    setTrainingSteps(INITIAL_TRAINING_STEPS);
+    setIsTrainingComplete(false);
+    setPendingCycleResult(null);
     goToStage("training");
-    startSimulation(CYCLE_N_WORDS);
-  }, [goToStage, startSimulation]);
+    // handleStartTraining is not called here directly — the training stage
+    // mounts and calls it via its own useEffect / button, keeping the flow
+    // consistent with the first cycle. If auto-start is preferred, the
+    // training-progress component can invoke handleStartTraining on mount.
+  }, [goToStage]);
 
   const handleStartOver = useCallback(() => {
-    setStepIndex(-1);
     setFiles([]);
     setModelConfig(DEFAULT_MODEL_CONFIG);
     setTrainingSteps(INITIAL_TRAINING_STEPS);
@@ -251,11 +304,15 @@ export function useTurtleshell() {
     setCurrentWordIndex(0);
     setTrainingResult(null);
     setPreviousResult(null);
+    setPendingCycleResult(null);
     setCycleHistory([]);
     setCompletedStages([]);
     setCurrentStage("ingestion");
-    // TODO [BACKEND]: Clear IndexedDB
+    cumulativeSelectSize.current = 0;
+    // TODO [BACKEND]: Wipe IndexedDB and clear VFS via worker message
   }, []);
+
+  // ─── Return ──────────────────────────────────────────────────────────────────
 
   return {
     // Workflow
@@ -263,8 +320,10 @@ export function useTurtleshell() {
     completedStages,
     goToStage,
 
-    // Status
+    // Backend status
     pyodideReady,
+    pyodideLoading,
+    pyodideError,
     indexedDBReady,
 
     // Files
