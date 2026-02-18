@@ -131,6 +131,11 @@ function StageRenderer({ ts }: { ts: ReturnType<typeof useTurtleshell> }) {
           onDownloadEvaluation={ts.handleDownloadEvaluation}
           onNewCycle={ts.handleNewCycle}
           onStartOver={ts.handleStartOver}
+          isRunningInference={ts.isRunningInference}
+          inferenceComplete={ts.inferenceComplete}
+          inferenceStats={ts.inferenceStats}
+          onRunInference={ts.handleRunInference}
+          onDownloadPredictions={ts.handleDownloadPredictions}
         />
       );
   }

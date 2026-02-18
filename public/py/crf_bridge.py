@@ -1,23 +1,5 @@
 """
 File: crf_bridge.py
-Location: public/py/crf_bridge.py (served as a static asset)
-
-Purpose:
-    Thin adapter between the JS Web Worker and crf_al.py. Receives JSON config
-    from JS, writes dataset files to Pyodide's VFS, runs the CRF active learning
-    pipeline, and returns JSON results. Designed to be called via runPythonAsync.
-
-Key Functions:
-    run_training_cycle(config_json)  -- main entry point from JS
-    _write_vfs_files(config, paths)  -- materialize file content into VFS
-    _read_increment_words(path)      -- parse increment.tgt -> AnnotationWord list
-
-Author: Evan
-Created: 2026-02-17
-Version: 0.1.0
-
-Dependencies:
-    crf_al (same VFS directory), sklearn_crfsuite, micropip (pre-installed by worker)
 """
 
 import json
@@ -114,15 +96,28 @@ def run_training_cycle(config_json: str) -> str:
         increment_words = _parse_increment_for_annotation(increment_path, crf, data, args.d)
         residual_count = _count_lines(residual_path)
 
-        # crf_al.calculate_metrics returns 0-100 range; normalize to 0-1 here.
-        # The JS UI (results-export.tsx) multiplies by 100 for display and uses
-        # 0-1 thresholds for getRecommendation / formatDelta / deltaColor.
+        # Build exportable file contents
+        increment_content = _read_file(increment_path)
+        residual_content = _read_file(residual_path)
+        evaluation_content = _build_evaluation_content(
+            data['test']['words'],
+            data['test']['morphs'],
+            test_predictions,
+            precision,
+            recall,
+            f1,
+        )
+
+        # Normalize metrics from 0-100 (crf_al) to 0-1 (JS convention)
         return json.dumps({
             'precision': round(precision / 100, 4),
             'recall': round(recall / 100, 4),
             'f1': round(f1 / 100, 4),
             'incrementWords': increment_words,
             'residualCount': residual_count,
+            'incrementContent': increment_content,
+            'residualContent': residual_content,
+            'evaluationContent': evaluation_content,
             'error': None,
         })
 
@@ -233,3 +228,142 @@ def _count_lines(path: str) -> int:
         return 0
     with open(path, encoding='utf-8') as f:
         return sum(1 for line in f if line.strip())
+
+
+def _read_file(path: str) -> str:
+    """Read a VFS file and return its content, or empty string if missing."""
+    if not os.path.exists(path):
+        return ''
+    with open(path, encoding='utf-8') as f:
+        return f.read()
+
+
+def _build_evaluation_content(
+    test_words: list,
+    test_morphs: list,
+    predicted_morphs: list,
+    precision: float,
+    recall: float,
+    f1: float,
+) -> str:
+    """
+    Build a human-readable evaluation report as a TSV string.
+
+    :return: Report with summary header and per-word rows (word | gold | predicted)
+    """
+    lines = [
+        '# TurtleShell Evaluation Report',
+        f'# Precision: {precision:.2f}  Recall: {recall:.2f}  F1: {f1:.2f}',
+        '#',
+        '# word\tgold\tpredicted',
+    ]
+    for word, gold, pred in zip(test_words, test_morphs, predicted_morphs):
+        gold_seg = '!'.join(gold)
+        pred_seg = '!'.join(pred)
+        lines.append(f'{word}\t{gold_seg}\t{pred_seg}')
+    return '\n'.join(lines) + '\n'
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Inference-only entry point
+# ──────────────────────────────────────────────────────────────────────────────
+
+def run_inference(config_json: str) -> str:
+    """
+    Run the trained CRF model over all words in the residual pool and return
+    predicted segmentations. Does not retrain — loads crf.model from the VFS.
+
+    Called from JS after the user is satisfied with their F1 score and wants to
+    segment the entire remaining unannotated corpus.
+
+    :param config_json: JSON string with fields:
+        - residualTgt: str   residual pool content (.tgt format, boundary markers ignored)
+        - delta: int         context window for features (default 4)
+        - workDir: str       VFS directory where crf.model was saved (default /tmp/turtleshell)
+    :return: JSON string with:
+        - predictions: list[{word, segmentation}]  e.g. {word: "unhappy", segmentation: "un!happy"}
+        - predictionsContent: str                  full .tgt file content for download
+        - totalWords: int
+        - error: str | null
+    :rtype: str
+    """
+    try:
+        config = json.loads(config_json)
+        work_dir = config.get('workDir', '/tmp/turtleshell')
+        model_path = os.path.join(work_dir, 'crf.model')
+        delta = config.get('delta', 4)
+
+        if not os.path.exists(model_path):
+            return json.dumps({
+                'predictions': [],
+                'predictionsContent': '',
+                'totalWords': 0,
+                'error': 'No trained model found. Run at least one training cycle first.',
+            })
+
+        # Load the pickled model from the last training cycle
+        with open(model_path, 'rb') as f:
+            crf = pickle.load(f)
+
+        # Parse the residual words — strip boundary markers to get surface forms
+        residual_content = config.get('residualTgt', '')
+        if not residual_content.strip():
+            return json.dumps({
+                'predictions': [],
+                'predictionsContent': '',
+                'totalWords': 0,
+                'error': None,
+            })
+
+        words = []
+        for line in residual_content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            # .tgt lines are space-separated chars with ! for boundaries
+            # Strip boundaries to get the surface word for feature extraction
+            word = ''.join(line.split()).replace('!', '')
+            words.append(word)
+
+        if not words:
+            return json.dumps({
+                'predictions': [],
+                'predictionsContent': '',
+                'totalWords': 0,
+                'error': None,
+            })
+
+        # Build features and predict — no gold labels needed
+        import argparse
+        dummy_bmes = {w: 'B' * len(w) for w in words}  # placeholder, not used in get_features
+        X, _, _ = crf_al.get_features(words, dummy_bmes, delta)
+        Y_predict = crf.predict(X)
+
+        # Reconstruct predicted morpheme sequences from BMES labels
+        predicted_morphs = crf_al.reconstruct_predictions(Y_predict, words)
+
+        # Build output structures
+        predictions = []
+        tgt_lines = []
+        for word, morphs in zip(words, predicted_morphs):
+            seg = '!'.join(morphs)
+            predictions.append({'word': word, 'segmentation': seg})
+            tgt_lines.append(seg)
+
+        predictions_content = '\n'.join(tgt_lines) + '\n'
+
+        return json.dumps({
+            'predictions': predictions,
+            'predictionsContent': predictions_content,
+            'totalWords': len(words),
+            'error': None,
+        })
+
+    except Exception as exc:
+        import traceback
+        return json.dumps({
+            'predictions': [],
+            'predictionsContent': '',
+            'totalWords': 0,
+            'error': traceback.format_exc(),
+        })

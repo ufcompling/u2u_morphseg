@@ -29,7 +29,7 @@
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import type { TrainingCycleConfig, TrainingCycleResult } from '../lib/types';
+import type { TrainingCycleConfig, TrainingCycleResult, InferenceConfig, InferenceResult } from '../lib/types';
 import type { WorkerOutMessage } from '../services/pyodide/workers/pyodide.worker';
 
 export type StepProgressCallback = (stepId: string, done: boolean, detail?: string) => void;
@@ -43,6 +43,8 @@ export interface UsePyodideWorkerReturn {
     config: TrainingCycleConfig,
     onStepProgress: StepProgressCallback
   ) => Promise<TrainingCycleResult>;
+  /** Run the trained model over all residual words. No retraining. */
+  runInference: (config: InferenceConfig) => Promise<InferenceResult>;
 }
 
 export function usePyodideWorker(): UsePyodideWorkerReturn {
@@ -57,6 +59,11 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
     resolve: (r: TrainingCycleResult) => void;
     reject: (e: Error) => void;
     onStep: StepProgressCallback;
+  } | null>(null);
+
+  const pendingInference = useRef<{
+    resolve: (r: InferenceResult) => void;
+    reject: (e: Error) => void;
   } | null>(null);
 
   // ── Spawn worker once ────────────────────────────────────────────────────────
@@ -125,6 +132,18 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
           pendingCycle.current?.reject(new Error(msg.error));
           pendingCycle.current = null;
           break;
+
+        case 'INFERENCE_DONE':
+          console.log('[usePyodideWorker] Inference complete');
+          pendingInference.current?.resolve(msg.result);
+          pendingInference.current = null;
+          break;
+
+        case 'INFERENCE_ERROR':
+          console.error('[usePyodideWorker] Inference error:', msg.error);
+          pendingInference.current?.reject(new Error(msg.error));
+          pendingInference.current = null;
+          break;
       }
     };
 
@@ -178,5 +197,20 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
     [getWorker]
   );
 
-  return { pyodideReady, pyodideLoading, pyodideError, runCycle };
+  
+  const runInference = useCallback(
+    (config: InferenceConfig): Promise<InferenceResult> => {
+      return new Promise((resolve, reject) => {
+        if (!workerRef.current) {
+          reject(new Error('Worker not initialized'));
+          return;
+        }
+        pendingInference.current = { resolve, reject };
+        getWorker().postMessage({ type: 'RUN_INFERENCE', payload: config });
+      });
+    },
+    [getWorker]
+  );
+
+  return { pyodideReady, pyodideLoading, pyodideError, runCycle, runInference };
 }

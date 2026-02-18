@@ -11,6 +11,11 @@ interface ResultsExportProps {
   result: TrainingResult | null;
   previousResult: TrainingResult | null;
   cycleHistory: CycleSnapshot[];
+  isRunningInference: boolean;
+  inferenceComplete: boolean;
+  inferenceStats: { totalWords: number; processedWords: number } | null;
+  onRunInference: () => void;
+  onDownloadPredictions: () => void;
   onDownloadIncrement: () => void;
   onDownloadResidual: () => void;
   onDownloadEvaluation: () => void;
@@ -22,6 +27,11 @@ export function ResultsExportStage({
   result,
   previousResult,
   cycleHistory,
+  isRunningInference,
+  inferenceComplete,
+  inferenceStats,
+  onRunInference,
+  onDownloadPredictions,
   onDownloadIncrement,
   onDownloadResidual,
   onDownloadEvaluation,
@@ -197,7 +207,65 @@ export function ResultsExportStage({
       )}
 
       {/* ==========================================================
-          4. ARTIFACTS — compressed inline chips
+          4. FULL INFERENCE — run model over all residuals
+          ========================================================== */}
+      {isViewingCurrent && (
+        <div className="px-6 py-5 border-b border-border/10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center">
+                <InferenceIcon className="w-4 h-4 text-muted-foreground/40" />
+              </div>
+              <div>
+                <p className="font-mono text-[11px] text-foreground/80 font-medium">
+                  Predict all residuals
+                </p>
+                <p className="font-mono text-[9px] text-muted-foreground/30 mt-0.5">
+                  Run the trained CRF model over all remaining unannotated data
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {inferenceComplete && inferenceStats && (
+                <span className="font-mono text-[10px] text-muted-foreground/40 tabular-nums">
+                  {inferenceStats.processedWords.toLocaleString()} words predicted
+                </span>
+              )}
+
+              {!inferenceComplete && !isRunningInference && (
+                <button
+                  onClick={onRunInference}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary/10 border border-border/15 text-foreground/70 font-mono text-[11px] font-medium hover:bg-secondary/20 hover:border-border/25 transition-all active:scale-[0.98]"
+                >
+                  <PlayIcon className="w-3 h-3" />
+                  <span>Run</span>
+                </button>
+              )}
+
+              {isRunningInference && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary/10 border border-border/15">
+                  <SpinnerIcon className="w-3 h-3 text-primary" />
+                  <span className="font-mono text-[11px] text-muted-foreground/50">Running...</span>
+                </div>
+              )}
+
+              {inferenceComplete && (
+                <button
+                  onClick={onDownloadPredictions}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 border border-primary/25 text-primary font-mono text-[11px] font-medium hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all active:scale-[0.98]"
+                >
+                  <DownloadIcon className="w-3 h-3" />
+                  <span>Download predictions</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================================
+          5. ARTIFACTS — compressed inline chips
           ========================================================== */}
       <div className="px-6 py-4 border-b border-border/10">
         <div className="flex items-center gap-3">
@@ -365,6 +433,31 @@ function DownloadIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    </svg>
+  );
+}
+
+function InferenceIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+    </svg>
+  );
+}
+
+function PlayIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+      <path d="M8 5.14v14l11-7-11-7z" />
+    </svg>
+  );
+}
+
+function SpinnerIcon({ className }: { className?: string }) {
+  return (
+    <svg className={`animate-spin ${className}`} fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
   );
 }

@@ -1,8 +1,27 @@
+/**
+ * pyodide.worker.ts
+ * Location: src/workers/pyodide.worker.ts
+ *
+ * Purpose:
+ *   Runs Pyodide (Python/WASM) in a Web Worker so CRF training never blocks
+ *   the UI thread. Handles the full lifecycle: load â†’ install deps â†’ run cycle.
+ *
+ * Message Protocol:
+ *   Incoming (from main thread) â€” WorkerInMessage
+ *   Outgoing (to main thread)  â€” WorkerOutMessage
+ *
+ * Author: Evan
+ * Created: 2026-02-17
+ * Version: 0.1.0
+ *
+ * Dependencies: Pyodide 0.27.4, micropip, sklearn-crfsuite, python-crfsuite (whl)
+ */
+
 /// <reference lib="webworker" />
 
 console.log('[pyodide-worker] ===== WORKER SCRIPT STARTING =====');
 
-// ─── Inline Types (avoid module imports in workers) ──────────────────────────
+// â”€â”€â”€ Inline Types (avoid module imports in workers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface MorphemeBoundary {
   index: number;
@@ -28,18 +47,22 @@ interface TrainingCycleConfig {
 }
 
 interface TrainingCycleResult {
-  precision: number;
+  precision: number;       // 0-1 range (normalized from Python's 0-100)
   recall: number;
   f1: number;
   incrementWords: AnnotationWord[];
   residualCount: number;
+  incrementContent: string;
+  residualContent: string;
+  evaluationContent: string;
 }
 
-// ─── Message shapes ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Message shapes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type WorkerInMessage =
   | { type: 'INIT' }
-  | { type: 'RUN_CYCLE'; payload: TrainingCycleConfig };
+  | { type: 'RUN_CYCLE'; payload: TrainingCycleConfig }
+  | { type: 'RUN_INFERENCE'; payload: { residualTgt: string; delta?: number; workDir?: string } };
 
 export type WorkerOutMessage =
   | { type: 'INIT_PROGRESS'; step: string }
@@ -48,9 +71,11 @@ export type WorkerOutMessage =
   | { type: 'STEP_START'; stepId: string }
   | { type: 'STEP_DONE'; stepId: string; detail?: string }
   | { type: 'CYCLE_DONE'; result: TrainingCycleResult }
-  | { type: 'CYCLE_ERROR'; error: string };
+  | { type: 'CYCLE_ERROR'; error: string }
+  | { type: 'INFERENCE_DONE'; result: { predictionsContent: string; totalWords: number } }
+  | { type: 'INFERENCE_ERROR'; error: string };
 
-// ─── Globals ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Globals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 declare const loadPyodide: (opts: { indexURL: string }) => Promise<any>;
 
@@ -61,10 +86,10 @@ const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v0.27.4/full/';
 // Path to the python-crfsuite wheel - put this file in public/wheels/
 const CRFSUITE_WHL = `${self.location.origin}/u2u_morphseg/wheels/python_crfsuite-0.9.12-cp312-cp312-pyodide_2024_0_wasm32.whl`;
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
- * Load Pyodide and install Python deps. Idempotent — multiple callers share
+ * Load Pyodide and install Python deps. Idempotent â€” multiple callers share
  * the same initPromise so we never double-load.
  */
 async function initPyodide(): Promise<void> {
@@ -73,7 +98,7 @@ async function initPyodide(): Promise<void> {
 
   initPromise = (async () => {
     console.log('[pyodide-worker] Starting initialization...');
-    post({ type: 'INIT_PROGRESS', step: 'Loading Pyodide runtime…' });
+    post({ type: 'INIT_PROGRESS', step: 'Loading Pyodide runtimeâ€¦' });
 
     console.log(`[pyodide-worker] Loading Pyodide from ${PYODIDE_CDN}`);
     
@@ -95,11 +120,11 @@ async function initPyodide(): Promise<void> {
       throw new Error(`Failed to load Pyodide: ${err}`);
     }
 
-    post({ type: 'INIT_PROGRESS', step: 'Installing micropip…' });
+    post({ type: 'INIT_PROGRESS', step: 'Installing micropipâ€¦' });
     console.log('[pyodide-worker] Loading micropip package...');
     await pyodide.loadPackage('micropip');
 
-    post({ type: 'INIT_PROGRESS', step: 'Installing Python packages…' });
+    post({ type: 'INIT_PROGRESS', step: 'Installing Python packagesâ€¦' });
     
     // CRITICAL: Install python-crfsuite FIRST (from local wheel)
     // sklearn-crfsuite depends on it, so we must install it before sklearn-crfsuite
@@ -122,7 +147,7 @@ async function initPyodide(): Promise<void> {
 import micropip
 await micropip.install('${CRFSUITE_WHL}')
 `);
-      console.log('[pyodide-worker] ✅ python-crfsuite installed successfully');
+      console.log('[pyodide-worker] âœ… python-crfsuite installed successfully');
     } catch (err) {
       console.error('[pyodide-worker] Failed to install python-crfsuite wheel:', err);
       throw new Error(`Failed to install python-crfsuite: ${err}`);
@@ -135,13 +160,13 @@ await micropip.install('${CRFSUITE_WHL}')
 import micropip
 await micropip.install('sklearn-crfsuite')
 `);
-      console.log('[pyodide-worker] ✅ sklearn-crfsuite installed successfully');
+      console.log('[pyodide-worker] âœ… sklearn-crfsuite installed successfully');
     } catch (err) {
       console.error('[pyodide-worker] Failed to install sklearn-crfsuite:', err);
       throw new Error(`Failed to install sklearn-crfsuite: ${err}`);
     }
 
-    post({ type: 'INIT_PROGRESS', step: 'Loading CRF pipeline scripts…' });
+    post({ type: 'INIT_PROGRESS', step: 'Loading CRF pipeline scriptsâ€¦' });
     console.log('[pyodide-worker] Fetching Python scripts...');
     await loadPythonScripts();
 
@@ -193,7 +218,7 @@ exec(open('/tmp/crf_bridge.py').read())
   console.log('[pyodide-worker] Python scripts loaded successfully');
 }
 
-// ─── Training cycle ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Training cycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Run one active-learning cycle. Emits STEP_START/STEP_DONE for each
@@ -212,19 +237,19 @@ async function runCycle(config: TrainingCycleConfig): Promise<void> {
     selectSize: config.selectSize,
   });
 
-  step('init', 'Setting up virtual filesystem…');
+  step('init', 'Setting up virtual filesystemâ€¦');
   // Config is passed as a JSON string so Pyodide doesn't need to unpack a
-  // JS proxy — plain string round-trips safely across the WASM boundary.
+  // JS proxy â€” plain string round-trips safely across the WASM boundary.
   const configJson = JSON.stringify(config);
   console.log('[pyodide-worker] Config JSON length:', configJson.length);
   pyodide.globals.set('_config_json', configJson);
   stepDone('init', 'VFS ready');
 
-  step('train', 'Training CRF model…');
+  step('train', 'Training CRF modelâ€¦');
   console.log('[pyodide-worker] Calling run_training_cycle...');
   // run_training_cycle does feature extraction + crf.fit internally and
   // writes increment/residual files to the VFS before returning.
-  // This is the slow call — typically 5-30 s depending on dataset size.
+  // This is the slow call â€” typically 5-30 s depending on dataset size.
   const resultJson: string = await pyodide.runPythonAsync(`
 run_training_cycle(_config_json)
 `);
@@ -244,6 +269,9 @@ run_training_cycle(_config_json)
       boundaries: Array<{ index: number }>;
     }>;
     residualCount: number;
+    incrementContent: string;
+    residualContent: string;
+    evaluationContent: string;
     error: string | null;
   };
 
@@ -261,10 +289,10 @@ run_training_cycle(_config_json)
     residualCount: raw.residualCount,
   });
 
-  step('predict', 'Reading predictions…');
+  step('predict', 'Reading predictionsâ€¦');
   stepDone('predict', `${raw.incrementWords.length} words selected`);
 
-  step('select', 'Ranking by confidence…');
+  step('select', 'Ranking by confidenceâ€¦');
   stepDone('select', `${raw.residualCount} words remain in pool`);
 
   // Clean up VFS build artifacts to keep IDBFS sync small
@@ -281,8 +309,33 @@ run_training_cycle(_config_json)
       f1: raw.f1,
       incrementWords: raw.incrementWords,
       residualCount: raw.residualCount,
+      incrementContent: raw.incrementContent,
+      residualContent: raw.residualContent,
+      evaluationContent: raw.evaluationContent,
     },
   });
+}
+
+async function runInference(config: { residualTgt: string; delta?: number; workDir?: string }): Promise<void> {
+  console.log('[pyodide-worker] Starting inference over residual...');
+  const configJson = JSON.stringify(config);
+  pyodide.globals.set('_inference_config_json', configJson);
+
+  const resultJson: string = await pyodide.runPythonAsync(`run_inference(_inference_config_json)`);
+  const raw = JSON.parse(resultJson) as {
+    predictionsContent: string;
+    totalWords: number;
+    error: string | null;
+  };
+
+  if (raw.error) {
+    console.error('[pyodide-worker] Inference error:', raw.error);
+    post({ type: 'INFERENCE_ERROR', error: raw.error });
+    return;
+  }
+
+  console.log(`[pyodide-worker] Inference complete: ${raw.totalWords} words`);
+  post({ type: 'INFERENCE_DONE', result: { predictionsContent: raw.predictionsContent, totalWords: raw.totalWords } });
 }
 
 /** Delete .pyc files and __pycache__ dirs to keep the VFS lean. */
@@ -302,11 +355,11 @@ for d in ['/tmp/__pycache__']:
         shutil.rmtree(d)
 `);
   } catch {
-    // Non-fatal — don't break the cycle result over cleanup
+    // Non-fatal â€” don't break the cycle result over cleanup
   }
 }
 
-// ─── Message handler ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Message handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 try {
   console.log('[pyodide-worker] Worker script loaded, setting up message handler...');
@@ -337,6 +390,16 @@ try {
           post({ type: 'CYCLE_ERROR', error: String(err) });
         }
         break;
+
+      case 'RUN_INFERENCE':
+        try {
+          if (!pyodide) await initPyodide();
+          await runInference(msg.payload);
+        } catch (err) {
+          console.error('[pyodide-worker] Inference failed:', err);
+          post({ type: 'INFERENCE_ERROR', error: String(err) });
+        }
+        break;
     }
   };
 
@@ -355,7 +418,7 @@ try {
   }
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function post(msg: WorkerOutMessage): void {
   (self as unknown as Worker).postMessage(msg);

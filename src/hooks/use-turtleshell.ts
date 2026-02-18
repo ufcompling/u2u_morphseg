@@ -1,18 +1,3 @@
-/**
- * use-turtleshell.ts
- * Custom hook managing all TurtleShell workflow state.
- *
- * Centralizes state for:
- * - Workflow navigation (stages, completion tracking)
- * - File management (upload, role assignment, validation)
- * - Model configuration (AL parameters)
- * - Training pipeline (steps, iteration tracking) — now backed by Pyodide worker
- * - Annotation workspace (word boundaries, user edits)
- * - Results & metrics (F1/P/R, cycle history)
- *
- * Backend integration points marked with TODO [BACKEND] for work not yet done.
- */
-
 "use client";
 
 import { useState, useCallback, useRef } from "react";
@@ -26,6 +11,7 @@ import {
   type TrainingResult,
   type CycleSnapshot,
   type TrainingCycleConfig,
+  type InferenceConfig,
   DEFAULT_MODEL_CONFIG,
   INITIAL_TRAINING_STEPS,
 } from "../lib/types";
@@ -51,6 +37,18 @@ function tgtToSrc(tgt: string): string {
     .join("\n");
 }
 
+/** Trigger a browser file download from an in-memory content string. */
+function triggerDownload(content: string, filename: string): void {
+  if (!content) return;
+  const blob = new Blob([content], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useTurtleshell() {
@@ -71,7 +69,7 @@ export function useTurtleshell() {
 
   // ── Backend status ─────────────────────────────────────────────────────────
 
-  const { pyodideReady, pyodideLoading, pyodideError, runCycle } = usePyodideWorker();
+  const { pyodideReady, pyodideLoading, pyodideError, runCycle, runInference } = usePyodideWorker();
   // TODO [BACKEND]: surface pyodideLoading and pyodideError in the UI (loading overlay / toast)
   const indexedDBReady = false; // TODO [BACKEND]: wire up Dexie.js
 
@@ -185,6 +183,9 @@ export function useTurtleshell() {
       setAnnotationWords(result.incrementWords);
       setCurrentWordIndex(0);
       setIsTrainingComplete(true);
+      setIncrementContent(result.incrementContent ?? "");
+      setResidualContent(result.residualContent ?? "");
+      setEvaluationContent(result.evaluationContent ?? "");
 
       // Stash result so handleSubmitAnnotations can use real metrics
       setPendingCycleResult({
@@ -215,6 +216,18 @@ export function useTurtleshell() {
   // Holds the real metrics from the last completed cycle until the user
   // submits their annotations, at which point it becomes the committed result.
   const [pendingCycleResult, setPendingCycleResult] = useState<TrainingResult | null>(null);
+
+  // Exportable file content strings from the last cycle.
+  // Populated when runCycle resolves. TODO [BACKEND]: persist to IndexedDB.
+  const [incrementContent, setIncrementContent] = useState("");
+  const [residualContent, setResidualContent] = useState("");
+  const [evaluationContent, setEvaluationContent] = useState("");
+
+  // Full-corpus inference state — run after user is satisfied with F1
+  const [isRunningInference, setIsRunningInference] = useState(false);
+  const [inferenceComplete, setInferenceComplete] = useState(false);
+  const [inferenceStats, setInferenceStats] = useState<{ totalWords: number; processedWords: number } | null>(null);
+  const [predictionsContent, setPredictionsContent] = useState("");
 
   // ── Annotation ─────────────────────────────────────────────────────────────
 
@@ -269,16 +282,36 @@ export function useTurtleshell() {
   // ── Results actions ────────────────────────────────────────────────────────
 
   const handleDownloadIncrement = useCallback(() => {
-    // TODO [BACKEND]: Read increment.tgt from VFS / IndexedDB and trigger download
-  }, []);
+    triggerDownload(incrementContent, `increment_cycle${currentIteration}.tgt`);
+  }, [incrementContent, currentIteration]);
 
   const handleDownloadResidual = useCallback(() => {
-    // TODO [BACKEND]: Read residual.tgt from VFS / IndexedDB and trigger download
-  }, []);
+    triggerDownload(residualContent, `residual_cycle${currentIteration}.tgt`);
+  }, [residualContent, currentIteration]);
 
   const handleDownloadEvaluation = useCallback(() => {
-    // TODO [BACKEND]: Read eval.txt from VFS and trigger download
-  }, []);
+    triggerDownload(evaluationContent, `evaluation_cycle${currentIteration}.txt`);
+  }, [evaluationContent, currentIteration]);
+
+  const handleRunInference = useCallback(async () => {
+    if (!residualContent || isRunningInference) return;
+    setIsRunningInference(true);
+    try {
+      const config: InferenceConfig = { residualTgt: residualContent, delta: 4 };
+      const result = await runInference(config);
+      setPredictionsContent(result.predictionsContent);
+      setInferenceStats({ totalWords: result.totalWords, processedWords: result.totalWords });
+      setInferenceComplete(true);
+    } catch (err) {
+      console.error("[inference] failed", err);
+    } finally {
+      setIsRunningInference(false);
+    }
+  }, [residualContent, isRunningInference, runInference]);
+
+  const handleDownloadPredictions = useCallback(() => {
+    triggerDownload(predictionsContent, `predictions_cycle${currentIteration}.tgt`);
+  }, [predictionsContent, currentIteration]);
 
   const handleNewCycle = useCallback(() => {
     setCurrentIteration((prev) => prev + 1);
@@ -287,6 +320,10 @@ export function useTurtleshell() {
     setTrainingSteps(INITIAL_TRAINING_STEPS);
     setIsTrainingComplete(false);
     setPendingCycleResult(null);
+    setIsRunningInference(false);
+    setInferenceComplete(false);
+    setInferenceStats(null);
+    setPredictionsContent("");
     goToStage("training");
     // handleStartTraining is not called here directly — the training stage
     // mounts and calls it via its own useEffect / button, keeping the flow
@@ -306,6 +343,13 @@ export function useTurtleshell() {
     setPreviousResult(null);
     setPendingCycleResult(null);
     setCycleHistory([]);
+    setIncrementContent("");
+    setResidualContent("");
+    setEvaluationContent("");
+    setIsRunningInference(false);
+    setInferenceComplete(false);
+    setInferenceStats(null);
+    setPredictionsContent("");
     setCompletedStages([]);
     setCurrentStage("ingestion");
     cumulativeSelectSize.current = 0;
@@ -361,5 +405,10 @@ export function useTurtleshell() {
     handleDownloadEvaluation,
     handleNewCycle,
     handleStartOver,
+    isRunningInference,
+    inferenceComplete,
+    inferenceStats,
+    handleRunInference,
+    handleDownloadPredictions,
   };
 }

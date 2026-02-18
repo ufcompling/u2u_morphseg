@@ -137,11 +137,35 @@ export interface TrainingCycleConfig {
 
 /** Result returned from the worker after a successful cycle. */
 export interface TrainingCycleResult {
-  precision: number;
+  precision: number;        // 0-1 range (normalized from Python's 0-100)
   recall: number;
   f1: number;
   /** Low-confidence words queued for user annotation */
   incrementWords: AnnotationWord[];
   /** Number of words remaining in the unlabeled pool */
   residualCount: number;
+  /** increment.tgt file content — words selected for annotation this cycle */
+  incrementContent: string;
+  /** residual.tgt file content — remaining unlabeled pool after this cycle */
+  residualContent: string;
+  /** Evaluation report — per-word predictions with P/R/F1 summary header */
+  evaluationContent: string;
+}
+
+/** Config for running the trained model over all residual words (no retraining). */
+export interface InferenceConfig {
+  /** residual.tgt content — the remaining unannotated pool */
+  residualTgt: string;
+  /** Context window size for character features (default 4) */
+  delta?: number;
+  /** VFS working directory where crf.model was saved (default /tmp/turtleshell) */
+  workDir?: string;
+}
+
+/** Result from a full-corpus inference pass. */
+export interface InferenceResult {
+  /** Full .tgt file content with predicted segmentations for every residual word */
+  predictionsContent: string;
+  /** Number of words that were segmented */
+  totalWords: number;
 }
