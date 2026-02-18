@@ -473,6 +473,12 @@ def save_data(confidence_data: list[ConfidenceData], sub_datadir: str, file_name
 	:param file_name: The base name for the source and target files
 	:type file_name: str
 	"""
+	if not confidence_data:
+		# Write empty files so downstream path-existence checks stay consistent
+		open(f'{sub_datadir}/{file_name}.src', 'w').close()
+		open(f'{sub_datadir}/{file_name}.tgt', 'w').close()
+		return
+
 	words, morphs_list, _ = zip(*confidence_data)
 	
 	src_content: list[str] = [' '.join(word) + '\n' for word in words]
@@ -646,6 +652,9 @@ def evaluate_predictions(gold_word: list[MorphList], pred_word: list[MorphList])
 		precision_scores.append(precision)
 		recall_scores.append(recall)
 		f1_scores.append(f1)
+
+	if not precision_scores:
+		return 0.0, 0.0, 0.0
 
 	average_precision, average_recall, average_f1 = (round(statistics.mean(x), 2) for x in (precision_scores, recall_scores, f1_scores))
 	return average_precision, average_recall, average_f1

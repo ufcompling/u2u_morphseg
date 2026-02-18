@@ -1,3 +1,25 @@
+"""
+File: crf_bridge.py
+Location: public/py/crf_bridge.py (served as a static asset)
+
+Purpose:
+    Thin adapter between the JS Web Worker and crf_al.py. Receives JSON config
+    from JS, writes dataset files to Pyodide's VFS, runs the CRF active learning
+    pipeline, and returns JSON results. Designed to be called via runPythonAsync.
+
+Key Functions:
+    run_training_cycle(config_json)  -- main entry point from JS
+    _write_vfs_files(config, paths)  -- materialize file content into VFS
+    _read_increment_words(path)      -- parse increment.tgt -> AnnotationWord list
+
+Author: Evan
+Created: 2026-02-17
+Version: 0.1.0
+
+Dependencies:
+    crf_al (same VFS directory), sklearn_crfsuite, micropip (pre-installed by worker)
+"""
+
 import json
 import os
 import sys
@@ -9,10 +31,10 @@ sys.path.insert(0, '/tmp')
 import crf_al
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Public entry point called from JS:
 #   result_json = await pyodide.runPythonAsync("run_training_cycle(config_json)")
-# ──────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def run_training_cycle(config_json: str) -> str:
     """
@@ -22,7 +44,7 @@ def run_training_cycle(config_json: str) -> str:
         - trainTgt: str          annotated training data (.tgt format)
         - testTgt: str           evaluation data (.tgt format)
         - selectTgt: str         unannotated pool (.tgt format)
-        - selectSrc: str         unannotated pool (.src format) — used by crf_al for residual
+        - selectSrc: str         unannotated pool (.src format) â€” used by crf_al for residual
         - incrementSize: int     how many words to pull into increment (select_interval)
         - delta: int             context window for features (default 4)
         - maxIterations: int     CRF training iterations (default 100)
@@ -43,49 +65,62 @@ def run_training_cycle(config_json: str) -> str:
         work_dir = config.get('workDir', '/tmp/turtleshell')
         paths = _setup_vfs(config, work_dir)
 
-        # ── Build args namespace to match crf_al's internal API ──
+        # â”€â”€ Build args namespace to match crf_al's internal API â”€â”€
         import argparse
+
+        # Cap increment to pool size - 1 so there's always a residual for the next cycle.
+        # If pool <= 1 we just take everything (final cycle).
+        pool_size = 0
+        if os.path.exists(paths['select_tgt']):
+            with open(paths['select_tgt'], encoding='utf-8') as _f:
+                pool_size = sum(1 for ln in _f if ln.strip())
+        raw_increment = config.get('incrementSize', 50)
+        safe_increment = min(raw_increment, max(pool_size - 1, 0)) if pool_size > 1 else pool_size
+
         args = argparse.Namespace(
             datadir=work_dir,
             lang='dataset',
             initial_size='train',
             seed='0',
             method='al',
-            select_interval=config.get('incrementSize', 50),
+            select_interval=safe_increment,
             select_size=config.get('selectSize', 0),
             d=config.get('delta', 4),
             e=0.001,
             i=config.get('maxIterations', 100),
         )
 
-        # ── Process data from VFS ──
+        # â”€â”€ Process data from VFS â”€â”€
         data = crf_al.process_data(
             paths['train_tgt'],
             paths['test_tgt'],
             paths['select_tgt'] if os.path.exists(paths['select_tgt']) else None
         )
 
-        # ── Train + predict ──
+        # â”€â”€ Train + predict â”€â”€
         X_train, Y_train, _ = crf_al.get_features(data['train']['words'], data['train']['bmes'], args.d)
         X_test, _, _ = crf_al.get_features(data['test']['words'], data['test']['bmes'], args.d)
 
         crf = crf_al.build_crf(work_dir, X_train, Y_train, max_iterations=args.i)
         Y_test_predict, _ = crf_al.output_crf(crf, work_dir, args, data, X_test)
 
-        # ── Evaluate ──
+        # â”€â”€ Evaluate â”€â”€
         test_predictions = crf_al.reconstruct_predictions(Y_test_predict, data['test']['words'])
         precision, recall, f1 = crf_al.evaluate_predictions(data['test']['morphs'], test_predictions)
 
-        # ── Read increment words for annotation ──
+        # â”€â”€ Read increment words for annotation â”€â”€
         increment_path = os.path.join(work_dir, 'increment.tgt')
         residual_path = os.path.join(work_dir, 'residual.tgt')
         increment_words = _parse_increment_for_annotation(increment_path, crf, data, args.d)
         residual_count = _count_lines(residual_path)
 
+        # crf_al.calculate_metrics returns 0-100 range; normalize to 0-1 here.
+        # The JS UI (results-export.tsx) multiplies by 100 for display and uses
+        # 0-1 thresholds for getRecommendation / formatDelta / deltaColor.
         return json.dumps({
-            'precision': precision,
-            'recall': recall,
-            'f1': f1,
+            'precision': round(precision / 100, 4),
+            'recall': round(recall / 100, 4),
+            'f1': round(f1 / 100, 4),
             'incrementWords': increment_words,
             'residualCount': residual_count,
             'error': None,
@@ -103,9 +138,9 @@ def run_training_cycle(config_json: str) -> str:
         })
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Helpers
-# ──────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _setup_vfs(config: dict, work_dir: str) -> dict:
     """
@@ -145,7 +180,7 @@ def _parse_increment_for_annotation(increment_tgt_path: str, crf, data: dict, de
 
     :param increment_tgt_path: Path to increment.tgt written by output_crf
     :param crf: Trained CRF model (for marginals on increment words)
-    :param data: Full DataDict — we pull select bmes from here for features
+    :param data: Full DataDict â€” we pull select bmes from here for features
     :param delta: Feature window size
     :return: List of dicts suitable for AnnotationWord in the frontend
     """
