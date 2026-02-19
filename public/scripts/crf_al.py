@@ -53,7 +53,7 @@ class DataDict(TypedDict):
 	
 class Args(TypedDict):
 	lang: str
-	datadir: str
+	datadir: str  # eventually, this will be unnecessary (constant)
 	# Active Learning arguments
 	method: str
 	increment_size: int
@@ -65,7 +65,7 @@ class Args(TypedDict):
 
 def train_and_select_iteration(args: Args) -> None:
 
-	sub_datadir: str = setup_datadirs(args)
+	sub_datadir: str = setup_datadirs(args)  # eventually, there will be a sub_datadir constant instead of this function
 
 	# Define file paths
 	PATHS: dict[str, str] = {
@@ -111,29 +111,6 @@ def train_and_select_iteration(args: Args) -> None:
 	print(f'  Average F1 Score: {average_f1}')
 
 ### Set up directories ###
-def read_file(file_path: str) -> str:
-	"""
-	Reads the content of a file.
-		
-	:param file_path: Path to the file
-	:type file_path: str
-	:return: Content of the file
-	:rtype: str
-	"""
-	with open(file_path, 'r', encoding='utf-8') as f:
-		return f.read()
-	
-def write_file(file_path: str, content: str) -> None:
-	"""
-	Writes content to a file.
-	
-	:param file_path: Path to the file
-	:type file_path: str
-	:param content: Content to write to the file
-	:type content: str
-	"""
-	with open(file_path, 'w', encoding='utf-8') as f:
-		f.write(content)
 
 def setup_datadirs(args: Args) -> str:
 	"""
