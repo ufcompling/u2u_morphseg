@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  reactapp: 
+    container_name: TurtleShell
+    
+    build:
+      context: .
+      dockerfile: "Dockerfile"
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules #Anonymous Volume
+      - /app/temp-crfsuite
+      - /app/dist
+      - /app/.venv
+
+    environment:
+      - CHOKIDAR_USEPOLLING=true
