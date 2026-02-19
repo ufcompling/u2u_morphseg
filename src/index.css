@@ -1,28 +1,23 @@
 @import "tailwindcss";
 
 :root {
-  /* Pine Teal #344e41 - darkest, for background */
-  --background: 52 73 65;
-  /* Dust Grey #dad7cd - light warm neutral for text */
-  --foreground: 218 215 205;
-  /* Hunter Green #3a5a40 - card background */
-  --card: 58 90 64;
-  --card-foreground: 218 215 205;
-  --popover: 58 90 64;
-  --popover-foreground: 218 215 205;
-  /* Dry Sage #a3b18a - primary accent */
-  --primary: 163 177 138;
-  --primary-foreground: 52 73 65;
-  /* Fern #588157 - secondary */
-  --secondary: 88 129 87;
-  --secondary-foreground: 218 215 205;
-  --muted: 88 129 87;
-  --muted-foreground: 163 177 138;
-  --accent: 163 177 138;
-  --accent-foreground: 52 73 65;
-  --border: 88 129 87;
-  --input: 58 90 64;
-  --ring: 163 177 138;
+  --background: 42 48 50;
+  --foreground: 228 230 226;
+  --card: 54 62 64;
+  --card-foreground: 228 230 226;
+  --popover: 54 62 64;
+  --popover-foreground: 228 230 226;
+  --primary: 165 195 130;
+  --primary-foreground: 36 42 44;
+  --secondary: 62 72 74;
+  --secondary-foreground: 190 198 192;
+  --muted: 62 72 74;
+  --muted-foreground: 138 150 146;
+  --accent: 120 175 210;
+  --accent-foreground: 36 42 44;
+  --border: 76 86 88;
+  --input: 54 62 64;
+  --ring: 165 195 130;
   --radius: 0.5rem;
 }
 
@@ -50,10 +45,9 @@
   * {
     @apply border-border;
   }
-  
+
   body {
     @apply bg-background text-foreground;
     font-family: system-ui, -apple-system, sans-serif;
   }
 }
-
