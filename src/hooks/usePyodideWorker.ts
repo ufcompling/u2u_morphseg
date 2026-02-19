@@ -14,16 +14,14 @@
  *   exposes wipeVfs() for the "start over" flow and modelRestored to indicate
  *   whether a trained model was found in IndexedDB on init.
  *
- * Author: Evan / Joshua
- * Created: 2026-02-17
- * Version: 0.2.0
- *
- * Dependencies: React 18+, pyodide.worker.ts
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { TrainingCycleConfig, TrainingCycleResult, InferenceConfig, InferenceResult } from '../lib/types';
 import type { WorkerOutMessage } from '../lib/worker-protocol';
+import { log } from '../lib/logger';
+
+const logger = log('pyodide-worker');
 
 export type StepProgressCallback = (stepId: string, done: boolean, detail?: string) => void;
 
@@ -52,7 +50,7 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
   const [pyodideError, setPyodideError] = useState<string | null>(null);
   const [modelRestored, setModelRestored] = useState(false);
 
-  // One pending cycle at a time â€” store its resolve/reject + step callback here
+  // One pending cycle at a time — store its resolve/reject + step callback here
   const pendingCycle = useRef<{
     resolve: (r: TrainingCycleResult) => void;
     reject: (e: Error) => void;
@@ -69,41 +67,41 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
     reject: (e: Error) => void;
   } | null>(null);
 
-  // â”€â”€ Spawn worker once â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Spawn worker once ------------------------------------------------------
   const getWorker = useCallback((): Worker => {
     if (workerRef.current) return workerRef.current;
 
-    console.log('[usePyodideWorker] Spawning worker...');
+    logger.info(' Spawning worker...');
     let worker: Worker;
     try {
       worker = new Worker(
-        new URL('../services/pyodide/workers/pyodide.worker.ts', import.meta.url),
+        new URL('../workers/pyodide.worker.ts', import.meta.url),
         { type: 'module' }
       );
-      console.log('[usePyodideWorker] Worker spawned successfully');
+      logger.info(' Worker spawned successfully');
     } catch (err) {
-      console.error('[usePyodideWorker] Failed to spawn worker:', err);
+      logger.error(' Failed to spawn worker:', err);
       throw err;
     }
 
     worker.onmessage = (event: MessageEvent<WorkerOutMessage>) => {
       const msg = event.data;
-      console.log('[usePyodideWorker] Message from worker:', msg.type);
+      logger.info(' Message from worker:', msg.type);
 
       switch (msg.type) {
         case 'INIT_PROGRESS':
-          console.log('[usePyodideWorker] Init progress:', msg.step);
+          logger.info(' Init progress:', msg.step);
           break;
 
         case 'INIT_DONE':
-          console.log('[usePyodideWorker] Pyodide ready! Model restored:', msg.modelExists);
+          logger.info(' Pyodide ready! Model restored:', msg.modelExists);
           setPyodideLoading(false);
           setPyodideReady(true);
           setModelRestored(msg.modelExists);
           break;
 
         case 'INIT_ERROR':
-          console.error('[usePyodideWorker] Init error:', msg.error);
+          logger.error(' Init error:', msg.error);
           setPyodideLoading(false);
           setPyodideError(msg.error);
           break;
@@ -117,36 +115,36 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
           break;
 
         case 'CYCLE_DONE':
-          console.log('[usePyodideWorker] Cycle complete (VFS synced to IndexedDB)');
+          logger.info(' Cycle complete (VFS synced to IndexedDB)');
           setModelRestored(true); // Model now definitely exists
           pendingCycle.current?.resolve(msg.result);
           pendingCycle.current = null;
           break;
 
         case 'CYCLE_ERROR':
-          console.error('[usePyodideWorker] Cycle error:', msg.error);
+          logger.error(' Cycle error:', msg.error);
           pendingCycle.current?.reject(new Error(msg.error));
           pendingCycle.current = null;
           break;
 
         case 'INFERENCE_DONE':
-          console.log('[usePyodideWorker] Inference complete');
+          logger.info(' Inference complete');
           pendingInference.current?.resolve(msg.result);
           pendingInference.current = null;
           break;
 
         case 'INFERENCE_ERROR':
-          console.error('[usePyodideWorker] Inference error:', msg.error);
+          logger.error(' Inference error:', msg.error);
           pendingInference.current?.reject(new Error(msg.error));
           pendingInference.current = null;
           break;
 
         case 'VFS_SYNCED':
-          console.log('[usePyodideWorker] VFS synced');
+          logger.info(' VFS synced');
           break;
 
         case 'VFS_WIPED':
-          console.log('[usePyodideWorker] VFS wiped');
+          logger.info(' VFS wiped');
           setModelRestored(false);
           pendingWipe.current?.resolve();
           pendingWipe.current = null;
@@ -156,7 +154,7 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
 
     worker.onerror = (err) => {
       const msg = err.message ?? 'Unknown worker error';
-      console.error('[usePyodideWorker] Worker error:', msg, err);
+      logger.error(' Worker error:', msg, err);
       setPyodideError(msg);
       pendingCycle.current?.reject(new Error(msg));
       pendingCycle.current = null;
@@ -166,22 +164,22 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
     return worker;
   }, []);
 
-  // â”€â”€ Auto-init on mount â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Auto-init on mount -----------------------------------------------------
   useEffect(() => {
-    console.log('[usePyodideWorker] Component mounted, starting init...');
+    logger.info(' Component mounted, starting init...');
     setPyodideLoading(true);
     const worker = getWorker();
     worker.postMessage({ type: 'INIT' });
 
     return () => {
-      console.log('[usePyodideWorker] Component unmounting, terminating worker...');
+      logger.info(' Component unmounting, terminating worker...');
       workerRef.current?.terminate();
       workerRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Public API ------------------------------------------------------------
 
   const runCycle = useCallback(
     (config: TrainingCycleConfig, onStepProgress: StepProgressCallback): Promise<TrainingCycleResult> => {
@@ -191,7 +189,7 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
           return;
         }
 
-        console.log('[usePyodideWorker] Starting cycle with config:', {
+        logger.info(' Starting cycle with config:', {
           trainTgtLines: config.trainTgt.split('\n').length,
           testTgtLines: config.testTgt.split('\n').length,
           selectTgtLines: config.selectTgt.split('\n').length,

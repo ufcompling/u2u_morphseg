@@ -118,3 +118,15 @@ export function validateTgtFormat(content: string): { valid: boolean; error?: st
 
   return { valid: true };
 }
+
+/**
+ * Human-readable file size string.
+ *
+ * :param bytes: File size in bytes
+ * :returns: Formatted string like "1.2 KB" or "3.4 MB"
+ */
+export function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}

@@ -1,10 +1,37 @@
+/**
+ * useTurtleShell.ts
+ * Location: src/hooks/useTurtleShell.ts
+ *
+ * Purpose:
+ *   Compositor hook for the TurtleShell active learning workflow.
+ *   Wires together focused subsystem hooks and owns the cross-cutting
+ *   lifecycle logic (cycle transitions, data flow, state restore).
+ *
+ *   Subsystem hooks:
+ *     useProjectDB()            → IndexedDB persistence
+ *     usePyodideWorker()        → CRF training/inference via Web Worker
+ *     useTrainingOrchestrator() → Training cycle + inference execution
+ *     useAnnotationState()      → Word list + boundary editing
+ *
+ *   Cycle data flow:
+ *     Cycle N trains on [original annotated + all prior user annotations].
+ *     After the user submits annotations:
+ *       1. Boundary decisions are converted to .tgt lines
+ *       2. Those lines are appended to the "annotated" file in IndexedDB
+ *       3. The "unannotated" file is replaced with the residual
+ *     So cycle N+1 naturally reads a larger training set and smaller pool.
+ *
+ */
+
 import { useState, useCallback, useRef, useEffect } from "react";
 import {
   type WorkflowStage,
   type ModelConfig,
   type FileRole,
   type StoredFile,
+  type TrainingStep,
   type TrainingResult,
+  type AnnotationWord,
   type CycleSnapshot,
   DEFAULT_MODEL_CONFIG,
 } from "../lib/types";
@@ -15,14 +42,78 @@ import {
   triggerDownload,
   validateTgtFormat,
 } from "../lib/format-utils";
+import { log } from "../lib/logger";
 import { useProjectDB } from "./useProjectDB";
 import { usePyodideWorker } from "./usePyodideWorker";
 import { useTrainingOrchestrator } from "./useTrainingOrchestrator";
 import { useAnnotationState } from "./useAnnotationState";
 
+const logger = log('turtleshell');
+
+// -- Compositor return type ---------------------------------------------------
+
+export interface UseTurtleshellReturn {
+  // Workflow
+  currentStage: WorkflowStage;
+  completedStages: WorkflowStage[];
+  goToStage: (stage: WorkflowStage) => void;
+
+  // Status
+  pyodideReady: boolean;
+  pyodideLoading: boolean;
+  pyodideError: string | null;
+  modelRestored: boolean;
+  indexedDBReady: boolean;
+
+  // Files
+  files: StoredFile[];
+  isUploading: boolean;
+  handleUpload: (files: FileList | null) => void;
+  handleAssignRole: (fileId: string, role: FileRole) => void;
+  handleRemoveFile: (fileId: string) => void;
+
+  // Config
+  modelConfig: ModelConfig;
+  setModelConfig: (config: ModelConfig) => void;
+
+  // Training
+  trainingSteps: TrainingStep[];
+  currentIteration: number;
+  totalIterations: number;
+  isTrainingComplete: boolean;
+  handleStartTraining: () => Promise<void>;
+
+  // Annotation
+  annotationWords: AnnotationWord[];
+  totalAnnotationWords: number;
+  handleUpdateBoundaries: (wordId: string, boundaryIndices: number[]) => void;
+  handleSubmitAnnotations: () => Promise<void>;
+  handleSkipAnnotation: () => void;
+
+  // Results
+  trainingResult: TrainingResult | null;
+  previousResult: TrainingResult | null;
+  cycleHistory: CycleSnapshot[];
+  incrementContent: string;
+  residualContent: string;
+  evaluationContent: string;
+  handleDownloadIncrement: () => void;
+  handleDownloadResidual: () => void;
+  handleDownloadEvaluation: () => void;
+  handleNewCycle: () => void;
+  handleStartOver: () => Promise<void>;
+
+  // Inference
+  isRunningInference: boolean;
+  inferenceComplete: boolean;
+  inferenceStats: { totalWords: number; processedWords: number } | null;
+  handleRunInference: () => Promise<void>;
+  handleDownloadPredictions: () => void;
+}
+
 // ── Hook ────────────────────────────────────────────────────────────────────
 
-export function useTurtleshell() {
+export function useTurtleshell(): UseTurtleshellReturn {
   const projectDB = useProjectDB();
   const { pyodideReady, pyodideLoading, pyodideError, modelRestored, runCycle, runInference, wipeVfs } =
     usePyodideWorker();
@@ -90,7 +181,7 @@ export function useTurtleshell() {
         try {
           await projectDB.saveFiles(newFiles);
         } catch (err) {
-          console.error("[useTurtleshell] Failed to persist files:", err);
+          logger.error(" Failed to persist files:", err);
         }
         setIsUploading(false);
       });
@@ -342,7 +433,7 @@ export function useTurtleshell() {
 
     await projectDB.clearAll();
     await projectDB.initProject();
-    wipeVfs().catch((err) => console.warn("[useTurtleshell] VFS wipe failed:", err));
+    wipeVfs().catch((err) => logger.warn(" VFS wipe failed:", err));
     hasRestored.current = true;
   }, [projectDB, wipeVfs, annotations, training]);
 
@@ -381,7 +472,6 @@ export function useTurtleshell() {
 
     // Annotation
     annotationWords: annotations.annotationWords,
-    currentWordIndex: annotations.currentWordIndex,
     totalAnnotationWords: annotations.totalAnnotationWords,
     handleUpdateBoundaries,
     handleSubmitAnnotations,

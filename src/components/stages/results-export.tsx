@@ -1,7 +1,7 @@
-"use client";
-
 import { useState } from "react";
 import type { TrainingResult, CycleSnapshot } from "../../lib/types";
+import { DownloadIcon, InferenceIcon, PlayIcon, SpinnerIcon, LoopIcon } from "../ui/icons";
+import { Tooltip } from "../ui/tooltip";
 
 // ============================================================
 // Results & Export Stage
@@ -25,7 +25,7 @@ interface ResultsExportProps {
 
 export function ResultsExportStage({
   result,
-  previousResult,
+  previousResult, //TODO:: DATABASE
   cycleHistory,
   isRunningInference,
   inferenceComplete,
@@ -386,8 +386,9 @@ const EXPORT_TOOLTIPS: Record<string, string> = {
 };
 
 function ExportChip({ label, onClick }: { label: string; onClick: () => void }) {
+  const tip = EXPORT_TOOLTIPS[label];
   return (
-    <div className="relative group/tip">
+    <div className="flex items-center gap-1.5">
       <button
         onClick={onClick}
         className="group flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/5 border border-border/10 hover:bg-secondary/15 hover:border-border/20 transition-all"
@@ -397,15 +398,7 @@ function ExportChip({ label, onClick }: { label: string; onClick: () => void }) 
           {label}
         </span>
       </button>
-
-      {/* Tooltip */}
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity duration-150 z-20">
-        <div className="bg-card border border-border/30 rounded-lg px-3 py-2 shadow-xl shadow-black/30 w-52">
-          <p className="font-mono text-[10px] text-muted-foreground/60 leading-relaxed">
-            {EXPORT_TOOLTIPS[label]}
-          </p>
-        </div>
-      </div>
+      {tip && <Tooltip text={tip} />}
     </div>
   );
 }
@@ -423,49 +416,4 @@ function deltaColor(d: number): string {
 function formatDelta(d: number): string {
   const sign = d >= 0 ? "+" : "";
   return `${sign}${(d * 100).toFixed(1)}`;
-}
-
-// ============================================================
-// Icons
-// ============================================================
-
-function DownloadIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-    </svg>
-  );
-}
-
-function InferenceIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-    </svg>
-  );
-}
-
-function PlayIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
-      <path d="M8 5.14v14l11-7-11-7z" />
-    </svg>
-  );
-}
-
-function SpinnerIcon({ className }: { className?: string }) {
-  return (
-    <svg className={`animate-spin ${className}`} fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-    </svg>
-  );
-}
-
-function LoopIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-    </svg>
-  );
 }

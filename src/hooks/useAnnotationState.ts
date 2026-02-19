@@ -7,11 +7,6 @@
  *   Reusable for any annotation workflow — morphological segmentation
  *   today, but could serve POS tagging or other labeling tasks.
  *
- * Author: Joshua / Evan
- * Created: 2026-02-18
- * Version: 1.0.0
- *
- * Dependencies: react, types
  */
 
 import { useState, useCallback } from "react";

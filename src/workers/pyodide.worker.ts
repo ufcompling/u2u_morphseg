@@ -1,6 +1,5 @@
 /**
  * pyodide.worker.ts
- * Location: src/services/pyodide/workers/pyodide.worker.ts
  *
  * Purpose:
  *   Runs Pyodide (Python/WASM) in a Web Worker so CRF training never blocks
@@ -16,19 +15,13 @@
  *   Incoming (from main thread) — WorkerInMessage
  *   Outgoing (to main thread)  — WorkerOutMessage
  *   Both defined in src/lib/worker-protocol.ts
- *
- * Author: Evan / Joshua
- * Created: 2026-02-17
- * Version: 0.3.0
- *
- * Dependencies: Pyodide 0.27.4, micropip, sklearn-crfsuite, python-crfsuite (whl)
  */
 
 /// <reference lib="webworker" />
 
 // Type-only imports are erased at compile time — safe for workers.
-import type { TrainingCycleConfig } from "../../../lib/types";
-import type { WorkerInMessage, WorkerOutMessage } from "../../../lib/worker-protocol";
+import type { TrainingCycleConfig } from "../lib/types";
+import type { WorkerInMessage, WorkerOutMessage } from "../lib/worker-protocol";
 
 console.log("[pyodide-worker] ===== WORKER SCRIPT STARTING =====");
 

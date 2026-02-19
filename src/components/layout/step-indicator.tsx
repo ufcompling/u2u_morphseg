@@ -1,6 +1,5 @@
-"use client";
-
-import { WORKFLOW_STAGES, type WorkflowStage } from "../lib/types";
+import { WORKFLOW_STAGES, type WorkflowStage } from "../../lib/types";
+import { CheckIcon } from "../ui";
 
 interface StepIndicatorProps {
   currentStage: WorkflowStage;
@@ -39,7 +38,7 @@ export function StepIndicator({
                 }`}
               >
                 {isCompleted || isPast ? (
-                  <CheckIcon />
+                  <CheckIcon className="w-4 h-4" />
                 ) : (
                   index + 1
                 )}
@@ -71,23 +70,5 @@ export function StepIndicator({
         );
       })}
     </nav>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2.5}
-        d="M5 13l4 4L19 7"
-      />
-    </svg>
   );
 }

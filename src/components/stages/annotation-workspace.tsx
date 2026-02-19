@@ -1,7 +1,6 @@
-"use client";
-
 import { useState, useCallback, useRef } from "react";
 import type { AnnotationWord } from "../../lib/types";
+import { ArrowIcon, UploadSmallIcon, CheckAllIcon } from "../ui/icons";
 
 // ============================================================
 // Annotation Workspace Stage
@@ -63,7 +62,6 @@ interface AnnotationWorkspaceProps {
   onUpdateBoundaries: (wordId: string, boundaryIndices: number[]) => void;
   onSubmit: () => void;
   onSkip: () => void;
-  currentWordIndex: number;
   totalWords: number;
   currentIteration: number;
   totalIterations: number;
@@ -200,7 +198,7 @@ export function AnnotationWorkspaceStage({
           )}
         </div>
 
-        {/* ── Dev/Testing Tools ── */}
+        {/* -- Dev/Testing Tools -- */}
         <div className="mt-3">
           <button
             onClick={() => setShowDevTools((prev) => !prev)}
@@ -224,7 +222,7 @@ export function AnnotationWorkspaceStage({
                   onClick={() => goldInputRef.current?.click()}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary/20 border border-border/20 font-mono text-[10px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/30 transition-all"
                 >
-                  <UploadIcon />
+                  <UploadSmallIcon />
                   <span>Load Gold File</span>
                 </button>
 
@@ -497,29 +495,5 @@ function WordEditor({
         )}
       </div>
     </div>
-  );
-}
-
-function ArrowIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-    </svg>
-  );
-}
-
-function UploadIcon() {
-  return (
-    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5m0 0l5 5m-5-5v12" />
-    </svg>
-  );
-}
-
-function CheckAllIcon() {
-  return (
-    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
   );
 }

@@ -1,7 +1,7 @@
-"use client";
-
 import { useState, type DragEvent, type ChangeEvent } from "react";
 import type { StoredFile, FileRole } from "../../lib/types";
+import { formatSize } from "../../lib/format-utils";
+import { UploadIcon, FileIcon, TrashIcon, ArrowIcon } from "../ui/icons";
 
 // ============================================================
 // Dataset Ingestion Stage
@@ -128,7 +128,7 @@ function UploadZone({
           multiple
           onChange={(e: ChangeEvent<HTMLInputElement>) => onUpload(e.target.files)}
           className="hidden"
-          accept=".csv,.txt,.tsv,.json"
+          accept=".tgt,.csv,.txt,.tsv,.json"
         />
 
         <div
@@ -157,13 +157,13 @@ function UploadZone({
         </div>
 
         <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/10 text-muted-foreground/40 font-mono text-[10px] uppercase tracking-wider">
-          <span>.csv</span>
+          <span>.tgt</span>
           <span className="text-border/50">|</span>
           <span>.txt</span>
           <span className="text-border/50">|</span>
-          <span>.tsv</span>
+          <span>.csv</span>
           <span className="text-border/50">|</span>
-          <span>.json</span>
+          <span>.tsv</span>
         </div>
       </label>
     </section>
@@ -205,14 +205,14 @@ function FileRow({
       <select
         value={file.role ?? ""}
         onChange={(e) => onAssignRole(file.id, e.target.value as FileRole)}
-        className="bg-[#3a5a40] border border-border/20 rounded-lg px-3 py-2 font-mono text-[11px] text-[#dad7cd] cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary/30 min-w-[130px]"
+        className="bg-card border border-border/20 rounded-lg px-3 py-2 font-mono text-[11px] text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary/30 min-w-[130px]"
       >
-        <option value="" disabled className="bg-[#3a5a40] text-[#dad7cd]">
+        <option value="" disabled className="bg-card text-foreground">
           Assign role...
         </option>
-        <option value="annotated" className="bg-[#3a5a40] text-[#dad7cd]">Annotated</option>
-        <option value="unannotated" className="bg-[#3a5a40] text-[#dad7cd]">Unannotated</option>
-        <option value="evaluation" className="bg-[#3a5a40] text-[#dad7cd]">Evaluation</option>
+        <option value="annotated" className="bg-card text-foreground">Annotated</option>
+        <option value="unannotated" className="bg-card text-foreground">Unannotated</option>
+        <option value="evaluation" className="bg-card text-foreground">Evaluation</option>
       </select>
 
       {/* Remove button */}
@@ -275,47 +275,5 @@ function EmptyState() {
         Upload your dataset files to get started
       </p>
     </div>
-  );
-}
-
-// --- Utility ---
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// --- Icons ---
-
-function UploadIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-    </svg>
-  );
-}
-
-function FileIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-    </svg>
-  );
-}
-
-function ArrowIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-    </svg>
   );
 }

@@ -1,6 +1,5 @@
-"use client";
-
 import type { ModelConfig, QueryStrategy } from "../../lib/types";
+import { ArrowIcon, Tooltip } from "../ui";
 
 // ============================================================
 // Model Configuration Stage
@@ -94,7 +93,7 @@ export function ModelConfigStage({
             value={config.targetLanguage}
             onChange={(e) => updateField("targetLanguage", e.target.value)}
             placeholder="e.g. Swahili, Turkish, Zulu..."
-            className="w-full bg-[#3a5a40] border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-[#dad7cd] placeholder:text-[#dad7cd]/25 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
+            className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground placeholder:text-foreground/25 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
           />
           <div className="flex flex-wrap gap-1.5">
             {COMMON_LANGUAGES.map((lang) => (
@@ -136,7 +135,7 @@ export function ModelConfigStage({
                 )
               }
               min={1}
-              className="w-full bg-[#3a5a40] border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-[#dad7cd] focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
+              className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
             />
             <p className="font-mono text-[10px] text-muted-foreground/30">
               Words queried each round
@@ -158,7 +157,7 @@ export function ModelConfigStage({
                 updateField("iterations", Math.max(1, Number(e.target.value)))
               }
               min={1}
-              className="w-full bg-[#3a5a40] border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-[#dad7cd] focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
+              className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
             />
             <p className="font-mono text-[10px] text-muted-foreground/30">
               Train-annotate-retrain rounds
@@ -176,7 +175,7 @@ export function ModelConfigStage({
           </div>
 
           {/* Strategy selector as segmented control */}
-          <div className="flex gap-1 p-1 bg-[#344e41] border border-border/15 rounded-lg">
+          <div className="flex gap-1 p-1 bg-background border border-border/15 rounded-lg">
             {(Object.keys(STRATEGY_INFO) as QueryStrategy[]).map(
               (strategy) => (
                 <button
@@ -224,44 +223,5 @@ export function ModelConfigStage({
         </button>
       </footer>
     </div>
-  );
-}
-
-// ---- Small helper components ----
-
-function Tooltip({ text }: { text: string }) {
-  return (
-    <div className="relative group/tip">
-      <div className="w-4 h-4 rounded-full bg-secondary/15 border border-border/10 flex items-center justify-center cursor-help">
-        <span className="font-mono text-[9px] text-muted-foreground/40 font-bold">
-          ?
-        </span>
-      </div>
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity duration-150 z-20">
-        <div className="bg-card border border-border/30 rounded-lg px-3 py-2 shadow-xl shadow-black/30 w-56">
-          <p className="font-mono text-[10px] text-muted-foreground/60 leading-relaxed">
-            {text}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ArrowIcon() {
-  return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 5l7 7-7 7"
-      />
-    </svg>
   );
 }

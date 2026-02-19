@@ -1,3 +1,15 @@
+/**
+ * useProjectDB.ts
+ * Location: src/hooks/useProjectDB.ts
+ *
+ * Purpose:
+ *   IndexedDB persistence layer for the TurtleShell project. Handles
+ *   storage and retrieval of project metadata, uploaded files, cycle
+ *   history, and per-word annotation state. All writes are async and
+ *   fire-and-forget from the UI's perspective.
+ *
+ */
+
 import { useState, useEffect, useCallback, useRef } from "react";
 import { db, type ProjectRow, type FileRow, type CycleRow, type AnnotationRow } from "../lib/db";
 import {
@@ -10,6 +22,9 @@ import {
   type MorphemeBoundary,
   DEFAULT_MODEL_CONFIG,
 } from "../lib/types";
+import { log } from "../lib/logger";
+
+const logger = log('project-db');
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
@@ -120,7 +135,7 @@ export function useProjectDB(): UseProjectDBReturn {
         ready.current = true;
         if (!cancelled) setDbReady(true);
       } catch (err) {
-        console.error("[useProjectDB] Failed to load from IndexedDB:", err);
+        logger.error(" Failed to load from IndexedDB:", err);
         if (!cancelled) {
           setDbError(err instanceof Error ? err.message : String(err));
           setDbReady(true); // still "ready" — the UI can render in degraded mode

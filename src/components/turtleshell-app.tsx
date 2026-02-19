@@ -1,18 +1,15 @@
 // Main application shell for TurtleShell active learning workflow.
- 
 
-"use client";
-
-import { useTurtleshell } from "../hooks/useTurtleShell";
-import { TurtleLogo } from "../components/turtle-logo";
-import { StatusIndicator } from "./ui/status-indicator";
-import { StepIndicator } from "../components/step-indicator";
-import { TurtleShellBackground } from "../components/turtle-background";
-import { DatasetIngestion } from "../components/stages/dataset-ingestion";
-import { ModelConfigStage } from "../components/stages/model-config";
-import { TrainingProgressStage } from "../components/stages/training-progress";
-import { AnnotationWorkspaceStage } from "../components/stages/annotation-workspace";
-import { ResultsExportStage } from "../components/stages/results-export";
+import { useTurtleshell, type UseTurtleshellReturn } from "../hooks/useTurtleShell";
+import { TurtleLogo, TurtleShellBackground, StepIndicator } from "./layout";
+import { StatusIndicator } from "./ui";
+import {
+  DatasetIngestion,
+  ModelConfigStage,
+  TrainingProgressStage,
+  AnnotationWorkspaceStage,
+  ResultsExportStage,
+} from "./stages";
 
 export function TurtleshellApp() {
   const ts = useTurtleshell();
@@ -50,6 +47,20 @@ export function TurtleshellApp() {
             </div>
           </header>
 
+          {/* Error banner — shown when Pyodide or IndexedDB fails */}
+          {ts.pyodideError && (
+            <ErrorBanner
+              message={`Pyodide failed to load: ${ts.pyodideError}`}
+              hint="Check your connection — Pyodide downloads ~10MB on first run. Private browsing may block required storage."
+            />
+          )}
+          {!ts.indexedDBReady && !ts.pyodideLoading && (
+            <ErrorBanner
+              message="IndexedDB unavailable"
+              hint="Your browser may be blocking storage. Try disabling private/incognito mode, or check site permissions."
+            />
+          )}
+
           {/* Step Indicator */}
           <div className="border-b border-border/20">
             <StepIndicator
@@ -71,7 +82,18 @@ export function TurtleshellApp() {
   );
 }
 
-function StageRenderer({ ts }: { ts: ReturnType<typeof useTurtleshell> }) {
+function ErrorBanner({ message, hint }: { message: string; hint?: string }) {
+  return (
+    <div className="px-6 py-3 bg-red-400/10 border-b border-red-400/20">
+      <p className="font-mono text-[11px] text-red-400 font-medium">{message}</p>
+      {hint && (
+        <p className="font-mono text-[10px] text-red-400/60 mt-0.5">{hint}</p>
+      )}
+    </div>
+  );
+}
+
+function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
   switch (ts.currentStage) {
     case "ingestion":
       return (
@@ -113,7 +135,6 @@ function StageRenderer({ ts }: { ts: ReturnType<typeof useTurtleshell> }) {
           onUpdateBoundaries={ts.handleUpdateBoundaries}
           onSubmit={ts.handleSubmitAnnotations}
           onSkip={ts.handleSkipAnnotation}
-          currentWordIndex={ts.currentWordIndex}
           totalWords={ts.totalAnnotationWords}
           currentIteration={ts.currentIteration}
           totalIterations={ts.totalIterations}

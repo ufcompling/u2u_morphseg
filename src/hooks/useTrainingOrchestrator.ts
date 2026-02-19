@@ -1,3 +1,15 @@
+/**
+ * useTrainingOrchestrator.ts
+ * Location: src/hooks/useTrainingOrchestrator.ts
+ *
+ * Purpose:
+ *   Manages the CRF training cycle lifecycle: starting a cycle, tracking
+ *   step progress, collecting results, and running full-corpus inference.
+ *   Isolated from the rest of the workflow so new model types or query
+ *   strategies can be added without touching annotation or navigation logic.
+ *
+ */
+
 import { useState, useCallback } from "react";
 import type {
   StoredFile,
@@ -10,9 +22,12 @@ import type {
   InferenceConfig,
   InferenceResult,
 } from "../lib/types";
-import { INITIAL_TRAINING_STEPS } from "../lib/types";
+import { INITIAL_TRAINING_STEPS, CRF_MAX_ITERATIONS, CRF_FEATURE_DELTA } from "../lib/types";
 import { getFileContent, tgtToSrc } from "../lib/format-utils";
+import { log } from "../lib/logger";
 import type { StepProgressCallback } from "./usePyodideWorker";
+
+const logger = log('training');
 
 // ── Input dependencies (provided by compositor) ─────────────────────────────
 
@@ -116,8 +131,8 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
       selectTgt,
       selectSrc,
       incrementSize: modelConfig.incrementSize,
-      maxIterations: 100,
-      delta: 4,
+      maxIterations: CRF_MAX_ITERATIONS,
+      delta: CRF_FEATURE_DELTA,
       selectSize: cumulativeSelectSize.current,
     };
 
@@ -147,7 +162,7 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
         iterationNumber: currentIteration,
       });
     } catch (err) {
-      console.error("[training] cycle failed", err);
+      logger.error(" cycle failed", err);
       setTrainingSteps((prev) =>
         prev.map((s) =>
           s.status === "active" ? { ...s, status: "error", detail: String(err) } : s
@@ -162,13 +177,13 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
     if (!residualContent || isRunningInference) return;
     setIsRunningInference(true);
     try {
-      const config: InferenceConfig = { residualTgt: residualContent, delta: 4 };
+      const config: InferenceConfig = { residualTgt: residualContent, delta: CRF_FEATURE_DELTA };
       const result = await runInference(config);
       setPredictionsContent(result.predictionsContent);
       setInferenceStats({ totalWords: result.totalWords, processedWords: result.totalWords });
       setInferenceComplete(true);
     } catch (err) {
-      console.error("[inference] failed", err);
+      logger.error(" failed", err);
     } finally {
       setIsRunningInference(false);
     }

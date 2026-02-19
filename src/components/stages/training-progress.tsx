@@ -1,6 +1,5 @@
-"use client";
-
 import type { TrainingStep } from "../../lib/types";
+import { ArrowIcon, CheckIcon } from "../ui/icons";
 
 // ============================================================
 // Training Progress Stage
@@ -47,7 +46,7 @@ export function TrainingProgressStage({
             )}
           </div>
 
-          {/* Iteration context – segmented indicator */}
+          {/* Iteration context -- segmented indicator */}
           <div className="flex items-center gap-2">
             <div className="flex gap-1">
               {Array.from({ length: totalIterations }).map((_, i) => (
@@ -69,7 +68,7 @@ export function TrainingProgressStage({
           </div>
         </div>
 
-        {/* Mini progress – step count */}
+        {/* Mini progress -- step count */}
         <div className="mt-3 flex items-center gap-2">
           <div className="flex-1 h-0.5 bg-border/10 rounded-full overflow-hidden">
             <div
@@ -112,9 +111,7 @@ export function TrainingProgressStage({
                 <div className="relative z-10 shrink-0">
                   {isCompleted ? (
                     <div className="w-[30px] h-[30px] rounded-full bg-primary/15 flex items-center justify-center">
-                      <svg className="w-3.5 h-3.5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
+                      <CheckIcon className="w-3.5 h-3.5 text-primary" />
                     </div>
                   ) : isActive ? (
                     <div className="w-[30px] h-[30px] rounded-full bg-primary/10 flex items-center justify-center">
@@ -152,7 +149,7 @@ export function TrainingProgressStage({
         </div>
       </div>
 
-      {/* ---- Footer – CTA anchored to final step ---- */}
+      {/* ---- Footer -- CTA anchored to final step ---- */}
       <div className="mx-6 h-px bg-border/10" />
       <footer className="px-6 py-4">
         {isComplete ? (
@@ -177,13 +174,5 @@ export function TrainingProgressStage({
         )}
       </footer>
     </div>
-  );
-}
-
-function ArrowIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-    </svg>
   );
 }
