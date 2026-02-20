@@ -20,7 +20,19 @@ export const initPyodide = async () => {
       await micropip.install('${window.location.origin}/u2u_morphseg/wheels/python_crfsuite-0.9.12-cp312-cp312-pyodide_2024_0_wasm32.whl')
       await micropip.install('sklearn-crfsuite')
     `);
+    
+    const response = await fetch('/u2u_morphseg/scripts/db_worker.py');
+    const code = await response.text();
+    pyodideInstance.FS.mkdir('/scripts');
+    try {
+      pyodideInstance.FS.mkdir('/data');
+    } catch (e) {
+      // Ignore if already exists
+    }  
+    pyodideInstance.FS.writeFile('/scripts/db_worker.py', code);
 
+    await pyodideInstance.runPythonAsync("import sys; sys.path.append('/scripts')");
+    await pyodideInstance.runPythonAsync("import db_worker");
     initPromise = null;
     return pyodideInstance;
   })();
