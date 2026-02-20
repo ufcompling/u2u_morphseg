@@ -8,6 +8,8 @@ The application allows users to perform sequence labeling using Conditional Rand
 * **Client-Side ML:** Training and inference happen on your device via Pyodide.
 * **Local Persistence:** Data is stored securely in your browser's IndexedDB.
 * **Manageable Labeling:** Uses Active Learning to increment annotated data a bit at a time, reducing the pressure of handling a large dataset all at once.
+* **Automated CI/CD**: Integrated with GitHub Actions for automated testing and seamless deployment to GitHub Pages.
+* **Serverless Deployment**: Fully functional as a static site; no expensive backend server required.
 
 ---
 
@@ -135,8 +137,8 @@ bun run dev
 ---
 
 ## 10. Set up the environment with Docker
-- install WSL: [https://learn.microsoft.com/en-us/windows/wsl/install](Microsoft WSL Install Guide) (Required for Windows).
-- install Docker: [https://docs.docker.com/engine/install/](Docker Install Guide). Ensure "Use the WSL 2 based engine" is checked in Docker settings.
+- install WSL: [Microsoft WSL Install Guide](https://learn.microsoft.com/en-us/windows/wsl/install) (Required for Windows).
+- install Docker: [Docker Install Guide](https://docs.docker.com/engine/install/). Ensure "Use the WSL 2 based engine" is checked in Docker settings.
 **One-Step Setup**:
 This will build the Docker image, start the container in the background, and generate the necessary ML wheel files automatically.
 ```

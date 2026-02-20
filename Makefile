@@ -13,6 +13,10 @@ up:
 setup:
 	docker exec -it TurtleShell ./setup.sh
 
+# Stop the container
+stop:	
+	docker compose stop
+
 # Stop and remove containers
 clean:
 	docker compose down
