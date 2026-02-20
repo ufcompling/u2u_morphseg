@@ -1,9 +1,20 @@
-node_modules/
-Dockerfile
-.dockerignore
+# Python
+**/.venv/
+__pycache__/
+*.py[cod]
+
+# Pyodide / Build Artifacts
+**/.venv
+**/dist
+**/build
+**/node_modules
+**/.pyodide-xbuildenv*
+**/temp-crfsuite
+
+# Bun / Node
+**/node_modules/
+
+# Git
 .git
 .gitignore
-.env
-emsdk/
-.venv
-dist/
+

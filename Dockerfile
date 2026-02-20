@@ -5,10 +5,10 @@ RUN apt-get update && apt-get install -y curl unzip && \
     curl -fsSL https://bun.sh/install | bash && \
     ln -s $HOME/.bun/bin/bun /usr/local/bin/bun
 
-RUN apt-get install -y \
+RUN apt-get update && apt-get install -y \
     build-essential \
     git \
-    python3.12-venv \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --depth 1 https://github.com/emscripten-core/emsdk.git /emsdk
