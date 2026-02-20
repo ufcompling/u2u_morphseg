@@ -41,14 +41,14 @@ export function tgtToSrc(tgt: string): string {
 export function annotationToTgtLine(word: AnnotationWord): string {
   const chars = word.word.split("");
   const boundarySet = new Set(word.boundaries.map((b) => b.index));
-  let result = "";
+  const parts: string[] = [];
   for (let i = 0; i < chars.length; i++) {
-    result += chars[i];
+    parts.push(chars[i]);
     if (boundarySet.has(i) && i < chars.length - 1) {
-      result += "!";
+      parts.push("!");
     }
   }
-  return result;
+  return parts.join(" ");
 }
 
 /** Trigger a browser file download from an in-memory string. */
