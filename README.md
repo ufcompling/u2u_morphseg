@@ -57,6 +57,8 @@ The application allows users to perform sequence labeling using Conditional Rand
 ## 4. Prerequisites
 - **Node.js** (v20+) & **Bun.js**
 - **Python 3.12** (Must match Pyodide's environment)
+- **venv** (Python virtual environment)
+  - *Linux:* `sudo apt install python3.12-venv`
 - **Git** (with submodules support)
 - **C++ Compiler**: 
   - *macOS*: `xcode-select --install`
@@ -101,19 +103,14 @@ cd emsdk && ./emsdk install 3.1.58 && ./emsdk activate 3.1.58 && cd ..
 
 ## 8. Run the Automated Setup:
 This script creates a virtual environment, installs build tools, clones the CRF source, and builds the .whl file.
+This automated setup is optimized for Linux and macOS. If you are on Windows, please follow the Docker instructions in section #11.
 ```
-source setup.sh
+./setup.sh
 ```
-
-**Note for Windows Users**: Please run all setup and build commands inside Git Bash.
-1. Right-click in your project folder.
-2. Select "Git Bash Here."
-3. Run source setup.sh.
 
 ---
 
-
-## 7. Running the app
+## 9. Running the app
 
 Install dependencies
 ```
@@ -137,10 +134,36 @@ bun run dev
 
 ---
 
-## 8. Access the Site
+## 10. Set up the environment with Docker
+- install WSL: [https://learn.microsoft.com/en-us/windows/wsl/install](Microsoft WSL Install Guide) (Required for Windows).
+- install Docker: [https://docs.docker.com/engine/install/](Docker Install Guide). Ensure "Use the WSL 2 based engine" is checked in Docker settings.
+**One-Step Setup**:
+This will build the Docker image, start the container in the background, and generate the necessary ML wheel files automatically.
+```
+make py-setup
+
+```
+**Manual Start**:
+To run the container normally (foreground) without rebuilding the ML wheels:
+```
+docker compose up
+```
+
+---
+
+## 11. Access the Site
 - Preview: http://localhost:4173/u2u_morphseg/
 - Development: http://localhost:5173/u2u_morphseg/
 - Github Pages: https://ufcompling.github.io/u2u_morphseg/
 
 ---
+
+## 12. Troubleshooting: Cannot access the site on Windows
+If you are using WSL and localhost:5173 does not load in your browser, the port forwarding may be failing. You can use the specific Linux IP address instead:
+1. Find your WSL IP: Run this command in your WSL terminal:
+```
+ip addr show eth0 | grep "inet "
+```
+2. Copy the IP: Look for the numbers after inet (e.g., 172.25.x.x).
+3. Update the URL: Replace localhost in your browser with that IP (e.g., http://172.25.x.x:5173).
 
