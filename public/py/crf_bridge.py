@@ -13,12 +13,6 @@ Purpose:
 Key functions:
     run_training_cycle(config_json) - Train CRF, evaluate, select increment
     run_inference(config_json)      - Segment residual pool with saved model
-
-Author: Evan / Joshua
-Created: 2026-02-17
-Version: 1.0.0
-
-Dependencies: crf_al.py, sklearn-crfsuite, pickle, json
 """
 
 import json
