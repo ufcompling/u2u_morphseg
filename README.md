@@ -46,6 +46,7 @@ The application allows users to perform sequence labeling using Conditional Rand
 ├── test/                             # Test suite directory
 │   ├── features/                     # UI and integration tests
 │   └── services/                     # Database and engine tests
+|          └── db_tests/              # Database tests
 ├── index.html                        # Entry point (loads Pyodide CDN)
 ├── package.json                      # Dependencies and scripts
 ├── requirements-dev.txt              # Local build tools (pyodide-build, etc.)
@@ -144,3 +145,6 @@ bun run dev
 
 ---
 
+## 9. Testing
+bun run vitest (<fileName>)
+```

@@ -1,4 +1,5 @@
 import { type rawData, mapData } from './dataHelpers';
+import { syncPyodideFS } from '../../pyodide/pyodideService';
 
 export async function importFiles(pyodide: any, files: FileList, setStatus: (_status: string) => void) {
   setStatus('Importing...');
@@ -40,11 +41,6 @@ export async function importFiles(pyodide: any, files: FileList, setStatus: (_st
       setStatus(`Failed to import ${fileData.fileName}`);
     }
   }
-  await new Promise<void>((resolve, reject) => {
-    pyodide.FS.syncfs(false, (err: any) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  await syncPyodideFS(pyodide);
   setStatus('Files imported successfully.');
 }
