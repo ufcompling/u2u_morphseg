@@ -50,6 +50,9 @@ The application allows users to perform sequence labeling using Conditional Rand
 │   └── services/                     # Database and engine tests
 ├── index.html                        # Entry point (loads Pyodide CDN)
 ├── package.json                      # Dependencies and scripts
+├── Dockerfile                        # Build environment for Emscripten & Pyodide
+├── docker-compose.yml                # Orchestrates the Wasm wheel compilation process
+├── Makefile                          # Shortcut commands for building, running, and cleaning the backend environment
 ├── requirements-dev.txt              # Local build tools (pyodide-build, etc.)
 ├── setup.sh                          # Environment & Wasm build script
 └── vite.config.ts                    # Vite bundler configuration
