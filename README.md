@@ -104,15 +104,35 @@ cd emsdk && ./emsdk install 3.1.58 && ./emsdk activate 3.1.58 && cd ..
 ---
 
 ## 8. Run the Automated Setup:
-This script creates a virtual environment, installs build tools, clones the CRF source, and builds the .whl file.
-This automated setup is optimized for Linux and macOS. If you are on Windows, please follow the Docker instructions in section #11.
+This script creates a virtual environment, installs build tools, clones the CRF source, and builds the .whl file. This only needs to be run once during the initial environment setup.
+This automated setup is optimized for Linux and macOS. If you are on Windows, please follow the Docker instructions in section #9.
 ```
+RUN chmod +x setup.sh
 ./setup.sh
 ```
 
 ---
+## 9. Set up the environment with Docker
+- install WSL: [Microsoft WSL Install Guide](https://learn.microsoft.com/en-us/windows/wsl/install) (Required for Windows).
+- install Docker: [Docker Install Guide](https://docs.docker.com/engine/install/). Ensure "Use the WSL 2 based engine" is checked in Docker settings.
+**One-Step Setup**:
+This will build the Docker image, start the service, and generate the necessary ML wheel files automatically.
+This only needs to be run once during the initial environment setup.
+```
+make
 
-## 9. Running the app
+```
+[!CAUTION]
+Permission Warning: Since the wheel files are generated inside a Docker container (running as root), they may be owned by the root user on your host machine. If you need to manually delete or move these files from your file explorer/terminal, you may need to use sudo:
+
+```
+sudo rm public/wheels/*.whl
+```
+```
+
+---
+
+## 10. Running the app
 
 Install dependencies
 ```
@@ -136,36 +156,10 @@ bun run dev
 
 ---
 
-## 10. Set up the environment with Docker
-- install WSL: [Microsoft WSL Install Guide](https://learn.microsoft.com/en-us/windows/wsl/install) (Required for Windows).
-- install Docker: [Docker Install Guide](https://docs.docker.com/engine/install/). Ensure "Use the WSL 2 based engine" is checked in Docker settings.
-**One-Step Setup**:
-This will build the Docker image, start the container in the background, and generate the necessary ML wheel files automatically.
-```
-make py-setup
-
-```
-**Manual Start**:
-To run the container normally (foreground) without rebuilding the ML wheels:
-```
-docker compose up
-```
-
----
-
 ## 11. Access the Site
 - Preview: http://localhost:4173/u2u_morphseg/
 - Development: http://localhost:5173/u2u_morphseg/
 - Github Pages: https://ufcompling.github.io/u2u_morphseg/
 
 ---
-
-## 12. Troubleshooting: Cannot access the site on Windows
-If you are using WSL and localhost:5173 does not load in your browser, the port forwarding may be failing. You can use the specific Linux IP address instead:
-1. Find your WSL IP: Run this command in your WSL terminal:
-```
-ip addr show eth0 | grep "inet "
-```
-2. Copy the IP: Look for the numbers after inet (e.g., 172.25.x.x).
-3. Update the URL: Replace localhost in your browser with that IP (e.g., http://172.25.x.x:5173).
 

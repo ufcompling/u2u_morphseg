@@ -12,10 +12,13 @@ echo "========================== Installing Pip Requirements ===================
 ./.venv/bin/python3 -m pip install --upgrade pip
 ./.venv/bin/python3 -m pip install -r requirements-dev.txt
 
-# 3. Check for C++ Compiler
-if ! command -v cc &> /dev/null; then
+echo "========================== Checking for Compiler =========================="
+if [ -x /usr/bin/gcc ] || [ -x /usr/bin/cc ]; then
+    echo "Compiler found: $(gcc --version | head -n 1)"
+else
     echo "========================== CRITICAL: No C++ compiler found! =========================="
     echo "Please install one first (e.g., 'xcode-select --install' on Mac or 'sudo apt install build-essential' on Linux)."
+    echo "PATH is: $PATH"
     exit 1
 fi
 
@@ -30,6 +33,7 @@ else
     else
         echo "========================== emsdk not found. Downloading... =========================="
         git clone https://github.com/emscripten-core/emsdk.git
+        rm -rf emsdk/.git
         cd emsdk
         ./emsdk install 3.1.58
     fi
@@ -51,6 +55,7 @@ if [ ! -d "temp-crfsuite/.git" ]; then  # Check for .git specifically
         echo "CRITICAL ERROR: Git clone failed!"
         exit 1
     }
+    rm -rf temp-crfsuite/.git
 fi
 
 # 6. Build Custom Wheel

@@ -1,14 +1,13 @@
 version: "3.8"
 
 services:
-  reactapp: 
+  buildwheel: 
     container_name: TurtleShell
     
     build:
       context: .
       dockerfile: "Dockerfile"
-    ports:
-      - "5173:5173"
+      
     volumes:
       - .:/app
       - /app/node_modules #Anonymous Volume

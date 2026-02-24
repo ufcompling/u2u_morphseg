@@ -1,26 +1,21 @@
-# Start everything from scratch for backend
-py-setup: build up setup
+# Default command
+all: wheel-build
 
-# Build the images
-build:
+# Rebuilds the image and runs a fresh build
+wheel-build:
 	docker compose build
+	docker compose run --rm buildwheel
 
-# Start containers in the background
-up:
-	docker compose up -d
+# Just run the factory (assumes image is already built)
+run-factory:
+	docker compose run --rm buildwheel
 
-# Run the wheel build script inside the container
-setup:
-	docker exec -it TurtleShell ./setup.sh
-
-# Stop the container
-stop:	
-	docker compose stop
-
-# Stop and remove containers
+# Stop everything and wipe volumes
 clean:
-	docker compose down
+	docker compose down -v
+	rm -rf dist/
+	rm -rf temp-crfsuite/
 
-# View logs
+# logs check
 logs:
-	docker logs -f TurtleShell
+	docker compose logs -f buildwheel
