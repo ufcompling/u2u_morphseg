@@ -75,3 +75,13 @@ def delete_file(file_name: str) -> None:
     file_path = os.path.join('/data', file_name)
     if os.path.exists(file_path):
         os.remove(file_path)
+
+def clear_files(directory: str | None = None) -> None:
+    """Deletes all files in the specified directory. Defaults to /data."""
+    if directory is None:
+        directory = '/data'
+    if os.path.exists(directory):
+        for file_name in os.listdir(directory):
+            file_path = os.path.join(directory, file_name)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
