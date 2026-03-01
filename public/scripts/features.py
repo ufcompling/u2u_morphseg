@@ -15,7 +15,7 @@ def get_labeled_features(words: list[Word], bmes: BMESDict, delta: int) -> tuple
 	:rtype: tuple[DatasetFeatures, DatasetLabels]
 	"""
 	X: DatasetFeatures = [] # list (learning set) of list (word) of dicts (chars), INPUT for crf training
-	Y: DatasetLabels = [] # list (learning set) of list (word) of labels (chars), INPUT for crf training
+	y: DatasetLabels = [] # list (learning set) of list (word) of labels (chars), INPUT for crf training
 
 	for word in words:
 		bounded: Word = f'[{word}]' # <w> and <\w> replaced with [ and ], respectively
@@ -31,9 +31,9 @@ def get_labeled_features(words: list[Word], bmes: BMESDict, delta: int) -> tuple
 				labels.append(cast(PredictionLabel, bmes[word][i-1]))
 
 		X.append(features)
-		Y.append(labels)
+		y.append(labels)
 
-	return X, Y
+	return X, y
 
 def get_unlabeled_features(words: list[Word], delta: int) -> DatasetFeatures:
 	"""
