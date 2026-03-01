@@ -3,8 +3,9 @@
 #
 
 import json
-from aliases import DataDict
+from aliases import DataDict, DatasetFeatures, DatasetLabels
 from process_data import process_data
+from features import get_labeled_features, get_unlabeled_features
 
 def run(config_json: str) -> str:
 	"""
@@ -21,12 +22,23 @@ def run(config_json: str) -> str:
 	config: dict = json.loads(config_json)
 
 	data: DataDict = process_data(config['train_tgt'], config['test_tgt'], config['select_src'])
-	print(data)
+
+	X_train: DatasetFeatures
+	y_train: DatasetLabels
+	X_train, y_train = get_labeled_features(data['train']['words'], data['train']['bmes'], config['delta'])
+
+	X_test: DatasetFeatures
+	y_test: DatasetLabels
+	X_test, y_test = get_labeled_features(data['test']['words'], data['test']['bmes'], config['delta'])
+
+	print(X_train)
+	print(y_train)
 
 if __name__ == '__main__':
 	config: dict = {
 		'train_tgt': 'hello\ngood!bye',
 		'test_tgt': 'what\nrun!ning',
-		'select_src': 'hello\nworld'
+		'select_src': 'hello\nworld',
+		'delta': 4
 	}
 	run(json.dumps(config))
