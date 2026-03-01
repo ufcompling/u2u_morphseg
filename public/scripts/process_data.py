@@ -90,7 +90,3 @@ def _get_bmes_labels(morphs: MorphList) -> str:
 			label.append('E')
 
 	return ''.join(label)
-
-if __name__ == '__main__':
-      from pprint import pprint
-      pprint(process_data('hello\ngood!bye', 'what\nfight!ing', 'hello\nworld'))
