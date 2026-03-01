@@ -39,6 +39,10 @@ if __name__ == '__main__':
 		'train_tgt': 'hello\ngood!bye',
 		'test_tgt': 'what\nrun!ning',
 		'select_src': 'hello\nworld',
+		'method': None,
+		'increment_size': 50,
+		'current_cycle': 0,
+		'max_crf_iterations': 100,
 		'delta': 4
 	}
 	run(json.dumps(config))
