@@ -1,5 +1,6 @@
 #output files
 data/finnish/100/
+test/data/finnish/100/
 
 # Logs
 logs
