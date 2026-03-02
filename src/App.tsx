@@ -1,5 +1,5 @@
-import { TurtleshellApp } from './components/turtleshell-app'
+import { MorphAnalyzerPage } from './pages/MorphAnalyzerPage'
 
 export default function App() {
-  return <TurtleshellApp />
+  return <MorphAnalyzerPage />
 }

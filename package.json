@@ -7,13 +7,15 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "clean": "rm -rf dist && tsc --build --clean"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.18",
     "dexie": "^4.3.0",
     "dexie-react-hooks": "^4.2.0",
-    "react": "^19.2.0",
+    "pyodide": "^0.29.3",
+    "react": "^19.2.4",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
@@ -32,6 +34,7 @@
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.4",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vitest": "^4.0.18"
   }
 }

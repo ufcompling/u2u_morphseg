@@ -8,6 +8,8 @@ The application allows users to perform sequence labeling using Conditional Rand
 * **Client-Side ML:** Training and inference happen on your device via Pyodide.
 * **Local Persistence:** Data is stored securely in your browser's IndexedDB.
 * **Manageable Labeling:** Uses Active Learning to increment annotated data a bit at a time, reducing the pressure of handling a large dataset all at once.
+* **Automated CI/CD**: Integrated with GitHub Actions for automated testing and seamless deployment to GitHub Pages.
+* **Serverless Deployment**: Fully functional as a static site; no expensive backend server required.
 
 ---
 
@@ -46,8 +48,12 @@ The application allows users to perform sequence labeling using Conditional Rand
 ├── test/                             # Test suite directory
 │   ├── features/                     # UI and integration tests
 │   └── services/                     # Database and engine tests
+|          └── db_tests/              # Database tests
 ├── index.html                        # Entry point (loads Pyodide CDN)
 ├── package.json                      # Dependencies and scripts
+├── Dockerfile                        # Build environment for Emscripten & Pyodide
+├── docker-compose.yml                # Orchestrates the Wasm wheel compilation process
+├── Makefile                          # Shortcut commands for building, running, and cleaning the backend environment
 ├── requirements-dev.txt              # Local build tools (pyodide-build, etc.)
 ├── setup.sh                          # Environment & Wasm build script
 └── vite.config.ts                    # Vite bundler configuration
@@ -57,6 +63,8 @@ The application allows users to perform sequence labeling using Conditional Rand
 ## 4. Prerequisites
 - **Node.js** (v20+) & **Bun.js**
 - **Python 3.12** (Must match Pyodide's environment)
+- **venv** (Python virtual environment)
+  - *Linux:* `sudo apt install python3.12-venv`
 - **Git** (with submodules support)
 - **C++ Compiler**: 
   - *macOS*: `xcode-select --install`
@@ -100,20 +108,35 @@ cd emsdk && ./emsdk install 3.1.58 && ./emsdk activate 3.1.58 && cd ..
 ---
 
 ## 8. Run the Automated Setup:
-This script creates a virtual environment, installs build tools, clones the CRF source, and builds the .whl file.
+This script creates a virtual environment, installs build tools, clones the CRF source, and builds the .whl file. This only needs to be run once during the initial environment setup.
+This automated setup is optimized for Linux and macOS. If you are on Windows, please follow the Docker instructions in section #9.
 ```
-source setup.sh
+RUN chmod +x setup.sh
+./setup.sh
 ```
 
-**Note for Windows Users**: Please run all setup and build commands inside Git Bash.
-1. Right-click in your project folder.
-2. Select "Git Bash Here."
-3. Run source setup.sh.
+---
+## 9. Set up the environment with Docker
+- install WSL: [Microsoft WSL Install Guide](https://learn.microsoft.com/en-us/windows/wsl/install) (Required for Windows).
+- install Docker: [Docker Install Guide](https://docs.docker.com/engine/install/). Ensure "Use the WSL 2 based engine" is checked in Docker settings.
+**One-Step Setup**:
+This will build the Docker image, start the service, and generate the necessary ML wheel files automatically.
+This only needs to be run once during the initial environment setup.
+```
+make
+
+```
+[!CAUTION]
+Permission Warning: Since the wheel files are generated inside a Docker container (running as root), they may be owned by the root user on your host machine. If you need to manually delete or move these files from your file explorer/terminal, you may need to use sudo:
+
+```
+sudo rm public/wheels/*.whl
+```
+```
 
 ---
 
-
-## 7. Running the app
+## 10. Running the app
 
 Install dependencies
 ```
@@ -137,10 +160,13 @@ bun run dev
 
 ---
 
-## 8. Access the Site
+## 11. Access the Site
 - Preview: http://localhost:4173/u2u_morphseg/
 - Development: http://localhost:5173/u2u_morphseg/
 - Github Pages: https://ufcompling.github.io/u2u_morphseg/
 
 ---
 
+## 9. Testing
+bun run vitest (<fileName>)
+```

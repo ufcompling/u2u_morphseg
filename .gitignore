@@ -1,5 +1,6 @@
 #output files
 data/finnish/100/
+test/data/finnish/100/
 
 # Logs
 logs
@@ -38,3 +39,6 @@ ENV/
 # Temporary build folders
 temp-crfsuite/
 emsdk/
+
+# Pyodide build environments
+.pyodide-xbuildenv*
