@@ -14,9 +14,9 @@ def process_data(train_tgt, test_tgt, select_src) -> DataDict:
 	:return: Dictionary containing train, test, and select data
 	:rtype: DataDict
 	"""
-	train_words, train_morphs, train_bmes = _parse_data(train_tgt)
-	test_words, test_morphs, test_bmes = _parse_data(test_tgt)
-	select_words, _, _ = _parse_data(select_src)
+	train_words, train_morphs, train_bmes = _parse_labeled_data(train_tgt)
+	test_words, test_morphs, test_bmes = _parse_labeled_data(test_tgt)
+	select_words, _, _ = _parse_unlabeled_data(select_src)
 
 	return {
 		'train': {
@@ -33,11 +33,6 @@ def process_data(train_tgt, test_tgt, select_src) -> DataDict:
 			'words': select_words
 		}
 	}
-
-def _parse_data(data: str, labeled: bool = True) -> tuple[list[Word], list[MorphList], BMESDict] | list[Word]:
-    if labeled:
-        return _parse_labeled_data(data)
-    return _parse_unlabeled_data
 
 def _parse_labeled_data(data: str) -> tuple[list[Word], list[MorphList], BMESDict]:
     words: list[Word] = []
