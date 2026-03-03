@@ -3,9 +3,12 @@
 #
 
 import json
+from sklearn_crfsuite import CRF
+
 from aliases import DataDict, DatasetFeatures, DatasetLabels
 from process_data import process_data
 from features import get_labeled_features, get_unlabeled_features
+from model import build_crf
 
 def run(config_json: str) -> str:
 	"""
@@ -31,8 +34,7 @@ def run(config_json: str) -> str:
 	y_test: DatasetLabels
 	X_test, y_test = get_labeled_features(data['test']['words'], data['test']['bmes'], config['delta'])
 
-	print(X_train)
-	print(y_train)
+	crf: CRF = build_crf(X_train, y_train, config['max_iterations'])
 
 if __name__ == '__main__':
 	config: dict = {
@@ -42,7 +44,7 @@ if __name__ == '__main__':
 		'method': None,
 		'increment_size': 50,
 		'current_cycle': 0,
-		'max_crf_iterations': 100,
+		'max_iterations': 1,
 		'delta': 4
 	}
 	run(json.dumps(config))
