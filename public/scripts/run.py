@@ -9,7 +9,7 @@ from aliases import DataDict, DatasetFeatures, DatasetLabels, MorphList
 from process_data import process_data
 from features import get_labeled_features, get_unlabeled_features
 from model import build_crf
-from evaluate import reconstruct_predictions
+from evaluate import reconstruct_predictions, evaluate_predictions
 
 def run(config_json: str) -> str:
 	"""
@@ -22,6 +22,9 @@ def run(config_json: str) -> str:
 		- current_cycle: int
 		- max_crf_iterations: int
 		- delta: int
+
+	Eventually, we want to move from the config containing the entire train, test, and select file content
+	to only containing the file path, so we can just read from it.
 	"""
 	config: dict = json.loads(config_json)
 
@@ -40,10 +43,16 @@ def run(config_json: str) -> str:
 	y_test_predict: DatasetLabels = crf.predict(X_test)
 	test_predictions: list[MorphList] = reconstruct_predictions(y_test_predict, data['test']['words'])
 
+	precision: float
+	recall: float
+	f1: float
+	precision, recall, f1 = evaluate_predictions(data['test']['morphs'], test_predictions)
+	print(precision, recall, f1)
+
 if __name__ == '__main__':
 	config: dict = {
 		'train_tgt': 'hello\ngood!bye\ngood!night',
-		'test_tgt': 'what\ngood!thing',
+		'test_tgt': 'gooden\ngood!thing',
 		'select_src': 'hello\nworld',
 		'method': None,
 		'increment_size': 50,

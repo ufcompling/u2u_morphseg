@@ -1,3 +1,5 @@
+from statistics import mean
+
 from aliases import DatasetLabels, Word, MorphList
 
 def reconstruct_predictions(pred_labels: DatasetLabels, words: list[Word]) -> list[MorphList]:
@@ -47,3 +49,49 @@ def reconstruct_predictions(pred_labels: DatasetLabels, words: list[Word]) -> li
 		predictions.append(morphs)
 
 	return predictions
+
+def evaluate_predictions(gold_word: list[MorphList], pred_word: list[MorphList]) -> tuple[float, float, float]:
+	"""
+	Evaluates predicted morphemes against gold standard morphemes using precision, recall, and F1 score.
+	
+	:param gold_word: The list of gold standard morpheme lists
+	:type gold_word: list[MorphList]
+	:param pred_word: The list of predicted morpheme lists
+	:type pred_word: list[MorphList]
+	:return: The average precision, recall, and F1 score across all words
+	:rtype: tuple[float, float, float]
+	"""
+	precision_scores: list[float] = []
+	recall_scores: list[float] = []
+	f1_scores: list[float] = []
+
+	for gold_morphs, pred_morphs in zip(gold_word, pred_word):
+		precision, recall, f1 = _calculate_metrics(gold_morphs, pred_morphs)
+		precision_scores.append(precision)
+		recall_scores.append(recall)
+		f1_scores.append(f1)
+
+	average_precision, average_recall, average_f1 = (round(mean(x), 2) for x in (precision_scores, recall_scores, f1_scores))
+	return average_precision, average_recall, average_f1
+
+def _calculate_metrics(y_true: MorphList, y_pred: MorphList) -> tuple[float, float, float]:
+	"""
+	Calculates precision, recall, and F1 score for predicted morphemes.
+	
+	:param y_true: The true morpheme list
+	:type y_true: MorphList
+	:param y_pred: The predicted morpheme list
+	:type y_pred: MorphList
+	:return: The precision, recall, and F1 score
+	:rtype: tuple[float, float, float]
+	"""
+	correct_total: int = sum(1 for m in y_pred if m in y_true)
+
+	if not y_pred:
+		return 0, 0, 0
+
+	precision: float = correct_total / len(y_pred) * 100
+	recall: float = correct_total / len(y_true) * 100
+	f1: float = 2 * (precision * recall) / (precision + recall) if precision + recall != 0 else 0
+
+	return round(precision, 2), round(recall, 2), round(f1, 2)
