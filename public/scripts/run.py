@@ -26,47 +26,63 @@ def run(config_json: str) -> str:
 	Eventually, we want to move from the config containing the entire train, test, and select file content
 	to only containing the file path, so we can just read from it.
 	"""
-	config: dict = json.loads(config_json)
+	try:
+		config: dict = json.loads(config_json)
 
-	data: DataDict = process_data(config['train_tgt'], config['test_tgt'], config['select_src'])
+		data: DataDict = process_data(config['train_tgt'], config['test_tgt'], config['select_src'])
 
-	X_train: DatasetFeatures
-	y_train: DatasetLabels
-	X_train, y_train = get_labeled_features(data['train']['words'], data['train']['bmes'], config['delta'])
+		X_train: DatasetFeatures
+		y_train: DatasetLabels
+		X_train, y_train = get_labeled_features(data['train']['words'], data['train']['bmes'], config['delta'])
 
-	X_test: DatasetFeatures
-	X_test, _ = get_labeled_features(data['test']['words'], data['test']['bmes'], config['delta'])
+		X_test: DatasetFeatures
+		X_test, _ = get_labeled_features(data['test']['words'], data['test']['bmes'], config['delta'])
 
-	crf: CRF = build_crf(X_train, y_train, config['max_iterations'])
+		crf: CRF = build_crf(X_train, y_train, config['max_iterations'])
 
-	y_test_predict: DatasetLabels = crf.predict(X_test)
-	test_predictions: list[MorphList] = reconstruct_predictions(y_test_predict, data['test']['words'])
+		y_test_predict: DatasetLabels = crf.predict(X_test)
+		test_predictions: list[MorphList] = reconstruct_predictions(y_test_predict, data['test']['words'])
 
-	precision: float
-	recall: float
-	f1: float
-	precision, recall, f1 = evaluate_predictions(data['test']['morphs'], test_predictions)
-	evaluation_content: str = format_evaluation()
-	
-	X_select = get_unlabeled_features(data['select']['words'], config['delta'])
-	y_select_predict: DatasetLabels = crf.predict(X_select)
-	marginals: DatasetMarginals = crf.predict_marginals(X_select)
-	confidence_data: list[ConfidenceData] = get_confidence_data(data['select']['words'], y_select_predict, marginals)
-	
-	increment_words: list[str] = [word for word, _ in confidence_data[:config['increment_size']]]
-	residual_words: list[str] = [word for word, _ in confidence_data[config['increment_size']:]]
+		precision: float
+		recall: float
+		f1: float
+		precision, recall, f1 = evaluate_predictions(data['test']['morphs'], test_predictions)
+		evaluation_content: str = format_evaluation(
+			data['test']['words'], data['test']['morphs'], test_predictions, precision, recall, f1
+		)
 
-	return json.dumps({
-		'precision': precision,
-		'recall': recall,
-		'f1': f1,
-		'incrementWords': increment_words,
-		'residualCount': len(residual_words),
-		'incrementContent': '\n'.join(increment_words),
-		'residualContent': '\n'.join(residual_words),
-		'evaluationContent': evaluation_content,
-		'error': None,
-    })
+		X_select = get_unlabeled_features(data['select']['words'], config['delta'])
+		y_select_predict: DatasetLabels = crf.predict(X_select)
+		marginals: DatasetMarginals = crf.predict_marginals(X_select)
+		confidence_data: list[ConfidenceData] = get_confidence_data(data['select']['words'], y_select_predict, marginals)
+
+		increment_words: list[str] = [word for word, _ in confidence_data[:config['increment_size']]]
+		residual_words: list[str] = [word for word, _ in confidence_data[config['increment_size']:]]
+
+		return json.dumps({
+			'precision': precision,
+			'recall': recall,
+			'f1': f1,
+			'incrementWords': increment_words,
+			'residualCount': len(residual_words),
+			'incrementContent': '\n'.join(increment_words),
+			'residualContent': '\n'.join(residual_words),
+			'evaluationContent': evaluation_content,
+			'error': None,
+		})
+	except Exception:
+		import traceback
+		return json.dumps({
+            'precision': 0.0,
+            'recall': 0.0,
+            'f1': 0.0,
+            'incrementWords': [],
+            'residualCount': 0,
+            'incrementContent': '',
+            'residualContent': '',
+            'evaluationContent': '',
+            'error': traceback.format_exc(),
+        })
 
 if __name__ == '__main__':
 	config: dict = {
