@@ -52,7 +52,12 @@ def run(config_json: str) -> str:
 	y_select_predict: DatasetLabels = crf.predict(X_select)
 	marginals: DatasetMarginals = crf.predict_marginals(X_select)
 	confidence_data: list[ConfidenceData] = get_confidence_data(data['select']['words'], y_select_predict, marginals)
-	print(confidence_data)
+	
+	increment_words: list[str] = [word for word, _ in confidence_data[:config['increment_size']]]
+	residual_words: list[str] = [word for word, _ in confidence_data[config['increment_size']:]]
+
+	print(increment_words)
+	print(residual_words)
 
 if __name__ == '__main__':
 	config: dict = {
@@ -60,9 +65,9 @@ if __name__ == '__main__':
 		'test_tgt': 'goodie\ngood!thing',
 		'select_src': 'good!bye\ngoodie\nnonsense',
 		'method': None,
-		'increment_size': 50,
+		'increment_size': 1,
 		'current_cycle': 0,
-		'max_iterations': 1,
+		'max_iterations': 5,
 		'delta': 4
 	}
 	run(json.dumps(config))
