@@ -1,6 +1,6 @@
 from statistics import mean
 
-from aliases import DatasetLabels, Word, MorphList
+from aliases import DatasetLabels, Word, MorphList, DatasetMarginals, ConfidenceData
 
 def reconstruct_predictions(pred_labels: DatasetLabels, words: list[Word]) -> list[MorphList]:
 	"""
@@ -73,6 +73,27 @@ def evaluate_predictions(gold_word: list[MorphList], pred_word: list[MorphList])
 
 	average_precision, average_recall, average_f1 = (round(mean(x), 2) for x in (precision_scores, recall_scores, f1_scores))
 	return average_precision, average_recall, average_f1
+
+def get_confidence_data(words: list[Word], predictions: DatasetLabels, marginals: DatasetMarginals) -> list[ConfidenceData]:
+	"""
+	Calculates confidence scores for a list of words based on predictions and marginals.
+	
+	:param words: The list of words to calculate confidence scores for
+	:type words: list[Word]
+	:param predictions: The predictions for each word in the list
+	:type predictions: DatasetLabels
+	:param marginals: The marginal probabilities for each word in the list
+	:type marginals: DatasetMarginals
+	:return: A list of each word and its confidence score, sorted lowest to highest
+	:rtype: list[ConfidenceData]
+	"""
+	confidence_data: list[ConfidenceData] = []
+	for word, prediction, marginal in zip(words, predictions, marginals):
+		# Remove '[' and ']' so that the characters match up with the labels
+		boundless_pred, boundless_marg = prediction[1:-1], marginal[1:-1]
+		confidence_data.append((word, sum(boundless_marg[i][label] for i, label in enumerate(boundless_pred)) / len(word)))
+
+	return sorted(confidence_data, key=lambda x: x[1])
 
 def _calculate_metrics(y_true: MorphList, y_pred: MorphList) -> tuple[float, float, float]:
 	"""

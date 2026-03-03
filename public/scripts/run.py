@@ -5,11 +5,11 @@
 import json
 from sklearn_crfsuite import CRF
 
-from aliases import DataDict, DatasetFeatures, DatasetLabels, MorphList
+from aliases import DataDict, DatasetFeatures, DatasetLabels, MorphList, DatasetMarginals, ConfidenceData
 from process_data import process_data
 from features import get_labeled_features, get_unlabeled_features
 from model import build_crf
-from evaluate import reconstruct_predictions, evaluate_predictions
+from evaluate import reconstruct_predictions, evaluate_predictions, get_confidence_data
 
 def run(config_json: str) -> str:
 	"""
@@ -47,13 +47,18 @@ def run(config_json: str) -> str:
 	recall: float
 	f1: float
 	precision, recall, f1 = evaluate_predictions(data['test']['morphs'], test_predictions)
-	print(precision, recall, f1)
+	
+	X_select = get_unlabeled_features(data['select']['words'], config['delta'])
+	y_select_predict: DatasetLabels = crf.predict(X_select)
+	marginals: DatasetMarginals = crf.predict_marginals(X_select)
+	confidence_data: list[ConfidenceData] = get_confidence_data(data['select']['words'], y_select_predict, marginals)
+	print(confidence_data)
 
 if __name__ == '__main__':
 	config: dict = {
 		'train_tgt': 'hello\ngood!bye\ngood!night',
-		'test_tgt': 'gooden\ngood!thing',
-		'select_src': 'hello\nworld',
+		'test_tgt': 'goodie\ngood!thing',
+		'select_src': 'good!bye\ngoodie\nnonsense',
 		'method': None,
 		'increment_size': 50,
 		'current_cycle': 0,

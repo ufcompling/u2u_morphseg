@@ -12,8 +12,7 @@ DatasetFeatures: TypeAlias = list[WordFeatures]
 WordLabels: TypeAlias = list[PredictionLabel]
 DatasetLabels: TypeAlias = list[WordLabels]
 
-ConfidenceScore: TypeAlias = float
-ConfidenceData: TypeAlias = tuple[Word, list[Morph], ConfidenceScore]
+ConfidenceData: TypeAlias = tuple[Word, float]
 
 CharMarginals: TypeAlias = dict[PredictionLabel, float]
 WordMarginals: TypeAlias = list[CharMarginals]

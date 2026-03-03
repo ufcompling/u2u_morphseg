@@ -29,7 +29,9 @@ def process_data(train_tgt, test_tgt, select_src) -> DataDict:
 			'morphs': test_morphs,
 			'bmes': test_bmes
 		},
-		'select': select_words
+		'select': {
+			'words': select_words
+		}
 	}
 
 def _parse_data(data: str, labeled: bool = True) -> tuple[list[Word], list[MorphList], BMESDict] | list[Word]:
