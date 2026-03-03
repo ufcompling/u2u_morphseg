@@ -12,9 +12,6 @@ DatasetFeatures: TypeAlias = list[WordFeatures]
 WordLabels: TypeAlias = list[PredictionLabel]
 DatasetLabels: TypeAlias = list[WordLabels]
 
-WordChars: TypeAlias = list[str]
-DatasetChars: TypeAlias = list[WordChars]
-
 ConfidenceScore: TypeAlias = float
 ConfidenceData: TypeAlias = tuple[Word, list[Morph], ConfidenceScore]
 
