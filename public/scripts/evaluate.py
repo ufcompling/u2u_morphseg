@@ -115,4 +115,4 @@ def _calculate_metrics(y_true: MorphList, y_pred: MorphList) -> tuple[float, flo
 	recall: float = correct_total / len(y_true)
 	f1: float = 2 * (precision * recall) / (precision + recall) if precision + recall != 0 else 0
 
-	return round(precision, 2), round(recall, 2), round(f1, 2)
+	return round(precision, 4), round(recall, 4), round(f1, 4)
