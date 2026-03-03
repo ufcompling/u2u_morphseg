@@ -9,7 +9,7 @@ from aliases import DataDict, DatasetFeatures, DatasetLabels, MorphList, Dataset
 from process_data import process_data
 from features import get_labeled_features, get_unlabeled_features
 from model import build_crf
-from evaluate import reconstruct_predictions, evaluate_predictions, get_confidence_data
+from evaluate import reconstruct_predictions, evaluate_predictions, get_confidence_data, format_evaluation
 
 def run(config_json: str) -> str:
 	"""
@@ -35,8 +35,7 @@ def run(config_json: str) -> str:
 	X_train, y_train = get_labeled_features(data['train']['words'], data['train']['bmes'], config['delta'])
 
 	X_test: DatasetFeatures
-	y_test: DatasetLabels
-	X_test, y_test = get_labeled_features(data['test']['words'], data['test']['bmes'], config['delta'])
+	X_test, _ = get_labeled_features(data['test']['words'], data['test']['bmes'], config['delta'])
 
 	crf: CRF = build_crf(X_train, y_train, config['max_iterations'])
 
@@ -47,6 +46,7 @@ def run(config_json: str) -> str:
 	recall: float
 	f1: float
 	precision, recall, f1 = evaluate_predictions(data['test']['morphs'], test_predictions)
+	evaluation_content: str = format_evaluation()
 	
 	X_select = get_unlabeled_features(data['select']['words'], config['delta'])
 	y_select_predict: DatasetLabels = crf.predict(X_select)
@@ -56,8 +56,17 @@ def run(config_json: str) -> str:
 	increment_words: list[str] = [word for word, _ in confidence_data[:config['increment_size']]]
 	residual_words: list[str] = [word for word, _ in confidence_data[config['increment_size']:]]
 
-	print(increment_words)
-	print(residual_words)
+	return json.dumps({
+		'precision': precision,
+		'recall': recall,
+		'f1': f1,
+		'incrementWords': increment_words,
+		'residualCount': len(residual_words),
+		'incrementContent': '\n'.join(increment_words),
+		'residualContent': '\n'.join(residual_words),
+		'evaluationContent': evaluation_content,
+		'error': None,
+    })
 
 if __name__ == '__main__':
 	config: dict = {

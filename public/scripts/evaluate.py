@@ -116,3 +116,17 @@ def _calculate_metrics(y_true: MorphList, y_pred: MorphList) -> tuple[float, flo
 	f1: float = 2 * (precision * recall) / (precision + recall) if precision + recall != 0 else 0
 
 	return round(precision, 4), round(recall, 4), round(f1, 4)
+
+def format_evaluation(words: list[Word], gold_morphs: list[MorphList], pred_morphs: list[MorphList], 
+					  precision: float, recall: float, f1: float) -> str:
+	lines = [
+        '# TurtleShell Evaluation Report',
+        f'# Precision: {precision:.2f}  Recall: {recall:.2f}  F1: {f1:.2f}',
+        '#',
+        '# word\tgold\tpredicted',
+    ]
+	for word, gold, pred in zip(words, gold_morphs, pred_morphs):
+		gold_seg = '!'.join(gold)
+		pred_seg = '!'.join(pred)
+		lines.append(f'{word}\t{gold_seg}\t{pred_seg}')
+		return '\n'.join(lines) + '\n'
