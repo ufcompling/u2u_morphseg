@@ -5,10 +5,11 @@
 import json
 from sklearn_crfsuite import CRF
 
-from aliases import DataDict, DatasetFeatures, DatasetLabels
+from aliases import DataDict, DatasetFeatures, DatasetLabels, MorphList
 from process_data import process_data
 from features import get_labeled_features, get_unlabeled_features
 from model import build_crf
+from evaluate import reconstruct_predictions
 
 def run(config_json: str) -> str:
 	"""
@@ -36,10 +37,13 @@ def run(config_json: str) -> str:
 
 	crf: CRF = build_crf(X_train, y_train, config['max_iterations'])
 
+	y_test_predict: DatasetLabels = crf.predict(X_test)
+	test_predictions: list[MorphList] = reconstruct_predictions(y_test_predict, data['test']['words'])
+
 if __name__ == '__main__':
 	config: dict = {
-		'train_tgt': 'hello\ngood!bye',
-		'test_tgt': 'what\nrun!ning',
+		'train_tgt': 'hello\ngood!bye\ngood!night',
+		'test_tgt': 'what\ngood!thing',
 		'select_src': 'hello\nworld',
 		'method': None,
 		'increment_size': 50,
