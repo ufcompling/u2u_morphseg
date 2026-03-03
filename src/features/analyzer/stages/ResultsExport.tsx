@@ -25,7 +25,7 @@ interface ResultsExportProps {
 
 export function ResultsExportStage({
   result,
-  previousResult, //TODO:: DATABASE
+  // previousResult, //TODO:: DATABASE
   cycleHistory,
   isRunningInference,
   inferenceComplete,
