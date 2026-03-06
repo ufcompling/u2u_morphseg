@@ -14,9 +14,28 @@ import {
 export function MorphAnalyzer() {
   const ts = useTurtleshell();
 
+  const notReady = !ts.pyodideReady || !ts.indexedDBReady;
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 md:p-8 relative">
       <TurtleShellBackground />
+
+      {/* Blocking overlay while not ready */}
+      {notReady && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-card/95 rounded-xl px-8 py-6 shadow-xl flex flex-col items-center">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mb-4" />
+            <p className="font-mono text-sm text-foreground mb-1">Initializing environment…</p>
+            <div className="flex gap-2 mt-2">
+              <StatusIndicator label="py" isReady={ts.pyodideReady} />
+              <StatusIndicator label="db" isReady={ts.indexedDBReady} />
+            </div>
+            {ts.pyodideLoading && (
+              <p className="font-mono text-xs text-muted-foreground mt-2">Loading Pyodide…</p>
+            )}
+          </div>
+        </div>
+      )}
 
       <main className="w-full max-w-4xl relative z-10">
         <div className="bg-card/98 backdrop-blur-3xl border border-border/20 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden ring-1 ring-white/5">
@@ -104,6 +123,7 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           onRemoveFile={ts.handleRemoveFile}
           onNext={() => ts.goToStage("config")}
           isUploading={ts.isUploading}
+          pyodideReady={ts.pyodideReady}
         />
       );
 

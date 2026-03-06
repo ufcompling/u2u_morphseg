@@ -19,21 +19,29 @@ export const initPyodide = async () => {
       import micropip
       await micropip.install('${window.location.origin}/u2u_morphseg/wheels/python_crfsuite-0.9.12-cp312-cp312-pyodide_2024_0_wasm32.whl')
       await micropip.install('sklearn-crfsuite')
+      await micropip.install('PyPDF2')
+      await micropip.install('reportlab')
+      await micropip.install('python-docx')
     `);
-    
-    const response = await fetch('/u2u_morphseg/scripts/db_worker.py');
-    const code = await response.text();
     pyodideInstance.FS.mkdir('/scripts');
     try {
       pyodideInstance.FS.mkdir('/data');
     } catch (e) {
       // Ignore if already exists
     }  
+    await pyodideInstance.runPythonAsync("import sys; sys.path.append('/scripts')");
+
+    // Load db_worker.py into Pyodide's filesystem and import it
+    const response = await fetch('/u2u_morphseg/scripts/db_worker.py');
+    const code = await response.text();
     pyodideInstance.FS.mount(pyodideInstance.FS.filesystems.IDBFS, {}, '/data');
     pyodideInstance.FS.writeFile('/scripts/db_worker.py', code);
 
-    await pyodideInstance.runPythonAsync("import sys; sys.path.append('/scripts')");
-    await pyodideInstance.runPythonAsync("import db_worker");
+    // Load binary_extractor.py into Pyodide's filesystem and import it
+    const binaryResponse = await fetch('/u2u_morphseg/scripts/binary_extractor.py');
+    const binaryCode = await binaryResponse.text();
+    pyodideInstance.FS.writeFile('/scripts/binary_extractor.py', binaryCode);
+
     await syncPyodideFS(pyodideInstance);
     initPromise = null;
     return pyodideInstance;
@@ -55,6 +63,7 @@ export async function syncPyodideFS(pyodide: any): Promise<void> {
     });
   });
 }
+
 export const getPyodide = () => {
   if (!pyodideInstance) {
     throw new Error("Pyodide has not been initialized yet.");

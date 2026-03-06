@@ -1,15 +1,14 @@
+// Used Copilot's autofill
 import { type rawData, mapData } from './dataHelpers';
 import { syncPyodideFS } from '../../pyodide/pyodideService';
 
-export async function importFiles(pyodide: any, files: FileList, setStatus: (_status: string) => void) {
-  setStatus('Importing...');
+export async function importFiles(pyodide: any, files: FileList): Promise<void> {
   const allFiles = await pyodide.runPythonAsync(`import os, json; json.dumps(os.listdir('/data'))`);
   const fileNames = new Set(JSON.parse(allFiles));
   const rawDataArray: rawData[] = [];
 
   for (const file of Array.from(files)) {
     if (fileNames.has(file.name)) {
-      setStatus(`ID collision for ${file.name}. Skipping.`);
       continue;
     }
     let fileContent: string | Uint8Array;
@@ -29,18 +28,22 @@ export async function importFiles(pyodide: any, files: FileList, setStatus: (_st
   const fileDataArray = mapData(rawDataArray);
   for (const fileData of fileDataArray) {
     try {
-      if (fileData.fileType === 'binary') {
-        pyodide.globals.set('b64_content', fileData.fileContent);
-        await pyodide.runPythonAsync(`import db_worker; db_worker.save_base64('/data/${fileData.fileName}', b64_content)`);
-        await pyodide.runPythonAsync('globals().pop("b64_content", None)');
-      } else {
-        await pyodide.runPythonAsync(`import db_worker; db_worker.save_file('/data/${fileData.fileName}', """${fileData.fileContent}""")`);
+      if (fileData.fileContent instanceof Uint8Array) {
+        pyodide.globals.set('data_bytes', fileData.fileContent);
+        await pyodide.runPythonAsync(
+          `import db_worker; db_worker.save_binary('/data/${fileData.fileName}', data_bytes)`
+        );
+        await pyodide.runPythonAsync("globals().pop('data_bytes', None)");
+      } else if (typeof fileData.fileContent === 'string') {
+        pyodide.globals.set('text_data', fileData.fileContent);
+        await pyodide.runPythonAsync(
+          `import db_worker; db_worker.save_text('/data/${fileData.fileName}', text_data)`
+        );
+        await pyodide.runPythonAsync("globals().pop('text_data', None)");
       }
     } catch (error) {
       console.error(`Error importing file ${fileData.fileName}:`, error);
-      setStatus(`Failed to import ${fileData.fileName}`);
     }
   }
   await syncPyodideFS(pyodide);
-  setStatus('Files imported successfully.');
 }

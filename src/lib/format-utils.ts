@@ -67,12 +67,12 @@ export function triggerDownload(content: string, filename: string): void {
 
 /** Look up a file's raw content by its assigned role. Returns "" if not found. */
 export function getFileContent(files: StoredFile[], role: FileRole): string {
-  return files.find((f) => f.role === role)?.content ?? "";
+  return files.find((f) => f.fileRole === role)?.fileContent ?? "";
 }
 
 /** Look up the full StoredFile object by its assigned role. */
 export function getFileByRole(files: StoredFile[], role: FileRole): StoredFile | undefined {
-  return files.find((f) => f.role === role);
+  return files.find((f) => f.fileRole === role);
 }
 
 /** Derive which stages the user has completed based on the current stage position. */

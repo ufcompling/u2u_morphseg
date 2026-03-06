@@ -15,6 +15,7 @@ interface DatasetIngestionProps {
   onRemoveFile: (fileId: string) => void;
   onNext: () => void;
   isUploading: boolean;
+  pyodideReady: boolean;
 }
 
 export function DatasetIngestion({
@@ -24,16 +25,17 @@ export function DatasetIngestion({
   onRemoveFile,
   onNext,
   isUploading,
+  pyodideReady,
 }: DatasetIngestionProps) {
-  const annotatedCount = files.filter((f) => f.role === "annotated").length;
-  const unannotatedCount = files.filter((f) => f.role === "unannotated").length;
-  const evaluationCount = files.filter((f) => f.role === "evaluation").length;
+  const annotatedCount = files.filter((f) => f.fileRole === "annotated").length;
+  const unannotatedCount = files.filter((f) => f.fileRole === "unannotated").length;
+  const evaluationCount = files.filter((f) => f.fileRole === "evaluation").length;
   const hasRequiredFiles = annotatedCount > 0 && unannotatedCount > 0;
 
   return (
     <div className="flex flex-col gap-0">
       {/* Upload zone */}
-      <UploadZone onUpload={onUpload} isUploading={isUploading} />
+      <UploadZone onUpload={onUpload} isUploading={isUploading} pyodideReady={pyodideReady} />
 
       {/* Role summary bar */}
       {files.length > 0 && (
@@ -57,7 +59,7 @@ export function DatasetIngestion({
           <div className="divide-y divide-border/10">
             {files.map((file) => (
               <FileRow
-                key={file.id}
+                key={file.filePath}
                 file={file}
                 onAssignRole={onAssignRole}
                 onRemove={onRemoveFile}
@@ -92,9 +94,11 @@ export function DatasetIngestion({
 function UploadZone({
   onUpload,
   isUploading,
+  pyodideReady,
 }: {
   onUpload: (files: FileList | null) => void;
   isUploading: boolean;
+  pyodideReady: boolean;
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -129,6 +133,7 @@ function UploadZone({
           onChange={(e: ChangeEvent<HTMLInputElement>) => onUpload(e.target.files)}
           className="hidden"
           accept=".tgt,.csv,.txt,.tsv,.json"
+          disabled={!pyodideReady}
         />
 
         <div
@@ -179,7 +184,7 @@ function FileRow({
   onAssignRole: (fileId: string, role: FileRole) => void;
   onRemove: (fileId: string) => void;
 }) {
-  const extension = file.name.split(".").pop()?.toLowerCase() || "";
+  const extension = file.fileName.split(".").pop()?.toLowerCase() || "";
 
   return (
     <div className="group flex items-center gap-4 px-6 py-3.5 hover:bg-secondary/5 transition-colors">
@@ -192,10 +197,10 @@ function FileRow({
 
       {/* File name + size */}
       <div className="flex-1 min-w-0">
-        <p className="font-mono text-sm text-foreground truncate">{file.name}</p>
+        <p className="font-mono text-sm text-foreground truncate">{file.fileName}</p>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="font-mono text-[10px] text-muted-foreground/40">
-            {formatSize(file.size)}
+            {formatSize(file.fileSize)}
           </span>
           <ValidationBadge status={file.validationStatus} />
         </div>
@@ -203,8 +208,8 @@ function FileRow({
 
       {/* Role selector */}
       <select
-        value={file.role ?? ""}
-        onChange={(e) => onAssignRole(file.id, e.target.value as FileRole)}
+        value={file.fileRole ?? ""}
+        onChange={(e) => onAssignRole(file.filePath, e.target.value as FileRole)}
         className="bg-card border border-border/20 rounded-lg px-3 py-2 font-mono text-[11px] text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary/30 min-w-[130px]"
       >
         <option value="" disabled className="bg-card text-foreground">
@@ -217,7 +222,7 @@ function FileRow({
 
       {/* Remove button */}
       <button
-        onClick={() => onRemove(file.id)}
+        onClick={() => onRemove(file.filePath)}
         className="p-2 rounded-lg text-muted-foreground/30 hover:text-red-400 hover:bg-red-400/10 transition-all opacity-0 group-hover:opacity-100"
         aria-label="Remove file"
       >

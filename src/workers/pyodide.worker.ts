@@ -181,6 +181,8 @@ exec(open('/tmp/crf_bridge.py').read())
 // ── Training cycle ──────────────────────────────────────────────────────────
 
 async function runCycle(config: TrainingCycleConfig): Promise<void> {
+  // Ensure pyodide is initialized before use
+  if (!pyodide) await initPyodide();
   const effectiveConfig = { ...config, workDir: DEFAULT_WORK_DIR };
 
   step("init");
@@ -240,6 +242,8 @@ async function runCycle(config: TrainingCycleConfig): Promise<void> {
 }
 
 async function runInference(config: { residualTgt: string; delta?: number; workDir?: string }): Promise<void> {
+  // Ensure pyodide is initialized before use
+  if (!pyodide) await initPyodide();
   const effectiveConfig = { ...config, workDir: DEFAULT_WORK_DIR };
 
   pyodide.globals.set("_inference_config_json", JSON.stringify(effectiveConfig));
@@ -263,6 +267,7 @@ async function runInference(config: { residualTgt: string; delta?: number; workD
 
 function cleanVfs(workDir: string): void {
   try {
+    if (!pyodide) return;
     pyodide.runPython(`
 import os, shutil
 for root, dirs, files in os.walk('${workDir}'):
@@ -283,6 +288,7 @@ for d in ['/tmp/__pycache__']:
 
 async function wipeVfs(): Promise<void> {
   try {
+    if (!pyodide) return;
     pyodide.runPython(`
 import os, shutil
 work_dir = '${DEFAULT_WORK_DIR}'

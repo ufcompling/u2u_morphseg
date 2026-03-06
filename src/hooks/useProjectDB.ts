@@ -3,26 +3,26 @@
  * Location: src/hooks/useProjectDB.ts
  *
  * Purpose:
- *   IndexedDB persistence layer for the TurtleShell project. Handles
+ *   IDBFS persistence layer for the TurtleShell project. Handles
  *   storage and retrieval of project metadata, uploaded files, cycle
  *   history, and per-word annotation state. All writes are async and
  *   fire-and-forget from the UI's perspective.
  *
  */
 
+import { type fileData } from "../services/database/helpers/dataHelpers";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { db, type ProjectRow, type FileRow, type CycleRow, type AnnotationRow } from "../lib/db";
+import { db, type CycleRow, type AnnotationRow } from "../lib/db";
 import {
   type WorkflowStage,
   type ModelConfig,
-  type FileRole,
-  type StoredFile,
   type CycleSnapshot,
   type AnnotationWord,
   type MorphemeBoundary,
   DEFAULT_MODEL_CONFIG,
 } from "../lib/types";
 import { log } from "../lib/logger";
+import { getPyodide } from "../services/pyodide/pyodideService"
 
 const logger = log('project-db');
 
@@ -44,20 +44,23 @@ export interface UseProjectDBReturn {
   // ── Loaded state ──
   /** Null on first-ever visit (no project row exists yet). */
   project: ProjectState | null;
-  files: StoredFile[];
+  files: fileData[];
   cycleHistory: CycleSnapshot[];
+
+  // Expose pyodide instance for consumers
+  pyodide: any;
 
   // ── Project metadata ──
   initProject: () => Promise<void>;
   saveProjectMeta: (partial: Partial<ProjectState>) => Promise<void>;
 
   // ── Files ──
-  saveFile: (file: Omit<StoredFile, "id">) => Promise<StoredFile>;
-  saveFiles: (files: Omit<StoredFile, "id">[]) => Promise<StoredFile[]>;
-  updateFileRole: (fileId: string, role: FileRole) => Promise<void>;
-  updateFileContent: (fileId: string, content: string) => Promise<void>;
-  updateFileValidation: (fileId: string, status: "valid" | "invalid" | "pending") => Promise<void>;
-  removeFile: (fileId: string) => Promise<void>;
+  saveFile: (pyodide: any, fileName: string, fileContent: string) => Promise<void>;
+  importFiles: (pyodide: any, files: FileList) => Promise<void>;
+  deleteFile: (pyodide: any, filePath: string) => Promise<void>;
+  clearFiles: (pyodide: any, directory?: string) => Promise<void>;
+  readFile: (pyodide: any, filePath: string) => Promise<{fileContent: string; fileType: 'text' | 'pdf' | 'docx'}>;
+  loadFiles: (pyodide: any) => Promise<fileData[]>;
 
   // ── Cycles ──
   saveCycle: (cycle: Omit<CycleSnapshot, "iteration"> & {
@@ -86,63 +89,57 @@ export interface UseProjectDBReturn {
   clearAll: () => Promise<void>;
 }
 
-// ── Constants ────────────────────────────────────────────────────────────────
-
-const PROJECT_ID = 1;
-
 // ── Hook ─────────────────────────────────────────────────────────────────────
-
 export function useProjectDB(): UseProjectDBReturn {
   const [dbReady, setDbReady] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
   const [project, setProject] = useState<ProjectState | null>(null);
-  const [files, setFiles] = useState<StoredFile[]>([]);
+  const [files, setFiles] = useState<fileData[]>([]);
   const [cycleHistory, setCycleHistory] = useState<CycleSnapshot[]>([]);
 
   // Guard against mutations before the DB is ready
   const ready = useRef(false);
+  const [pyodide, setPyodide] = useState<any>(null);
 
   // ── Initial load ───────────────────────────────────────────────────────────
 
   useEffect(() => {
     let cancelled = false;
-
     async function load() {
       try {
-        // Project singleton
-        const row = await db.project.get(PROJECT_ID);
-        if (row && !cancelled) {
+        const pyodideInstance = getPyodide();
+        setPyodide(pyodideInstance);
+        // Project metadata
+        const projectResult = await db.readFile(pyodideInstance, "project.json");
+        if (projectResult && projectResult.fileContent && !cancelled) {
+          const meta = JSON.parse(projectResult.fileContent);
           setProject({
-            currentStage: row.currentStage,
-            modelConfig: row.modelConfig,
-            currentIteration: row.currentIteration,
-            cumulativeSelectSize: row.cumulativeSelectSize,
+            currentStage: meta.currentStage as WorkflowStage,
+            modelConfig: meta.modelConfig,
+            currentIteration: meta.currentIteration,
+            cumulativeSelectSize: meta.cumulativeSelectSize,
           });
         }
 
-        // Files — map from DB rows to the StoredFile shape the UI expects
-        const fileRows = await db.files.toArray();
-        if (!cancelled) {
-          setFiles(fileRows.map(fileRowToStoredFile));
+        // Files
+        const loadedFiles = await db.loadFiles(pyodideInstance);
+        if (!cancelled) setFiles(loadedFiles);
+        // Cycles
+        const cyclesResult = await db.readFile(pyodideInstance, "cycles.json");
+        if (cyclesResult && cyclesResult.fileContent && !cancelled) {
+          const cyclesArr = JSON.parse(cyclesResult.fileContent);
+          setCycleHistory(Array.isArray(cyclesArr) ? cyclesArr.map(cycleRowToSnapshot) : []);
         }
-
-        // Cycle history — ordered by cycleNumber for the timeline
-        const cycleRows = await db.cycles.orderBy("cycleNumber").toArray();
-        if (!cancelled) {
-          setCycleHistory(cycleRows.map(cycleRowToSnapshot));
-        }
-
         ready.current = true;
         if (!cancelled) setDbReady(true);
       } catch (err) {
-        logger.error(" Failed to load from IndexedDB:", err);
+        logger.error("[useProjectDB] Failed to load from IDBFS:", err);
         if (!cancelled) {
           setDbError(err instanceof Error ? err.message : String(err));
           setDbReady(true); // still "ready" — the UI can render in degraded mode
         }
       }
     }
-
     load();
     return () => { cancelled = true; };
   }, []);
@@ -150,111 +147,126 @@ export function useProjectDB(): UseProjectDBReturn {
   // ── Project metadata ───────────────────────────────────────────────────────
 
   const initProject = useCallback(async () => {
+    if (!pyodide) return;
     const now = Date.now();
-    const row: ProjectRow = {
-      id: PROJECT_ID,
-      currentStage: "ingestion",
+    const meta = {
+      currentStage: "ingestion" as WorkflowStage,
       modelConfig: DEFAULT_MODEL_CONFIG,
       currentIteration: 1,
       cumulativeSelectSize: 0,
       createdAt: now,
       updatedAt: now,
     };
-    await db.project.put(row);
+    await db.saveFile(pyodide, "project.json", JSON.stringify(meta));
     setProject({
-      currentStage: row.currentStage,
-      modelConfig: row.modelConfig,
-      currentIteration: row.currentIteration,
-      cumulativeSelectSize: row.cumulativeSelectSize,
+      currentStage: meta.currentStage,
+      modelConfig: meta.modelConfig,
+      currentIteration: meta.currentIteration,
+      cumulativeSelectSize: meta.cumulativeSelectSize,
     });
-  }, []);
+  }, [pyodide]);
 
   const saveProjectMeta = useCallback(async (partial: Partial<ProjectState>) => {
-    if (!ready.current) return;
-    const existing = await db.project.get(PROJECT_ID);
+    if (!ready.current || !pyodide) return;
+    // Read current project meta from file
+    let existing: any = null;
+    try {
+      const projectResult = await db.readFile(pyodide, "project.json");
+      if (projectResult && projectResult.fileContent) {
+        existing = JSON.parse(projectResult.fileContent);
+      }
+    } catch {}
     if (!existing) {
-      // Auto-init if somehow missing (defensive)
       await initProject();
       return saveProjectMeta(partial);
     }
-    const updated: ProjectRow = {
+    const updated = {
       ...existing,
       ...partial,
       updatedAt: Date.now(),
     };
-    await db.project.put(updated);
+    await db.saveFile(pyodide, "project.json", JSON.stringify(updated));
     setProject((prev) => prev ? { ...prev, ...partial } : null);
-  }, [initProject]);
+  }, [initProject, pyodide]);
 
-  // ── Files ──────────────────────────────────────────────────────────────────
+  // ── Files (using new db class functions) ───────────────────────────────
 
-  const saveFile = useCallback(async (file: Omit<StoredFile, "id">): Promise<StoredFile> => {
-    const row: FileRow = {
-      name: file.name,
-      size: file.size,
-      content: file.content,
-      role: file.role,
-      validationStatus: file.validationStatus,
-      uploadedAt: file.uploadedAt.getTime(),
-    };
-    const generatedId = await db.files.add(row);
-    const stored: StoredFile = {
-      ...file,
-      id: String(generatedId),
-    };
-    setFiles((prev) => [...prev, stored]);
-    return stored;
+
+  // Save a single file
+  const saveFile = useCallback(async (pyodide: any, fileName: string, fileContent: string): Promise<void> => {
+    if (!pyodide) return;
+    try {
+      await db.saveFile(pyodide, fileName, fileContent);
+      const updatedFiles = await db.loadFiles(pyodide);
+      setFiles(updatedFiles);
+    } catch (err) {
+      logger.error("Failed to save file:", err);
+    }
   }, []);
 
-  const saveFiles = useCallback(async (incoming: Omit<StoredFile, "id">[]): Promise<StoredFile[]> => {
-    const rows: FileRow[] = incoming.map((f) => ({
-      name: f.name,
-      size: f.size,
-      content: f.content,
-      role: f.role,
-      validationStatus: f.validationStatus,
-      uploadedAt: f.uploadedAt.getTime(),
-    }));
 
-    const ids = await db.files.bulkAdd(rows, { allKeys: true });
-
-    const stored: StoredFile[] = incoming.map((f, i) => ({
-      ...f,
-      id: String(ids[i]),
-    }));
-
-    setFiles((prev) => [...prev, ...stored]);
-    return stored;
+  // Import multiple files
+  const importFiles = useCallback(async (pyodide: any, files: FileList): Promise<void> => {
+    if (!pyodide) return;
+    try {
+      await db.importFiles(pyodide, files);
+      const updatedFiles = await db.loadFiles(pyodide);
+      setFiles(updatedFiles);
+    } catch (err) {
+      logger.error("Failed to import files:", err);
+    }
   }, []);
 
-  const updateFileRole = useCallback(async (fileId: string, role: FileRole) => {
-    const numericId = Number(fileId);
-    await db.files.update(numericId, { role });
-    setFiles((prev) =>
-      prev.map((f) => (f.id === fileId ? { ...f, role } : f))
-    );
+
+  // Delete a file
+  const deleteFile = useCallback(async (pyodide: any, filePath: string): Promise<void> => {
+    if (!pyodide) return;
+    try {
+      await db.deleteFile(pyodide, filePath);
+      const updatedFiles = await db.loadFiles(pyodide);
+      setFiles(updatedFiles);
+    } catch (err) {
+      logger.error("Failed to delete file:", err);
+    }
   }, []);
 
-  const updateFileContent = useCallback(async (fileId: string, content: string) => {
-    const numericId = Number(fileId);
-    await db.files.update(numericId, { content, size: new Blob([content]).size });
-    setFiles((prev) =>
-      prev.map((f) => (f.id === fileId ? { ...f, content, size: new Blob([content]).size } : f))
-    );
+
+  // Clear all files (optionally in a directory)
+  const clearFiles = useCallback(async (pyodide: any, directory?: string): Promise<void> => {
+    if (!pyodide) return;
+    try {
+      await db.clearFiles(pyodide, directory); // directory param not used in db API, but could be added
+      setFiles([]);
+    } catch (err) {
+      logger.error("Failed to clear files:", err);
+    }
   }, []);
 
-  const updateFileValidation = useCallback(async (fileId: string, status: "valid" | "invalid" | "pending") => {
-    const numericId = Number(fileId);
-    await db.files.update(numericId, { validationStatus: status });
-    setFiles((prev) =>
-      prev.map((f) => (f.id === fileId ? { ...f, validationStatus: status } : f))
-    );
+
+  // Read a file's content
+  const readFile = useCallback(async (pyodide: any, filePath: string): Promise<{fileContent: string; fileType: 'text' | 'pdf' | 'docx'}> => {
+    if (!pyodide) return { fileContent: '', fileType: 'text' };
+    try {
+      const result = await db.readFile(pyodide, filePath);
+      return result;
+    } catch (err) {
+      logger.error("Failed to read file:", err);
+      return { fileContent: '', fileType: 'text' };
+    }
   }, []);
 
-  const removeFile = useCallback(async (fileId: string) => {
-    const numericId = Number(fileId);
-    await db.files.delete(numericId);
-    setFiles((prev) => prev.filter((f) => f.id !== fileId));
+
+  // Load all files
+  const loadFiles = useCallback(async (pyodide: any): Promise<fileData[]> => {
+    if (!pyodide) return [];
+    try {
+      const loadedFiles = await db.loadFiles(pyodide);
+      setFiles(loadedFiles);
+      return loadedFiles;
+    } catch (err) {
+      logger.error("Failed to load files:", err);
+      return [];
+    }
   }, []);
 
   // ── Cycles ─────────────────────────────────────────────────────────────────
@@ -265,6 +277,17 @@ export function useProjectDB(): UseProjectDBReturn {
     residualContent: string;
     evaluationContent: string;
   }) => {
+    if (!pyodide) return;
+    // Load cycles array
+    let cycles: CycleRow[] = [];
+    try {
+      const result = await db.readFile(pyodide, "cycles.json");
+      if (result && result.fileContent) {
+        cycles = JSON.parse(result.fileContent);
+      }
+    } catch {}
+    // Upsert or add
+    const idx = cycles.findIndex(c => c.cycleNumber === cycle.iteration);
     const row: CycleRow = {
       cycleNumber: cycle.iteration,
       precision: cycle.precision,
@@ -276,36 +299,32 @@ export function useProjectDB(): UseProjectDBReturn {
       evaluationContent: cycle.evaluationContent,
       completedAt: Date.now(),
     };
-
-    // Upsert — if user somehow re-runs the same cycle number, overwrite
-    const existing = await db.cycles.where("cycleNumber").equals(cycle.iteration).first();
-    if (existing) {
-      await db.cycles.update(existing.id!, row);
+    if (idx >= 0) {
+      cycles[idx] = row;
     } else {
-      await db.cycles.add(row);
+      cycles.push(row);
     }
-
-    setCycleHistory((prev) => {
-      const filtered = prev.filter((s) => s.iteration !== cycle.iteration);
-      return [...filtered, {
-        iteration: cycle.iteration,
-        precision: cycle.precision,
-        recall: cycle.recall,
-        f1: cycle.f1,
-        annotatedCount: cycle.annotatedCount,
-      }].sort((a, b) => a.iteration - b.iteration);
-    });
-  }, []);
+    await db.saveFile(pyodide, "cycles.json", JSON.stringify(cycles));
+    setCycleHistory(cycles.map(cycleRowToSnapshot));
+  }, [pyodide]);
 
   const getCycleContent = useCallback(async (cycleNumber: number) => {
-    const row = await db.cycles.where("cycleNumber").equals(cycleNumber).first();
+    if (!pyodide) return null;
+    let cycles: CycleRow[] = [];
+    try {
+      const result = await db.readFile(pyodide, "cycles.json");
+      if (result && result.fileContent) {
+        cycles = JSON.parse(result.fileContent);
+      }
+    } catch {}
+    const row = cycles.find(c => c.cycleNumber === cycleNumber);
     if (!row) return null;
     return {
       incrementContent: row.incrementContent,
       residualContent: row.residualContent,
       evaluationContent: row.evaluationContent,
     };
-  }, []);
+  }, [pyodide]);
 
   // ── Annotations ────────────────────────────────────────────────────────────
 
@@ -313,10 +332,17 @@ export function useProjectDB(): UseProjectDBReturn {
     cycleNumber: number,
     words: AnnotationWord[]
   ) => {
-    // Clear any existing annotations for this cycle, then bulk insert.
-    // This is the "training just finished, here are the new words" path.
-    await db.annotations.where("cycleNumber").equals(cycleNumber).delete();
-
+    if (!pyodide) return;
+    let annotations: AnnotationRow[] = [];
+    try {
+      const result = await db.readFile(pyodide, "annotations.json");
+      if (result && result.fileContent) {
+        annotations = JSON.parse(result.fileContent);
+      }
+    } catch {}
+    // Remove existing for this cycle
+    annotations = annotations.filter(a => a.cycleNumber !== cycleNumber);
+    // Add new
     const rows: AnnotationRow[] = words.map((w) => ({
       cycleNumber,
       wordId: w.id,
@@ -325,60 +351,80 @@ export function useProjectDB(): UseProjectDBReturn {
       boundaries: w.boundaries,
       confirmed: false,
     }));
-
-    await db.annotations.bulkAdd(rows);
-  }, []);
+    annotations.push(...rows);
+    await db.saveFile(pyodide, "annotations.json", JSON.stringify(annotations));
+  }, [pyodide]);
 
   const confirmAnnotation = useCallback(async (
     cycleNumber: number,
     wordId: string,
     boundaries: MorphemeBoundary[]
   ) => {
-    const row = await db.annotations
-      .where("[cycleNumber+wordId]")
-      .equals([cycleNumber, wordId])
-      .first();
-
-    if (row?.id != null) {
-      await db.annotations.update(row.id, { boundaries, confirmed: true });
+    if (!pyodide) return;
+    let annotations: AnnotationRow[] = [];
+    try {
+      const result = await db.readFile(pyodide, "annotations.json");
+      if (result && result.fileContent) {
+        annotations = JSON.parse(result.fileContent);
+      }
+    } catch {}
+    const idx = annotations.findIndex(a => a.cycleNumber === cycleNumber && a.wordId === wordId);
+    if (idx >= 0) {
+      annotations[idx] = { ...annotations[idx], boundaries, confirmed: true };
+      await db.saveFile(pyodide, "annotations.json", JSON.stringify(annotations));
     }
-  }, []);
+  }, [pyodide]);
 
   const loadAnnotations = useCallback(async (cycleNumber: number): Promise<AnnotationWord[]> => {
-    const rows = await db.annotations
-      .where("cycleNumber")
-      .equals(cycleNumber)
-      .toArray();
-
-    return rows.map((r) => ({
+    if (!pyodide) return [];
+    let annotations: AnnotationRow[] = [];
+    try {
+      const result = await db.readFile(pyodide, "annotations.json");
+      if (result && result.fileContent) {
+        annotations = JSON.parse(result.fileContent);
+      }
+    } catch {}
+    return annotations.filter(a => a.cycleNumber === cycleNumber).map((r) => ({
       id: r.wordId,
       word: r.word,
       confidence: r.confidence,
       boundaries: r.boundaries,
     }));
-  }, []);
+  }, [pyodide]);
 
   const getConfirmedCount = useCallback(async (cycleNumber: number): Promise<number> => {
-    return db.annotations
-      .where("cycleNumber")
-      .equals(cycleNumber)
-      .filter((r) => r.confirmed)
-      .count();
-  }, []);
+    if (!pyodide) return 0;
+    let annotations: AnnotationRow[] = [];
+    try {
+      const result = await db.readFile(pyodide, "annotations.json");
+      if (result && result.fileContent) {
+        annotations = JSON.parse(result.fileContent);
+      }
+    } catch {}
+    return annotations.filter(a => a.cycleNumber === cycleNumber && a.confirmed).length;
+  }, [pyodide]);
 
   // ── Cleanup ────────────────────────────────────────────────────────────────
 
   const clearAll = useCallback(async () => {
-    await db.transaction("rw", [db.project, db.files, db.cycles, db.annotations], async () => {
-      await db.project.clear();
-      await db.files.clear();
-      await db.cycles.clear();
-      await db.annotations.clear();
-    });
+    if (!pyodide) return;
+    // Remove all persistent files for project, cycles, annotations, and files
+    try {
+      await db.deleteFile(pyodide, "project.json");
+    } catch {}
+    try {
+      await db.deleteFile(pyodide, "cycles.json");
+    } catch {}
+    try {
+      await db.deleteFile(pyodide, "annotations.json");
+    } catch {}
+    try {
+      await db.clearFiles(pyodide);
+    } catch {}
     setProject(null);
     setFiles([]);
     setCycleHistory([]);
-  }, []);
+  }, [pyodide]);
 
   // ── Return ─────────────────────────────────────────────────────────────────
 
@@ -391,11 +437,11 @@ export function useProjectDB(): UseProjectDBReturn {
     initProject,
     saveProjectMeta,
     saveFile,
-    saveFiles,
-    updateFileRole,
-    updateFileContent,
-    updateFileValidation,
-    removeFile,
+    importFiles,
+    deleteFile,
+    clearFiles,
+    loadFiles,
+    readFile,
     saveCycle,
     getCycleContent,
     saveAnnotationWords,
@@ -403,22 +449,11 @@ export function useProjectDB(): UseProjectDBReturn {
     loadAnnotations,
     getConfirmedCount,
     clearAll,
+    pyodide,
   };
 }
 
 // ── Row ↔ UI type mappers ────────────────────────────────────────────────────
-
-function fileRowToStoredFile(row: FileRow): StoredFile {
-  return {
-    id: String(row.id),
-    name: row.name,
-    size: row.size,
-    content: row.content,
-    role: row.role,
-    validationStatus: row.validationStatus,
-    uploadedAt: new Date(row.uploadedAt),
-  };
-}
 
 function cycleRowToSnapshot(row: CycleRow): CycleSnapshot {
   return {

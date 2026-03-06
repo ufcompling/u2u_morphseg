@@ -12,35 +12,19 @@ export interface rawData {
 }
 
 // Emscripten uses string lookups only.
-// Structured file data ready for IndexedDB storage
+// Structured file data ready for IndexedDB storage and calls
 export interface fileData {
   fileName: string;                    // Original filename preserved
-  fileContent: string;                 // Always a string (binary data gets Base64-encoded)
+  fileContent?: string | Uint8Array;                 // Always a string (binary data gets Uint8Array-encoded as a string)
   fileSize?: number;                   // File size in bytes
-  fileType: 'text' | 'binary';         // Only 'text' or 'binary' allowed
+  fileType?: 'text' | 'pdf' | 'docx';         // Only 'text', 'pdf', or 'docx' allowed
   createdAt?: number;                  // Unix timestamp - when file was uploaded
-  processedFileContent?: string;       // ML output - populated after running CRF model
+  filePath?: string;                  // Virtual path in Emscripten FS (e.g. "/uploads/filename.txt")
 }
 
 /* =============================================================================
  * DATA TRANSFORMATION UTILITIES
  * ============================================================================= */
-
-// Convert binary file data to Base64 string for storage
-// We do this because IndexedDB can't efficiently store Uint8Array in our schema
-// Base64 is ~33% larger but lets us treat all content uniformly as strings
-function uint8ArrayToBase64(uint8Array: Uint8Array): string {
-  let binary = '';
-  const len = uint8Array.byteLength;
-  
-  // Build a binary string by converting each byte to a character
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(uint8Array[i]);
-  }
-  
-  // Use browser's built-in Base64 encoder
-  return btoa(binary);
-}
 
 // Transform raw uploaded files into database-ready format
 // This is the bridge between the browser's File API and our IndexedDB schema
@@ -49,8 +33,17 @@ export function mapData(rawDataArray: rawData[]): fileData[] {
     const isText = typeof rawItem.fileContent === 'string';
     const fileContent = isText
       ? rawItem.fileContent as string
-      : uint8ArrayToBase64(rawItem.fileContent as Uint8Array);
-    const fileType: 'text' | 'binary' = isText ? 'text' : 'binary';
+      : rawItem.fileContent as Uint8Array;
+    let fileType: 'text' | 'pdf' | 'docx';
+    if (rawItem.fileType.startsWith('text/')) {
+      fileType = 'text';
+    } else if (rawItem.fileType === 'application/pdf') {
+      fileType = 'pdf';
+    } else if (rawItem.fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      fileType = 'docx';
+    } else {
+      throw new Error(`Unsupported file type: ${rawItem.fileType}`);
+    }
     return {
       fileName: rawItem.fileName,
       fileContent,

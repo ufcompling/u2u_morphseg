@@ -1,4 +1,9 @@
-import Dexie, { type Table } from "dexie";
+import { importFiles } from "../services/database/helpers/importFiles";
+import { deleteFile } from "../services/database/helpers/deleteFile";
+import { saveFile } from "../services/database/helpers/saveFile";
+import { loadFiles } from "../services/database/helpers/loadFiles";
+import { readFile } from "../services/database/helpers/readFile";
+import { clearFiles } from "../services/database/helpers/clearFiles";
 import type {
   WorkflowStage,
   ModelConfig,
@@ -11,7 +16,6 @@ import type {
 
 /** Singleton project row. Always id=1 for single-project model. */
 export interface ProjectRow {
-  id: number; // always 1
   currentStage: WorkflowStage;
   modelConfig: ModelConfig;
   currentIteration: number;
@@ -23,7 +27,6 @@ export interface ProjectRow {
 
 /** Uploaded file stored as a text blob with role metadata. */
 export interface FileRow {
-  id?: number; // auto-increment
   name: string;
   size: number;
   content: string;
@@ -34,7 +37,6 @@ export interface FileRow {
 
 /** Snapshot of a single completed AL cycle. */
 export interface CycleRow {
-  id?: number;
   cycleNumber: number;
   precision: number;
   recall: number;
@@ -48,7 +50,6 @@ export interface CycleRow {
 
 /** Individual word annotation within a cycle. */
 export interface AnnotationRow {
-  id?: number;
   cycleNumber: number;
   wordId: string;
   word: string;
@@ -60,27 +61,24 @@ export interface AnnotationRow {
 
 // ── Database class ───────────────────────────────────────────────────────────
 
-class TurtleShellDB extends Dexie {
-  project!: Table<ProjectRow, number>;
-  files!: Table<FileRow, number>;
-  cycles!: Table<CycleRow, number>;
-  annotations!: Table<AnnotationRow, number>;
 
-  constructor() {
-    super("TurtleShellDB");
-
-    this.version(1).stores({
-      // Singleton — only ever one row with id=1
-      project: "id",
-      // Auto-increment PK, indexed on role for filtered queries
-      files: "++id, role",
-      // Auto-increment PK, unique on cycleNumber for lookup
-      cycles: "++id, &cycleNumber",
-      // Auto-increment PK, compound index for "get all annotations in cycle N"
-      // plus [cycleNumber+wordId] uniqueness so we can upsert cleanly
-      annotations: "++id, cycleNumber, [cycleNumber+wordId]",
-    });
+export const db = new class {
+  async importFiles(pyodide: any, files: FileList) {
+    return await importFiles(pyodide, files);
   }
-}
-
-export const db = new TurtleShellDB();
+  async deleteFile(pyodide: any, filePath: string) {
+    return await deleteFile(pyodide, filePath);
+  }
+  async saveFile(pyodide: any, fileName: string, fileContent: string) {
+    return await saveFile(pyodide, fileName, fileContent);
+  }
+  async loadFiles(pyodide: any) {
+    return await loadFiles(pyodide);
+  }
+  async readFile(pyodide: any, filePath: string) {
+    return await readFile(pyodide, filePath);
+  }
+  async clearFiles(pyodide: any, directory?: string) {
+    return await clearFiles(pyodide, directory);
+  }
+}();

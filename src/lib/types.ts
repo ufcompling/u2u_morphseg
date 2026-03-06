@@ -31,13 +31,13 @@ export type FileRole = "annotated" | "unannotated" | "evaluation";
 export type ValidationStatus = "pending" | "valid" | "invalid";
 
 export interface StoredFile {
-  id: string;
-  name: string;
-  size: number;
-  content: string;
-  role: FileRole | null;
+  fileName: string;
+  fileSize: number;
+  fileContent: string;
+  fileRole: FileRole | null;
   validationStatus: ValidationStatus;
-  uploadedAt: Date;
+  createdAt: Date;
+  filePath: string;
 }
 
 // --- Model Configuration ---

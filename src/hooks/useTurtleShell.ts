@@ -40,7 +40,6 @@ import {
   getFileByRole,
   deriveCompletedStages,
   triggerDownload,
-  validateTgtFormat,
 } from "../lib/format-utils";
 import { log } from "../lib/logger";
 import { useProjectDB } from "./useProjectDB";
@@ -115,9 +114,24 @@ export interface UseTurtleshellReturn {
 
 export function useTurtleshell(): UseTurtleshellReturn {
   const projectDB = useProjectDB();
+  // Log when projectDB.pyodide changes (including when it becomes available)
+  useEffect(() => {
+  }, [projectDB.pyodide]);
   const { pyodideReady, pyodideLoading, pyodideError, modelRestored, runCycle, runInference, wipeVfs } =
     usePyodideWorker();
   const hasRestored = useRef(false);
+
+  // Map projectDB.files (fileData[]) to StoredFile[] with all required fields
+  const files: StoredFile[] = projectDB.files.map(fd => ({
+    fileName: fd.fileName,
+    fileSize: fd.fileSize ?? 0,
+    fileContent: typeof fd.fileContent === "string" ? fd.fileContent : "",
+    fileRole: null,
+    fileType: fd.fileType ?? "text",
+    createdAt: new Date(fd.createdAt ?? Date.now()),
+    filePath: fd.filePath ?? "",
+    validationStatus: "pending",
+  }));
 
   // ── Workflow navigation ─────────────────────────────────────────────────
 
@@ -151,61 +165,31 @@ export function useTurtleshell(): UseTurtleshellReturn {
 
   // ── File management ─────────────────────────────────────────────────────
 
-  const files = projectDB.files;
   const [isUploading, setIsUploading] = useState(false);
 
   const handleUpload = useCallback(
     (fileList: FileList | null) => {
-      if (!fileList) return;
+      if (!fileList) {
+        return;
+      }
+      if (!pyodideReady || !projectDB.pyodide) {
+        return;
+      }
       setIsUploading(true);
-
-      const readers = Array.from(fileList).map(
-        (file) =>
-          new Promise<Omit<StoredFile, "id">>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              resolve({
-                name: file.name,
-                size: file.size,
-                content: reader.result as string,
-                role: null,
-                validationStatus: "pending",
-                uploadedAt: new Date(),
-              });
-            };
-            reader.readAsText(file);
-          })
-      );
-
-      Promise.all(readers).then(async (newFiles) => {
-        try {
-          await projectDB.saveFiles(newFiles);
-        } catch (err) {
-          logger.error(" Failed to persist files:", err);
-        }
-        setIsUploading(false);
-      });
+      projectDB.importFiles(projectDB.pyodide, fileList)
     },
-    [projectDB]
+    [projectDB, pyodideReady]
   );
 
   const handleAssignRole = useCallback(
-    (fileId: string, role: FileRole) => {
-      projectDB.updateFileRole(fileId, role);
-
-      // Validate .tgt format now that we know the file's intended role
-      const file = files.find((f) => f.id === fileId);
-      if (file) {
-        const { valid } = validateTgtFormat(file.content);
-        projectDB.updateFileValidation(fileId, valid ? "valid" : "invalid");
-      }
+    (_fileId: string, _role: FileRole) => {
     },
-    [projectDB, files]
+    []
   );
 
   const handleRemoveFile = useCallback(
-    (fileId: string) => {
-      projectDB.removeFile(fileId);
+    (fileName: string) => {
+      projectDB.deleteFile(projectDB.pyodide, fileName);
     },
     [projectDB]
   );
@@ -355,14 +339,14 @@ export function useTurtleshell(): UseTurtleshellReturn {
     const annotatedFile = getFileByRole(files, "annotated");
     if (annotatedFile) {
       const newTgtLines = annotations.annotationWords.map(annotationToTgtLine).join("\n");
-      const merged = annotatedFile.content.trimEnd() + "\n" + newTgtLines;
-      await projectDB.updateFileContent(annotatedFile.id, merged);
+      const merged = annotatedFile.fileContent.trimEnd() + "\n" + newTgtLines;
+      await projectDB.saveFile(projectDB.pyodide, annotatedFile.fileName, merged);
     }
 
     // Replace unannotated pool with residual
     const unannotatedFile = getFileByRole(files, "unannotated");
     if (unannotatedFile && training.residualContent) {
-      await projectDB.updateFileContent(unannotatedFile.id, training.residualContent);
+      await projectDB.saveFile(projectDB.pyodide, unannotatedFile.fileName, training.residualContent);
     }
 
     goToStage("results");

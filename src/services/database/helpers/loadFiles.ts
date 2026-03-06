@@ -1,36 +1,21 @@
+// Used Copilot's autofill.
 import { type fileData } from "./dataHelpers";
-import { readFile } from './readFile';
 
 export async function loadFiles(pyodide: any): Promise<fileData[]> {
   if (!pyodide) {
     console.warn('loadFiles called before Pyodide initialized');
     return [];
   }
+  // Get file names in /data
   const fileIdsStr = await pyodide.runPythonAsync(`import os; import json; json.dumps(os.listdir('/data'))`);
-  const fileIds = JSON.parse(fileIdsStr).filter((name: string) => !name.startsWith('processed_'));
-  const allFiles = await Promise.all(
-    fileIds.map(async (fileName: string) => {
-      try {
-        const read = await readFile(pyodide, fileName, true);
-        const size = read.fileType === 'binary'
-          ? Math.ceil((read.fileContent.length * 3) / 4) - (read.fileContent.endsWith('==') ? 2 : read.fileContent.endsWith('=') ? 1 : 0)
-          : read.fileContent.length;
-
-          const proc = await readFile(pyodide, `processed_${fileName}`, true);
-          const processedFileContent: string | undefined = proc?.fileContent;
-        return {
-          fileName: read.fileName,
-          fileContent: read.fileContent,
-          fileType: read.fileType,
-          fileSize: size,
-          processedFileContent: processedFileContent,
-        } as fileData;
-      }
-      catch (error) {
-        console.error(`Error loading file ${fileName}:`, error);
-        return null;
-      }
-    })
-  );
-  return allFiles.filter((f): f is fileData => f !== null);
-} 
+  const fileIds = JSON.parse(fileIdsStr) as string[];
+  // Get file stats for each file (size, createdAt)
+  const statsStr = await pyodide.runPythonAsync(`\nimport os, json\nfile_stats = {}\nfor fname in os.listdir('/data'):\n    stat = os.stat(f'/data/{fname}')\n    file_stats[fname] = {\n        'fileSize': stat.st_size,\n        'createdAt': int(stat.st_ctime * 1000)\n    }\njson.dumps(file_stats)\n`);
+  const fileStats = JSON.parse(statsStr);
+  return fileIds.map((fileName: string) => ({
+    fileName,
+    filePath: '/data/' + fileName,
+    fileSize: fileStats[fileName]?.fileSize,
+    createdAt: fileStats[fileName]?.createdAt
+  } as fileData));
+}
