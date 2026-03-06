@@ -1,3 +1,5 @@
+import os
+
 import db_worker
 from aliases import DataDict, Word, MorphList, BMESDict
 
@@ -16,7 +18,7 @@ def process_data(train_tgt, test_tgt, select_src) -> DataDict:
 	"""
 	train_words, train_morphs, train_bmes = _parse_labeled_data(train_tgt)
 	test_words, test_morphs, test_bmes = _parse_labeled_data(test_tgt)
-	select_words, _, _ = _parse_unlabeled_data(select_src)
+	select_words = _parse_unlabeled_data(select_src)
 
 	return {
 		'train': {
@@ -87,3 +89,31 @@ def _get_bmes_labels(morphs: MorphList) -> str:
 			label.append('E')
 
 	return ''.join(label)
+
+def setup_dirs(config: dict, work_dir: str) -> None: #dict[str, str]:
+    """
+    Write JS-provided file content strings into the Pyodide VFS.
+
+    :param config: Decoded config dict from JS
+    :param work_dir: Base directory to write files into
+    :return: Dict of resolved file paths keyed by role
+    """
+    os.makedirs(work_dir, exist_ok=True)
+
+    paths = {
+        'train_tgt':  os.path.join(work_dir, 'train.train.tgt'),
+        'test_tgt':   os.path.join(work_dir, 'test.full.tgt'),
+        'select_src': os.path.join(work_dir, 'select.train.src'),
+    }
+
+    _write_if_present(paths['train_tgt'], config.get('trainTgt', ''))
+    _write_if_present(paths['test_tgt'],  config.get('testTgt', ''))
+    _write_if_present(paths['select_src'], config.get('selectSrc', ''))
+
+    #return paths
+
+
+def _write_if_present(path: str, content: str) -> None:
+    if content:
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
