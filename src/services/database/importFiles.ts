@@ -1,8 +1,9 @@
 // Used Copilot's autofill
 import { type rawData, mapData } from './dataHelpers';
-import { syncPyodideFS } from '../../pyodide/pyodideService';
+import { syncPyodideFS } from '../pyodide/pyodideService';
+declare const pyodide: any;
 
-export async function importFiles(pyodide: any, files: FileList): Promise<void> {
+export async function importFiles(files: FileList): Promise<void> {
   const allFiles = await pyodide.runPythonAsync(`import os, json; json.dumps(os.listdir('/data'))`);
   const fileNames = new Set(JSON.parse(allFiles));
   const rawDataArray: rawData[] = [];

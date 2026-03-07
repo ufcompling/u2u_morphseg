@@ -1,4 +1,6 @@
-export async function readFile(pyodide: any, filePath: string): Promise<{ fileContent: string; fileType: 'text' | 'pdf' | 'docx' }> {
+declare const pyodide: any;
+
+export async function readFile(filePath: string): Promise<{ fileContent: string; fileType: 'text' | 'pdf' | 'docx' }> {
   // Read file from Python db_worker
   const fileContentRaw = await pyodide.runPythonAsync(`import db_worker; db_worker.read_file('${filePath}')`);
   const fileObj = JSON.parse(fileContentRaw);

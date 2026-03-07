@@ -1,7 +1,8 @@
 // Used Copilot's autofill.
 import { type fileData } from "./dataHelpers";
+declare const pyodide: any;
 
-export async function loadFiles(pyodide: any): Promise<fileData[]> {
+export async function loadFiles(): Promise<fileData[]> {
   if (!pyodide) {
     console.warn('loadFiles called before Pyodide initialized');
     return [];
