@@ -30,7 +30,7 @@ def run(config_json: str) -> str:
 	try:
 		config: dict = json.loads(config_json)
 		work_dir = config.get('workDir', '/tmp/turtleshell')
-		paths: dict[str, str] = setup_dirs(config, work_dir)
+		setup_dirs(config, work_dir)
 	
 		data: DataDict = process_data(config['train_tgt'], config['test_tgt'], config['select_src'])
 
@@ -62,9 +62,9 @@ def run(config_json: str) -> str:
 		increment_size: int = config['increment_size']
 		increment_words: list[str] = [word for word, _, _ in confidence_data[increment_size:]]
 		increment_content: str = '\n'.join(increment_words)
-		increment_data: str = format_increment(confidence_data[increment_size:])
+		increment_data: str = format_increment(confidence_data[:increment_size])
 
-		residual_words: list[str] = [word for word, _, _ in confidence_data[:increment_size]]
+		residual_words: list[str] = [word for word, _, _ in confidence_data[increment_size:]]
 		residual_count: int = len(residual_words)
 		residual_content: str = '\n'.join(residual_words)
 

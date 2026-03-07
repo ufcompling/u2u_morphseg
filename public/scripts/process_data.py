@@ -89,7 +89,7 @@ def _get_bmes_labels(morphs: MorphList) -> str:
 
 	return ''.join(label)
 
-def setup_dirs(config: dict, work_dir: str) -> None: #dict[str, str]:
+def setup_dirs(config: dict, work_dir: str) -> None:
     """
     Write JS-provided file content strings into the Pyodide VFS.
 
