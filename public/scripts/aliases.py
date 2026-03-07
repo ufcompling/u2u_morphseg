@@ -28,4 +28,4 @@ class DatasetInfo(TypedDict):
 class DataDict(TypedDict):
 	train: DatasetInfo
 	test: DatasetInfo
-	select: list[Word]
+	select: dict[str, list[Word]]
