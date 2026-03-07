@@ -6,9 +6,9 @@ import json
 from sklearn_crfsuite import CRF
 
 from aliases import DataDict, DatasetFeatures, DatasetLabels, MorphList, DatasetMarginals, ConfidenceData
-from process_data import process_data, setup_dirs
+from process_data import process_data#, setup_dirs
 from features import get_labeled_features, get_unlabeled_features
-from model import build_crf
+from model import build_crf, save_crf
 from evaluate import reconstruct_predictions, evaluate_predictions, get_confidence_data
 from format import format_evaluation, format_increment
 
@@ -31,7 +31,7 @@ def run_training_cycle(config_json: str) -> str:
 	try:
 		config: dict = json.loads(config_json)
 		work_dir = config.get('workDir', '/tmp/turtleshell')
-		setup_dirs(config, work_dir)
+		#setup_dirs(config, work_dir)
 	
 		data: DataDict = process_data(config['trainTgt'], config['testTgt'], config['selectSrc'])
 
@@ -43,6 +43,7 @@ def run_training_cycle(config_json: str) -> str:
 		X_test, _ = get_labeled_features(data['test']['words'], data['test']['bmes'], config['delta'])
 
 		crf: CRF = build_crf(X_train, y_train, config['maxIterations'])
+		save_crf(crf, work_dir, 'crf.model')
 
 		y_test_predict: DatasetLabels = crf.predict(X_test)
 		test_predictions: list[MorphList] = reconstruct_predictions(y_test_predict, data['test']['words'])
@@ -61,7 +62,7 @@ def run_training_cycle(config_json: str) -> str:
 		confidence_data: list[ConfidenceData] = get_confidence_data(data['select']['words'], y_select_predict, marginals)
 
 		increment_size: int = config['selectSize']
-		increment_words: list[str] = [word for word, _, _ in confidence_data[increment_size:]]
+		increment_words: list[str] = [word for word, _, _ in confidence_data[:increment_size]]
 		increment_content: str = '\n'.join(increment_words)
 		increment_data: str = format_increment(confidence_data[:increment_size])
 

@@ -1,3 +1,4 @@
+import os, pickle
 from sklearn_crfsuite import CRF
 
 from aliases import DatasetFeatures, DatasetLabels
@@ -26,3 +27,14 @@ def build_crf(X: DatasetFeatures, y: DatasetLabels, max_iterations: int) -> CRF:
     )
     crf.fit(X, y)
     return crf
+
+def save_crf(crf: CRF, work_dir: str, file_name: str) -> None:
+    with open(os.path.join(work_dir, file_name), 'wb') as f:
+        pickle.dump(crf, f)
+
+def load_crf(work_dir: str, file_name: str) -> CRF | None:
+    path = os.path.join(work_dir, file_name)
+    if not os.path.exists(path):
+        return None
+    with open(path, 'rb') as f:
+        return pickle.load(f)
