@@ -166,7 +166,7 @@ async function loadPythonScripts(): Promise<void> {
     "run.py"
   ];
 
-  const responses = await Promise.all(files.map(f => fetch(`/u2u_morphseg/py/${f}`)));
+  const responses = await Promise.all(files.map(f => fetch(`/u2u_morphseg/scripts/${f}`)));
 
   for (let i = 0; i < files.length; i++) {
     if (!responses[i].ok) throw new Error(`Failed to fetch ${files[i]}: ${responses[i].status}`)
