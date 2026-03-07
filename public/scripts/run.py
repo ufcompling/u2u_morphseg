@@ -8,7 +8,7 @@ from sklearn_crfsuite import CRF
 from aliases import DataDict, DatasetFeatures, DatasetLabels, MorphList, DatasetMarginals, ConfidenceData
 from process_data import process_data#, setup_dirs
 from features import get_labeled_features, get_unlabeled_features
-from model import build_crf, save_crf
+from model import build_crf, save_crf, load_crf
 from evaluate import reconstruct_predictions, evaluate_predictions, get_confidence_data
 from format import format_evaluation, format_increment
 
@@ -94,3 +94,68 @@ def run_training_cycle(config_json: str) -> str:
             'evaluationContent': '',
             'error': traceback.format_exc(),
         })
+	
+def run_inference(config_json: str) -> str:
+	"""
+    Run the trained CRF model over residual words without retraining.
+    Loads crf.model from the VFS written during the last training cycle.
+
+    :param config_json: JSON string with fields:
+        - residualTgt: str   residual pool content (.tgt format)
+        - delta: int         context window for features (default 4)
+        - workDir: str       VFS directory where crf.model lives
+    :type config_json: str
+    :return: JSON string with fields:
+        - predictions: list[{word, segmentation}]
+        - predictionsContent: str   full .tgt file content for download
+        - totalWords: int
+        - error: str | null
+    :rtype: str
+    """
+	try:
+		config: dict = json.loads(config_json)
+		work_dir = config.get('workDir', '/tmp/turtleshell')
+		delta: int = config.get('delta', 4)
+
+		crf: CRF | None = load_crf(work_dir, 'crf.model')
+		if crf is None:
+			return json.dumps({
+                'predictionsContent': '',
+                'totalWords': 0,
+                'error': 'No trained model found. Run at least one training cycle first.'
+			})
+		
+		residual_content = config.get('residualTgt', '')
+		if not residual_content.strip():
+			return json.dumps({
+                'predictionsContent': '',
+                'totalWords': 0,
+                'error': None
+            })
+		
+		words: list[str] = [
+			line.strip().replace('!', '')
+			for line in residual_content.splitlines()
+			if line.strip()
+		]
+
+		X_select: DatasetFeatures = get_unlabeled_features(words, delta)
+		y_predict: DatasetLabels = crf.predict(X_select)
+		predicted_morphs: list[MorphList] = reconstruct_predictions(y_predict, words)
+
+		tgt_lines: list[str] = ['!'.join(morphs) for morphs in predicted_morphs]
+		predictions_content: str = '\n'.join(tgt_lines) + '\n'
+
+		return json.dumps({
+            'predictionsContent': predictions_content,
+            'totalWords': len(words),
+            'error': None
+        })
+
+	except Exception:
+		import traceback
+		return json.dumps({
+			'predictionsContent': '',
+            'totalWords': 0,
+            'error': traceback.format_exc()
+		})
