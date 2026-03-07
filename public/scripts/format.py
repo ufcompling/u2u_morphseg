@@ -12,7 +12,7 @@ def format_evaluation(words: list[Word], gold_morphs: list[MorphList], pred_morp
 		gold_seg = '!'.join(gold)
 		pred_seg = '!'.join(pred)
 		lines.append(f'{word}\t{gold_seg}\t{pred_seg}')
-		return '\n'.join(lines) + '\n'
+	return '\n'.join(lines) + '\n'
 	
 def format_increment(confidence_data: list[ConfidenceData]) -> list[dict[str, str | float | list[dict]]]:
 	increment: list[dict[str, str | float | list[dict]]] = []
