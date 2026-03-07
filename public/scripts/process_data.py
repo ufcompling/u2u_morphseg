@@ -1,6 +1,5 @@
 import os
 
-import db_worker
 from aliases import DataDict, Word, MorphList, BMESDict
 
 def process_data(train_tgt, test_tgt, select_src) -> DataDict:
