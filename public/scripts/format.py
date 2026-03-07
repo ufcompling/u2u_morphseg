@@ -23,6 +23,7 @@ def format_increment(confidence_data: list[ConfidenceData]) -> list[dict[str, st
 			'confidence': round(confscore, 4),
 			'boundaries': [{'index': b} for b in _get_morph_boundaries(word, labels)]
         })
+	return increment
 		
 def _get_morph_boundaries(word: str, bounded_labels: DatasetLabels) -> list[int]:
 	labels: DatasetLabels = bounded_labels[1:-1]
