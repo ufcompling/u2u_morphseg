@@ -20,8 +20,15 @@
 /// <reference lib="webworker" />
 
 // Type-only imports are erased at compile time — safe for workers.
-import type { TrainingCycleConfig } from "../lib/types";
-import type { WorkerInMessage, WorkerOutMessage } from "../lib/worker-protocol";
+import type { TrainingCycleConfig } from "../../../lib/types";
+import type { WorkerInMessage, WorkerOutMessage } from "../../../lib/worker-protocol";
+import { importFiles } from "../../database/importFiles";
+import { deleteFile } from "../../database/deleteFile";
+import { saveFile } from "../../database/saveFile";
+import { loadFiles } from "../../database/loadFiles";
+import { readFile } from "../../database/readFile";
+import { clearFiles } from "../../database/clearFiles";
+ 
 
 console.log("[pyodide-worker] ===== WORKER SCRIPT STARTING =====");
 
@@ -346,6 +353,60 @@ try {
           else post({ type: "VFS_WIPED" });
         } catch {
           post({ type: "VFS_WIPED" });
+        }
+        break;
+      case "IMPORT_FILES":
+        try {
+          if (!pyodide) await initPyodide();
+            await importFiles(msg.files);
+            post({ type: "FILES_IMPORTED" });
+        } catch (err) {
+          post({ type: "FILE_IMPORT_ERROR", error: String(err) });
+        }
+        break;
+      case "LOAD_FILES":
+        try {
+          if (!pyodide) await initPyodide();
+            const files = await loadFiles();
+            post({ type: "FILES_LOADED", payload: files });
+        } catch (err) {
+          post({ type: "FILE_LOAD_ERROR", error: String(err) });
+        }
+        break;
+      case "READ_FILE":
+        try {
+          if (!pyodide) await initPyodide();
+            const { fileType, fileContent } = await readFile(msg.filePath);
+            post({ type: "FILE_READ", payload: { filePath: msg.filePath, fileType, fileContent } });
+        } catch (err) {
+          post({ type: "FILE_READ_ERROR", error: String(err) });
+        }
+        break;
+      case "DELETE_FILE":
+        try {
+          if (!pyodide) await initPyodide();
+            await deleteFile(msg.filePath);
+            post({ type: "FILE_DELETED", filePath: msg.filePath });
+        } catch (err) {
+          post({ type: "FILE_DELETE_ERROR", error: String(err) });
+        }
+        break;
+      case "SAVE_FILE":
+        try {
+          if (!pyodide) await initPyodide();
+            await saveFile(msg.fileName, msg.fileContent);
+            post({ type: "FILE_SAVED", fileName: msg.fileName });
+        } catch (err) {
+          post({ type: "FILE_SAVE_ERROR", error: String(err) });
+        }
+        break;
+      case "CLEAR_FILES":
+        try {
+          if (!pyodide) await initPyodide();
+            await clearFiles(msg.directory);
+            post({ type: "FILES_CLEARED", directory: msg.directory });
+        } catch (err) {
+          post({ type: "FILE_CLEAR_ERROR", error: String(err) });
         }
         break;
     }

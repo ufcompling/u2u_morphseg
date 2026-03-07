@@ -26,7 +26,14 @@ export type WorkerInMessage =
   | { type: "RUN_CYCLE"; payload: TrainingCycleConfig }
   | { type: "RUN_INFERENCE"; payload: { residualTgt: string; delta?: number; workDir?: string } }
   | { type: "SYNC_VFS" }
-  | { type: "WIPE_VFS" };
+  | { type: "WIPE_VFS" }
+  | { type: "IMPORT_FILES"; files: FileList }
+  | { type: "LOAD_FILES" }
+  | { type: "READ_FILE"; filePath: string }
+  | { type: "DELETE_FILE"; filePath: string }
+  | { type: "SAVE_FILE"; fileName: string; fileContent: string }
+  | { type: "CLEAR_FILES"; directory?: string };
+
 
 // ── Messages: Worker → Main Thread ────────────────────────────────────────────
 
@@ -41,4 +48,16 @@ export type WorkerOutMessage =
   | { type: "INFERENCE_DONE"; result: InferenceResult }
   | { type: "INFERENCE_ERROR"; error: string }
   | { type: "VFS_SYNCED" }
-  | { type: "VFS_WIPED" };
+  | { type: "VFS_WIPED" }
+  | { type: "FILES_IMPORTED" }
+  | { type: "FILE_IMPORT_ERROR"; error: string }
+  | { type: "FILES_LOADED"; payload: any }
+  | { type: "FILE_LOAD_ERROR"; error: string }
+  | { type: "FILE_READ"; payload: { filePath: string; fileType: string; fileContent: string } }
+  | { type: "FILE_READ_ERROR"; error: string }
+  | { type: "FILE_DELETED"; filePath: string }
+  | { type: "FILE_DELETE_ERROR"; error: string }
+  | { type: "FILE_SAVED"; fileName: string }
+  | { type: "FILE_SAVE_ERROR"; error: string }
+  | { type: "FILES_CLEARED"; directory?: string }
+  | { type: "FILE_CLEAR_ERROR"; error: string };
