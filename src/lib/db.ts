@@ -1,9 +1,4 @@
-import { importFiles } from "../services/database/helpers/importFiles";
-import { deleteFile } from "../services/database/helpers/deleteFile";
-import { saveFile } from "../services/database/helpers/saveFile";
-import { loadFiles } from "../services/database/helpers/loadFiles";
-import { readFile } from "../services/database/helpers/readFile";
-import { clearFiles } from "../services/database/helpers/clearFiles";
+// Removed unused import
 import type {
   WorkflowStage,
   ModelConfig,
@@ -61,24 +56,42 @@ export interface AnnotationRow {
 
 // ── Database class ───────────────────────────────────────────────────────────
 
+let pyodide: Worker | undefined;
+export function setPyodideWorker(worker: Worker) {
+  pyodide = worker;
+}
+
+async function sendMessageToWorker(message: any): Promise<any> {
+  if (!pyodide) throw new Error("Pyodide worker not set");
+  return new Promise((resolve) => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === `${message.type}_RESPONSE`) {
+        pyodide!.removeEventListener("message", handleMessage);
+        resolve(event.data.payload);
+      }
+    };
+    pyodide!.addEventListener("message", handleMessage);
+    pyodide!.postMessage(message);
+  });
+}
 
 export const db = new class {
-  async importFiles(pyodide: any, files: FileList) {
-    return await importFiles(pyodide, files);
+  async importFiles(files: FileList) {
+    return await sendMessageToWorker({ type: "IMPORT_FILES", files });
   }
-  async deleteFile(pyodide: any, filePath: string) {
-    return await deleteFile(pyodide, filePath);
+  async deleteFile(filePath: string) {
+    return await sendMessageToWorker({ type: "DELETE_FILE", filePath });
   }
-  async saveFile(pyodide: any, fileName: string, fileContent: string) {
-    return await saveFile(pyodide, fileName, fileContent);
+  async saveFile(fileName: string, fileContent: string) {
+    return await sendMessageToWorker({ type: "SAVE_FILE", fileName, fileContent });
   }
-  async loadFiles(pyodide: any) {
-    return await loadFiles(pyodide);
+  async loadFiles() {
+    return await sendMessageToWorker({ type: "LOAD_FILES" });
   }
-  async readFile(pyodide: any, filePath: string) {
-    return await readFile(pyodide, filePath);
+  async readFile(filePath: string) {
+    return await sendMessageToWorker({ type: "READ_FILE", filePath });
   }
-  async clearFiles(pyodide: any, directory?: string) {
-    return await clearFiles(pyodide, directory);
+  async clearFiles(directory?: string) {
+    return await sendMessageToWorker({ type: "CLEAR_FILES", directory });
   }
 }();
