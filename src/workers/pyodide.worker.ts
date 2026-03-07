@@ -155,26 +155,33 @@ await micropip.install('sklearn-crfsuite')
 }
 
 async function loadPythonScripts(): Promise<void> {
-  const [crfAlResp, bridgeResp] = await Promise.all([
-    fetch("/u2u_morphseg/py/crf_al.py"),
-    fetch("/u2u_morphseg/py/crf_bridge.py"),
-  ]);
 
-  if (!crfAlResp.ok) throw new Error(`Failed to fetch crf_al.py: ${crfAlResp.status}`);
-  if (!bridgeResp.ok) throw new Error(`Failed to fetch crf_bridge.py: ${bridgeResp.status}`);
+  const files = [
+    "aliases.py",
+    "evaluate.py",
+    "features.py",
+    "format.py",
+    "model.py",
+    "process_data.py",
+    "run.py"
+  ];
 
-  const [crfAlText, bridgeText] = await Promise.all([
-    crfAlResp.text(),
-    bridgeResp.text(),
-  ]);
+  const responses = await Promise.all(files.map(f => fetch(`/u2u/morphseg/py/${f}`)));
 
-  pyodide.FS.writeFile("/tmp/crf_al.py", crfAlText);
-  pyodide.FS.writeFile("/tmp/crf_bridge.py", bridgeText);
+  for (let i = 0; i < files.length; i++) {
+    if (!responses[i].ok) throw new Error(`Failed to fetch ${files[i]}: ${responses[i].status}`)
+  }
+
+  const texts = await Promise.all(responses.map(r => r.text()));
+
+  for (let i = 0; i < files.length; i++) {
+    pyodide.FS.writeFile(`/tmp/${files[i]}`, texts[i])
+  }
 
   await pyodide.runPythonAsync(`
 import sys
 sys.path.insert(0, '/tmp')
-exec(open('/tmp/crf_bridge.py').read())
+exec(open('/tmp/run.py').read())
 `);
 }
 
