@@ -18,10 +18,11 @@ def run_training_cycle(config_json: str) -> str:
 		- trainTgt: str
 		- testTgt: str
 		- selectSrc: str
+		- workDir: str
 		- method: str
-		- increment_size: int
+		- increment_size (selectSize): int
 		- current_cycle: int
-		- max_crf_iterations: int
+		- max_crf_iterations (maxIterations): int
 		- delta: int
 
 	Eventually, we want to move from the config containing the entire train, test, and select file content
@@ -41,7 +42,7 @@ def run_training_cycle(config_json: str) -> str:
 		X_test: DatasetFeatures
 		X_test, _ = get_labeled_features(data['test']['words'], data['test']['bmes'], config['delta'])
 
-		crf: CRF = build_crf(X_train, y_train, config['max_iterations'])
+		crf: CRF = build_crf(X_train, y_train, config['maxIterations'])
 
 		y_test_predict: DatasetLabels = crf.predict(X_test)
 		test_predictions: list[MorphList] = reconstruct_predictions(y_test_predict, data['test']['words'])
@@ -59,7 +60,7 @@ def run_training_cycle(config_json: str) -> str:
 		marginals: DatasetMarginals = crf.predict_marginals(X_select)
 		confidence_data: list[ConfidenceData] = get_confidence_data(data['select']['words'], y_select_predict, marginals)
 
-		increment_size: int = config['increment_size']
+		increment_size: int = config['selectSize']
 		increment_words: list[str] = [word for word, _, _ in confidence_data[increment_size:]]
 		increment_content: str = '\n'.join(increment_words)
 		increment_data: str = format_increment(confidence_data[:increment_size])
