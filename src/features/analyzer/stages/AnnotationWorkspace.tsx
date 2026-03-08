@@ -25,7 +25,7 @@ import { ArrowIcon, UploadSmallIcon, CheckAllIcon } from "../../../components/ui
 function parseGoldFile(content: string): Map<string, number[]> {
   const lookup = new Map<string, number[]>();
 
-  for (const rawLine of content.split("\n")) {
+  for (const rawLine of (content ?? '').split("\n")) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
 

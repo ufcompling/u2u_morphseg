@@ -184,7 +184,7 @@ function FileRow({
   onAssignRole: (fileId: string, role: FileRole) => void;
   onRemove: (fileId: string) => void;
 }) {
-  const extension = file.fileName.split(".").pop()?.toLowerCase() || "";
+  const extension = (file.fileName ?? '').split(".").pop()?.toLowerCase() || "";
 
   return (
     <div className="group flex items-center gap-4 px-6 py-3.5 hover:bg-secondary/5 transition-colors">

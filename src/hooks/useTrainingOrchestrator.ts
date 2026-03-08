@@ -150,8 +150,8 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
       setEvaluationContent(result.evaluationContent ?? "");
 
       const totalWords =
-        selectTgt.split("\n").filter(Boolean).length +
-        trainTgt.split("\n").filter(Boolean).length;
+        (selectTgt ?? '').split("\n").filter(Boolean).length +
+        (trainTgt ?? '').split("\n").filter(Boolean).length;
 
       setPendingCycleResult({
         precision: result.precision,
