@@ -76,7 +76,7 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
     let worker: Worker;
     try {
       worker = new Worker(
-        new URL('../services/pyodide/workers/pyodide.worker.ts', import.meta.url),
+        new URL('../workers/pyodide.worker.ts', import.meta.url),
         { type: 'module' }
       );
       setPyodideWorker(worker);
@@ -192,9 +192,9 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
         }
 
         logger.info(' Starting cycle with config:', {
-          trainTgtLines: config.trainTgt.split('\n').length,
-          testTgtLines: config.testTgt.split('\n').length,
-          selectTgtLines: config.selectTgt.split('\n').length,
+          trainTgtLines: (config.trainTgt ?? '').split('\n').length,
+          testTgtLines: (config.testTgt ?? '').split('\n').length,
+          selectTgtLines: (config.selectTgt ?? '').split('\n').length,
         });
 
         pendingCycle.current = { resolve, reject, onStep: onStepProgress };

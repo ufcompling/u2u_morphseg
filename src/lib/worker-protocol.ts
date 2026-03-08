@@ -60,4 +60,5 @@ export type WorkerOutMessage =
   | { type: "FILE_SAVED"; fileName: string }
   | { type: "FILE_SAVE_ERROR"; error: string }
   | { type: "FILES_CLEARED"; directory?: string }
-  | { type: "FILE_CLEAR_ERROR"; error: string };
+  | { type: "FILE_CLEAR_ERROR"; error: string }
+  | { type: "PYODIDE_READY" };

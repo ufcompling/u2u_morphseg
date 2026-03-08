@@ -15,7 +15,7 @@ export async function loadFiles(): Promise<fileData[]> {
   const fileStats = JSON.parse(statsStr);
   return fileIds.map((fileName: string) => ({
     fileName,
-    filePath: '/data/' + fileName,
+    filePath: '/data/models/' + fileName,
     fileSize: fileStats[fileName]?.fileSize,
     createdAt: fileStats[fileName]?.createdAt
   } as fileData));
