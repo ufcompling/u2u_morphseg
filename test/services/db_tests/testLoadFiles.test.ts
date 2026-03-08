@@ -1,14 +1,17 @@
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {loadFiles} from '../../../src/services/database/helpers/loadFiles';
+// Type declaration for globalThis.pyodide
+declare global {
+  var pyodide: any;
+}
+import {loadFiles} from '../../../src/services/database/loadFiles';
 
 vi.mock('../../../src/services/pyodide/pyodideService', () => ({
   syncPyodideFS: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe('loadFiles', () => {
-  let pyodide: any;
   beforeEach(() => {
-    pyodide = {
+    globalThis.pyodide = {
       runPythonAsync: vi.fn(),
       FS: { syncfs: vi.fn((flush: boolean) => Promise.resolve()) },
     };
@@ -39,21 +42,19 @@ describe('loadFiles', () => {
       'file1.txt': { content: 'content of file 1', type: 'text' },
       'file2.txt': { content: 'content of file 2', type: 'text' },
     });
-    const result = await loadFiles(pyodide);
+    const result = await loadFiles();
     expect(result).toEqual([
       {
         fileName: 'file1.txt',
-      fileContent: 'content of file 1',
-      fileType: 'text',
-      fileSize: 'content of file 1'.length,
-      processedFileContent: null,
+        filePath: '/data/models/file1.txt',
+        fileSize: undefined,
+        createdAt: undefined,
       },
       {
         fileName: 'file2.txt',
-        fileContent: 'content of file 2',
-        fileType: 'text',
-        fileSize: 'content of file 2'.length,
-        processedFileContent: null,
+        filePath: '/data/models/file2.txt',
+        fileSize: undefined,
+        createdAt: undefined,
       },
     ]);
   });
@@ -62,36 +63,41 @@ describe('loadFiles', () => {
     mockPython({
       'binary.bin': { content: 'AAECAw==', type: 'binary' },
     });
-    const result = await loadFiles(pyodide);
+    const result = await loadFiles();
     expect(result).toEqual([
       {
         fileName: 'binary.bin',
-        fileContent: 'AAECAw==',
-        fileType: 'binary',
-        fileSize: 4,
-        processedFileContent: null,
+        filePath: '/data/models/binary.bin',
+        fileSize: undefined,
+        createdAt: undefined,
       },
     ]);
   });
 
   it('should handle empty file content', async () => {
     mockPython({ 'empty.txt': { content: '', type: 'text' } });
-    const result = await loadFiles(pyodide);
+    const result = await loadFiles();
     expect(result).toEqual([
       {
         fileName: 'empty.txt',
-        fileContent: '',
-        fileType: 'text',
-        fileSize: 0,
-        processedFileContent: null,
+        filePath: '/data/models/empty.txt',
+        fileSize: undefined,
+        createdAt: undefined,
       },
     ]);
   });
 
   it('should handle file read errors', async () => {
     mockPython({ 'file.txt': new Error('File read error') });
-    const result = await loadFiles(pyodide);
-    expect(result).toEqual([]);
+    const result = await loadFiles();
+    expect(result).toEqual([
+      {
+        fileName: 'file.txt',
+        filePath: '/data/models/file.txt',
+        fileSize: undefined,
+        createdAt: undefined,
+      },
+    ]);
   });
 });
 

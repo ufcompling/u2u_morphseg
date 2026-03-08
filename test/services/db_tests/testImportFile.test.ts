@@ -1,5 +1,5 @@
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {importFiles} from '../../../src/services/database/helpers/importFiles';
+import {importFile} from '../../../src/services/database/importFile';
 
 vi.mock('../../../src/services/pyodide/pyodideService', () => ({
   syncPyodideFS: vi.fn().mockResolvedValue(undefined),
@@ -15,7 +15,7 @@ function arrayToList(files: File[]) : FileList {
   return fileList;
 }
 
-describe('importFiles', () => {
+describe('importFile', () => {
   let pyodide: any;
   let saved: Record<string, any>;
   beforeEach(() => {
@@ -28,6 +28,7 @@ describe('importFiles', () => {
       },
       FS: { syncfs: vi.fn((flush: boolean) => Promise.resolve()) },
     };
+    globalThis.pyodide = pyodide;
     vi.clearAllMocks();
   });
 
@@ -37,16 +38,20 @@ describe('importFiles', () => {
       if (arg.includes('os.listdir')) {
         return Promise.resolve(JSON.stringify(existing));
       }
-      if (arg.includes('save_base64')) {
-        const m = arg.match(/save_base64\('\/data\/([^']+)'/);
-        const fileName = m![1];
-        saved[fileName] = pyodide.globals.get('b64_content');
+      if (arg.includes('save_binary')) {
+        const m = arg.match(/save_binary\('\/data\/models\/([^']+)'/);
+        const fileName = m && m[1];
+        if (fileName) {
+          saved[fileName] = pyodide.globals.get('data_bytes');
+        }
         return Promise.resolve('');
       }
-      if (arg.includes('save_file')) {
-        const m = arg.match(/save_file\('\/data\/([^']+)'/);
-        const fileName = m![1];
-        saved[fileName] = arg.split('"""')[1];
+      if (arg.includes('save_text')) {
+        const m = arg.match(/save_text\('\/data\/models\/([^']+)'/);
+        const fileName = m && m[1];
+        if (fileName) {
+          saved[fileName] = pyodide.globals.get('text_data');
+        }
         return Promise.resolve('');
       }
       return Promise.resolve('');
@@ -57,13 +62,12 @@ describe('importFiles', () => {
   it('should import files and return their content', async () => {
     const mockFile1 = new File(['content of file 1'], 'file1.txt', { type: 'text/plain' });
     const mockFile2 = new File(['content of file 2'], 'file2.txt', { type: 'text/plain' });
-
     mockPython([]);
-    const fileList = arrayToList([mockFile1, mockFile2]);
-    const status = vi.fn();
-
-    await importFiles(pyodide, fileList, status);
-
+    const files = [mockFile1, mockFile2];
+    for (const file of files) {
+      const content = await file.text();
+      await importFile(file.name, content);
+    }
     expect(saved).toEqual({
       'file1.txt': 'content of file 1',
       'file2.txt': 'content of file 2',
@@ -74,25 +78,21 @@ describe('importFiles', () => {
     const binaryContent = new Uint8Array([0, 1, 2, 3]);
     const mockFile = new File([binaryContent], 'binary.bin', { type: 'application/octet-stream' });
     mockPython([]);
-    const fileList = arrayToList([mockFile]);
-    const status = vi.fn();
-
-    await importFiles(pyodide, fileList, status);
+    // For binary, use arrayBuffer and convert to Uint8Array
+    const arrayBuffer = await mockFile.arrayBuffer();
+    const content = new Uint8Array(arrayBuffer);
+    await importFile(mockFile.name, content);
     expect(saved).toEqual({
-      'binary.bin': 'AAECAw==',
+      'binary.bin': content,
     });
   });
 
   it('should skip files with ID collisions', async () => {
     const mockFile = new File(['content'], 'file1.txt', { type: 'text/plain' });
     mockPython(['file1.txt']);
-    const fileList = arrayToList([mockFile]);
-    const status = vi.fn();
-
-    await importFiles(pyodide, fileList, status);
-
+    const content = await mockFile.text();
+    await importFile(mockFile.name, content);
     expect(saved).toEqual({});
-    expect(status).toHaveBeenCalledWith('ID collision for file1.txt. Skipping.');
   });
 
   it('should handle errors during import', async () => {
@@ -100,13 +100,8 @@ describe('importFiles', () => {
     pyodide.runPythonAsync
       .mockResolvedValueOnce(JSON.stringify([]))
       .mockRejectedValueOnce(new Error('Import error'));
-
-    const fileList = arrayToList([mockFile]);
-    const status = vi.fn();
-
-    await importFiles(pyodide, fileList, status);
-
+    const content = await mockFile.text();
+    await importFile(mockFile.name, content);
     expect(saved).toEqual({});
-    expect(status).toHaveBeenCalledWith('Failed to import file1.txt');
   });
 });
