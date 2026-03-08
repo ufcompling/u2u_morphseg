@@ -27,7 +27,7 @@ export type WorkerInMessage =
   | { type: "RUN_INFERENCE"; payload: { residualTgt: string; delta?: number; workDir?: string } }
   | { type: "SYNC_VFS" }
   | { type: "WIPE_VFS" }
-  | { type: "IMPORT_FILES"; files: FileList }
+  | { type: "IMPORT_FILES"; fileName: string, fileContent: string | Uint8Array }
   | { type: "LOAD_FILES" }
   | { type: "READ_FILE"; filePath: string }
   | { type: "DELETE_FILE"; filePath: string }

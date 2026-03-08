@@ -40,8 +40,7 @@ let initPromise: Promise<void> | null = null;
 const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.27.4/full/";
 const CRFSUITE_WHL = `${self.location.origin}/u2u_morphseg/wheels/python_crfsuite-0.9.12-cp312-cp312-pyodide_2024_0_wasm32.whl`;
 
-const PERSIST_ROOT = "/persist";
-const DEFAULT_WORK_DIR = `${PERSIST_ROOT}/turtleshell`;
+const DATA_ROOT = "/data";
 const MODEL_FILENAME = "crf.model";
 
 // ── IDBFS helpers ───────────────────────────────────────────────────────────
@@ -59,15 +58,17 @@ async function idbfsSync(populate: boolean): Promise<void> {
 
 async function syncVfsToIDB(): Promise<void> {
   await idbfsSync(false);
+  ensureDir(DATA_ROOT);
 }
 
 async function restoreVfsFromIDB(): Promise<void> {
   await idbfsSync(true);
+  ensureDir(DATA_ROOT);
 }
 
 function modelExists(): boolean {
   try {
-    pyodide.FS.stat(`${DEFAULT_WORK_DIR}/${MODEL_FILENAME}`);
+    pyodide.FS.stat(`${DATA_ROOT}/${MODEL_FILENAME}`);
     return true;
   } catch {
     return false;
@@ -105,13 +106,14 @@ async function initPyodide(): Promise<void> {
     // ── Mount IDBFS ───────────────────────────────────────────────────────
     post({ type: "INIT_PROGRESS", step: "Mounting persistent filesystem…" });
     try {
-      ensureDir(PERSIST_ROOT);
-      pyodide.FS.mount(pyodide.FS.filesystems.IDBFS, {}, PERSIST_ROOT);
+      // Create /scripts and /data
+      try { pyodide.FS.mkdir('/scripts'); } catch (e) {}
+      ensureDir(DATA_ROOT);
+      pyodide.FS.mount(pyodide.FS.filesystems.IDBFS, {}, DATA_ROOT);
       await restoreVfsFromIDB();
-      ensureDir(DEFAULT_WORK_DIR);
     } catch (err) {
       console.warn("[pyodide-worker] IDBFS mount failed (non-fatal):", err);
-      ensureDir(DEFAULT_WORK_DIR);
+      ensureDir(DATA_ROOT);
     }
 
     // ── Install Python packages ───────────────────────────────────────────
@@ -119,34 +121,46 @@ async function initPyodide(): Promise<void> {
     await pyodide.loadPackage("micropip");
 
     post({ type: "INIT_PROGRESS", step: "Installing Python packages…" });
-
     try {
-      const whlResponse = await fetch(CRFSUITE_WHL);
-      if (!whlResponse.ok) {
-        throw new Error(`Wheel not found at ${CRFSUITE_WHL} (HTTP ${whlResponse.status})`);
-      }
-      if ((whlResponse.headers.get("content-type") || "").includes("text/html")) {
-        throw new Error(`Wheel URL returned HTML. Check that .whl exists at ${CRFSUITE_WHL}`);
-      }
       await pyodide.runPythonAsync(`
 import micropip
 await micropip.install('${CRFSUITE_WHL}')
-`);
-    } catch (err) {
-      throw new Error(`Failed to install python-crfsuite: ${err}`);
-    }
-
-    try {
-      await pyodide.runPythonAsync(`
-import micropip
 await micropip.install('sklearn-crfsuite')
+await micropip.install('PyPDF2')
+await micropip.install('reportlab')
+await micropip.install('python-docx')
 `);
     } catch (err) {
-      throw new Error(`Failed to install sklearn-crfsuite: ${err}`);
+      throw new Error(`Failed to install one or more Python packages: ${err}`);
     }
 
-    post({ type: "INIT_PROGRESS", step: "Loading CRF pipeline scripts…" });
+    // ── Load scripts into /scripts and /tmp ──────────────────────────────
+    // db_worker.py
+    try {
+      const dbWorkerResp = await fetch('/u2u_morphseg/scripts/db_worker.py');
+      if (dbWorkerResp.ok) {
+        const dbWorkerCode = await dbWorkerResp.text();
+        pyodide.FS.writeFile('/scripts/db_worker.py', dbWorkerCode);
+      }
+    } catch (err) {
+      console.warn('Failed to load db_worker.py:', err);
+    }
+    // binary_extractor.py
+    try {
+      const binaryResp = await fetch('/u2u_morphseg/scripts/binary_extractor.py');
+      if (binaryResp.ok) {
+        const binaryCode = await binaryResp.text();
+        pyodide.FS.writeFile('/scripts/binary_extractor.py', binaryCode);
+      }
+    } catch (err) {
+      console.warn('Failed to load binary_extractor.py:', err);
+    }
+
+    // crf_al.py and crf_bridge.py (legacy location: /tmp)
     await loadPythonScripts();
+
+    // Add /scripts to sys.path
+    await pyodide.runPythonAsync("import sys; sys.path.append('/scripts')");
 
     const hasModel = modelExists();
     console.log(`[pyodide-worker] Init complete. Model exists: ${hasModel}`);
@@ -190,7 +204,7 @@ exec(open('/tmp/crf_bridge.py').read())
 async function runCycle(config: TrainingCycleConfig): Promise<void> {
   // Ensure pyodide is initialized before use
   if (!pyodide) await initPyodide();
-  const effectiveConfig = { ...config, workDir: DEFAULT_WORK_DIR };
+  const effectiveConfig = { ...config, workDir: DATA_ROOT };
 
   step("init");
   pyodide.globals.set("_config_json", JSON.stringify(effectiveConfig));
@@ -251,7 +265,7 @@ async function runCycle(config: TrainingCycleConfig): Promise<void> {
 async function runInference(config: { residualTgt: string; delta?: number; workDir?: string }): Promise<void> {
   // Ensure pyodide is initialized before use
   if (!pyodide) await initPyodide();
-  const effectiveConfig = { ...config, workDir: DEFAULT_WORK_DIR };
+  const effectiveConfig = { ...config, workDir: DATA_ROOT };
 
   pyodide.globals.set("_inference_config_json", JSON.stringify(effectiveConfig));
   const resultJson: string = await pyodide.runPythonAsync(`run_inference(_inference_config_json)`);
@@ -297,12 +311,12 @@ async function wipeVfs(): Promise<void> {
   try {
     if (!pyodide) return;
     pyodide.runPython(`
-import os, shutil
-work_dir = '${DEFAULT_WORK_DIR}'
-if os.path.exists(work_dir):
+  import os, shutil
+  work_dir = '${DATA_ROOT}'
+  if os.path.exists(work_dir):
     shutil.rmtree(work_dir)
     os.makedirs(work_dir)
-`);
+  `);
     await syncVfsToIDB();
   } catch (err) {
     console.warn("[pyodide-worker] VFS wipe failed (non-fatal):", err);
@@ -358,8 +372,8 @@ try {
       case "IMPORT_FILES":
         try {
           if (!pyodide) await initPyodide();
-            await importFiles(msg.files);
-            post({ type: "FILES_IMPORTED" });
+          await importFiles(msg.fileName, msg.fileContent);
+          post({ type: "FILES_IMPORTED" });
         } catch (err) {
           post({ type: "FILE_IMPORT_ERROR", error: String(err) });
         }

@@ -114,9 +114,6 @@ export interface UseTurtleshellReturn {
 
 export function useTurtleshell(): UseTurtleshellReturn {
   const projectDB = useProjectDB();
-  // Log when projectDB.pyodide changes (including when it becomes available)
-  useEffect(() => {
-  }, [projectDB.pyodide]);
   const { pyodideReady, pyodideLoading, pyodideError, modelRestored, runCycle, runInference, wipeVfs } =
     usePyodideWorker();
   const hasRestored = useRef(false);
@@ -168,15 +165,28 @@ export function useTurtleshell(): UseTurtleshellReturn {
   const [isUploading, setIsUploading] = useState(false);
 
   const handleUpload = useCallback(
-    (fileList: FileList | null) => {
+    async (fileList: FileList | null) => {
       if (!fileList) {
         return;
       }
-      if (!pyodideReady || !projectDB.pyodide) {
+      if (!pyodideReady) {
         return;
       }
       setIsUploading(true);
-      projectDB.importFiles(projectDB.pyodide, fileList)
+      try {
+        for (const file of Array.from(fileList)) {
+          let content: string | Uint8Array;
+          if (file.type.startsWith('text/')) {
+            content = await file.text();
+          } else {
+            const buffer = await file.arrayBuffer();
+            content = new Uint8Array(buffer);
+          }
+          await projectDB.importFiles(file.name, content);
+        }
+      } finally {
+        setIsUploading(false);
+      }
     },
     [projectDB, pyodideReady]
   );
@@ -189,7 +199,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
 
   const handleRemoveFile = useCallback(
     (fileName: string) => {
-      projectDB.deleteFile(projectDB.pyodide, fileName);
+      projectDB.deleteFile(fileName);
     },
     [projectDB]
   );
@@ -340,13 +350,13 @@ export function useTurtleshell(): UseTurtleshellReturn {
     if (annotatedFile) {
       const newTgtLines = annotations.annotationWords.map(annotationToTgtLine).join("\n");
       const merged = annotatedFile.fileContent.trimEnd() + "\n" + newTgtLines;
-      await projectDB.saveFile(projectDB.pyodide, annotatedFile.fileName, merged);
+      await projectDB.saveFile(annotatedFile.fileName, merged);
     }
 
     // Replace unannotated pool with residual
     const unannotatedFile = getFileByRole(files, "unannotated");
     if (unannotatedFile && training.residualContent) {
-      await projectDB.saveFile(projectDB.pyodide, unannotatedFile.fileName, training.residualContent);
+      await projectDB.saveFile(unannotatedFile.fileName, training.residualContent);
     }
 
     goToStage("results");

@@ -20,6 +20,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import type { TrainingCycleConfig, TrainingCycleResult, InferenceConfig, InferenceResult } from '../lib/types';
 import type { WorkerOutMessage } from '../lib/worker-protocol';
 import { log } from '../lib/logger';
+import { setPyodideWorker } from '../lib/db';
 
 const logger = log('pyodide-worker');
 
@@ -75,9 +76,10 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
     let worker: Worker;
     try {
       worker = new Worker(
-        new URL('../workers/pyodide.worker.ts', import.meta.url),
+        new URL('../services/pyodide/workers/pyodide.worker.ts', import.meta.url),
         { type: 'module' }
       );
+      setPyodideWorker(worker);
       logger.info(' Worker spawned successfully');
     } catch (err) {
       logger.error(' Failed to spawn worker:', err);

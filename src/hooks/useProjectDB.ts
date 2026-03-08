@@ -52,7 +52,7 @@ export interface UseProjectDBReturn {
 
   // ── Files ──
   saveFile: (fileName: string, fileContent: string) => Promise<void>;
-  importFiles: (files: FileList) => Promise<void>;
+  importFiles: (fileName: string, fileContent: string | Uint8Array) => Promise<void>;
   deleteFile: (filePath: string) => Promise<void>;
   clearFiles: (directory?: string) => Promise<void>;
   readFile: (filePath: string) => Promise<{fileContent: string; fileType: 'text' | 'pdf' | 'docx'}>;
@@ -96,8 +96,15 @@ export function useProjectDB(): UseProjectDBReturn {
   // Guard against mutations before the DB is ready
   const ready = useRef(false);
 
-  // ── Initial load ───────────────────────────────────────────────────────────
+  // Pyodide readiness from db API (worker)
+  const [pyodideReady, setPyodideReady] = useState(db.pyodideReady);
+  useEffect(() => {
+    // Subscribe to db's readiness state
+    const unsub = db.subPyodideReady(setPyodideReady);
+    return () => { if (typeof unsub === 'function') unsub(); };
+  }, []);
 
+  // ── Initial load ───────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -140,6 +147,10 @@ export function useProjectDB(): UseProjectDBReturn {
   // ── Project metadata ───────────────────────────────────────────────────────
 
   const initProject = useCallback(async () => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking initProject");
+      return;
+    }
     const now = Date.now();
     const meta = {
       currentStage: "ingestion" as WorkflowStage,
@@ -156,10 +167,13 @@ export function useProjectDB(): UseProjectDBReturn {
       currentIteration: meta.currentIteration,
       cumulativeSelectSize: meta.cumulativeSelectSize,
     });
-  }, []);
+  }, [pyodideReady]);
 
   const saveProjectMeta = useCallback(async (partial: Partial<ProjectState>) => {
-    if (!ready.current) return;
+    if (!ready.current || !pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking saveProjectMeta");
+      return;
+    }
     // Read current project meta from file
     let existing: any = null;
     try {
@@ -179,13 +193,17 @@ export function useProjectDB(): UseProjectDBReturn {
     };
     await db.saveFile("project.json", JSON.stringify(updated));
     setProject((prev) => prev ? { ...prev, ...partial } : null);
-  }, [initProject]);
+  }, [initProject, pyodideReady]);
 
   // ── Files (using new db class functions) ───────────────────────────────
 
 
   // Save a single file
   const saveFile = useCallback(async (fileName: string, fileContent: string): Promise<void> => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking saveFile");
+      return;
+    }
     try {
       await db.saveFile(fileName, fileContent);
       const updatedFiles = await db.loadFiles();
@@ -193,23 +211,31 @@ export function useProjectDB(): UseProjectDBReturn {
     } catch (err) {
       logger.error("Failed to save file:", err);
     }
-  }, []);
+  }, [pyodideReady]);
 
 
-  // Import multiple files
-  const importFiles = useCallback(async (files: FileList): Promise<void> => {
+  // Import a single file (new API)
+  const importFiles = useCallback(async (fileName: string, fileContent: string | Uint8Array): Promise<void> => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking importFiles");
+      return;
+    }
     try {
-      await db.importFiles(files);
+      await db.importFiles(fileName, fileContent);
       const updatedFiles = await db.loadFiles();
       setFiles(updatedFiles);
     } catch (err) {
-      logger.error("Failed to import files:", err);
+      logger.error("Failed to import file:", err);
     }
-  }, []);
+  }, [pyodideReady]);
 
 
   // Delete a file
   const deleteFile = useCallback(async (filePath: string): Promise<void> => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking deleteFile");
+      return;
+    }
     try {
       await db.deleteFile(filePath);
       const updatedFiles = await db.loadFiles();
@@ -217,22 +243,30 @@ export function useProjectDB(): UseProjectDBReturn {
     } catch (err) {
       logger.error("Failed to delete file:", err);
     }
-  }, []);
+  }, [pyodideReady]);
 
 
   // Clear all files (optionally in a directory)
   const clearFiles = useCallback(async (directory?: string): Promise<void> => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking clearFiles");
+      return;
+    }
     try {
       await db.clearFiles(directory); // directory param not used in db API, but could be added
       setFiles([]);
     } catch (err) {
       logger.error("Failed to clear files:", err);
     }
-  }, []);
+  }, [pyodideReady]);
 
 
   // Read a file's content
   const readFile = useCallback(async (filePath: string): Promise<{fileContent: string; fileType: 'text' | 'pdf' | 'docx'}> => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking readFile");
+      return { fileContent: '', fileType: 'text' };
+    }
     try {
       const result = await db.readFile(filePath);
       return result;
@@ -240,11 +274,15 @@ export function useProjectDB(): UseProjectDBReturn {
       logger.error("Failed to read file:", err);
       return { fileContent: '', fileType: 'text' };
     }
-  }, []);
+  }, [pyodideReady]);
 
 
   // Load all files
   const loadFiles = useCallback(async (): Promise<fileData[]> => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking loadFiles");
+      return [];
+    }
     try {
       const loadedFiles = await db.loadFiles();
       setFiles(loadedFiles);
@@ -253,7 +291,7 @@ export function useProjectDB(): UseProjectDBReturn {
       logger.error("Failed to load files:", err);
       return [];
     }
-  }, []);
+  }, [pyodideReady]);
 
   // ── Cycles ─────────────────────────────────────────────────────────────────
 
@@ -263,6 +301,10 @@ export function useProjectDB(): UseProjectDBReturn {
     residualContent: string;
     evaluationContent: string;
   }) => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking saveCycle");
+      return;
+    }
     // Load cycles array
     let cycles: CycleRow[] = [];
     try {
@@ -291,9 +333,13 @@ export function useProjectDB(): UseProjectDBReturn {
     }
     await db.saveFile("cycles.json", JSON.stringify(cycles));
     setCycleHistory(cycles.map(cycleRowToSnapshot));
-  }, []);
+  }, [pyodideReady]);
 
   const getCycleContent = useCallback(async (cycleNumber: number) => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking getCycleContent");
+      return null;
+    }
     let cycles: CycleRow[] = [];
     try {
       const result = await db.readFile("cycles.json");
@@ -308,7 +354,7 @@ export function useProjectDB(): UseProjectDBReturn {
       residualContent: row.residualContent,
       evaluationContent: row.evaluationContent,
     };
-  }, []);
+  }, [pyodideReady]);
 
   // ── Annotations ────────────────────────────────────────────────────────────
 
@@ -316,6 +362,10 @@ export function useProjectDB(): UseProjectDBReturn {
     cycleNumber: number,
     words: AnnotationWord[]
   ) => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking saveAnnotationWords");
+      return;
+    }
     let annotations: AnnotationRow[] = [];
     try {
       const result = await db.readFile("annotations.json");
@@ -336,13 +386,17 @@ export function useProjectDB(): UseProjectDBReturn {
     }));
     annotations.push(...rows);
     await db.saveFile("annotations.json", JSON.stringify(annotations));
-  }, []);
+  }, [pyodideReady]);
 
   const confirmAnnotation = useCallback(async (
     cycleNumber: number,
     wordId: string,
     boundaries: MorphemeBoundary[]
   ) => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking confirmAnnotation");
+      return;
+    }
     let annotations: AnnotationRow[] = [];
     try {
       const result = await db.readFile("annotations.json");
@@ -355,9 +409,13 @@ export function useProjectDB(): UseProjectDBReturn {
       annotations[idx] = { ...annotations[idx], boundaries, confirmed: true };
       await db.saveFile("annotations.json", JSON.stringify(annotations));
     }
-  }, []);
+  }, [pyodideReady]);
 
   const loadAnnotations = useCallback(async (cycleNumber: number): Promise<AnnotationWord[]> => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking loadAnnotations");
+      return [];
+    }
     let annotations: AnnotationRow[] = [];
     try {
       const result = await db.readFile("annotations.json");
@@ -371,9 +429,13 @@ export function useProjectDB(): UseProjectDBReturn {
       confidence: r.confidence,
       boundaries: r.boundaries,
     }));
-  }, []);
+  }, [pyodideReady]);
 
   const getConfirmedCount = useCallback(async (cycleNumber: number): Promise<number> => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking getConfirmedCount");
+      return 0;
+    }
     let annotations: AnnotationRow[] = [];
     try {
       const result = await db.readFile("annotations.json");
@@ -382,11 +444,15 @@ export function useProjectDB(): UseProjectDBReturn {
       }
     } catch {}
     return annotations.filter(a => a.cycleNumber === cycleNumber && a.confirmed).length;
-  }, []);
+  }, [pyodideReady]);
 
   // ── Cleanup ────────────────────────────────────────────────────────────────
 
   const clearAll = useCallback(async () => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking clearAll");
+      return;
+    }
     // Remove all persistent files for project, cycles, annotations, and files
     try {
       await db.deleteFile("project.json");
@@ -403,7 +469,7 @@ export function useProjectDB(): UseProjectDBReturn {
     setProject(null);
     setFiles([]);
     setCycleHistory([]);
-  }, []);
+  }, [pyodideReady]);
 
   // ── Return ─────────────────────────────────────────────────────────────────
 

@@ -56,9 +56,22 @@ export interface AnnotationRow {
 
 // ── Database class ───────────────────────────────────────────────────────────
 
+
 let pyodide: Worker | undefined;
+
+// Pyodide readiness state and listeners
+let pyodideReady = false;
+const pyodideListeners: Array<(ready: boolean) => void> = [];
+
 export function setPyodideWorker(worker: Worker) {
   pyodide = worker;
+  // Listen for PYODIDE_READY message from worker
+  pyodide.addEventListener("message", (event: MessageEvent) => {
+    if (event.data && event.data.type === "PYODIDE_READY") {
+      pyodideReady = true;
+      pyodideListeners.forEach((cb) => cb(true));
+    }
+  });
 }
 
 async function sendMessageToWorker(message: any): Promise<any> {
@@ -76,8 +89,22 @@ async function sendMessageToWorker(message: any): Promise<any> {
 }
 
 export const db = new class {
-  async importFiles(files: FileList) {
-    return await sendMessageToWorker({ type: "IMPORT_FILES", files });
+  get pyodideReady() {
+    return pyodideReady;
+  }
+  subPyodideReady(cb: (ready: boolean) => void) {
+    pyodideListeners.push(cb);
+    // Immediately call with current state
+    cb(pyodideReady);
+    // Return unsubscribe function
+    return () => {
+      const idx = pyodideListeners.indexOf(cb);
+      if (idx !== -1) pyodideListeners.splice(idx, 1);
+    };
+  }
+  async importFiles(fileName: string, fileContent: string | Uint8Array) {
+    await sendMessageToWorker({ type: "IMPORT_FILES", fileName, fileContent });
+    return await this.loadFiles();
   }
   async deleteFile(filePath: string) {
     return await sendMessageToWorker({ type: "DELETE_FILE", filePath });
