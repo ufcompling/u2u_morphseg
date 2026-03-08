@@ -65,11 +65,16 @@ const pyodideListeners: Array<(ready: boolean) => void> = [];
 
 export function setPyodideWorker(worker: Worker) {
   pyodide = worker;
-  // Listen for PYODIDE_READY message from worker
+  // Listen for PYODIDE_READY or INIT_DONE message from worker
   pyodide.addEventListener("message", (event: MessageEvent) => {
-    if (event.data && event.data.type === "PYODIDE_READY") {
-      pyodideReady = true;
-      pyodideListeners.forEach((cb) => cb(true));
+    if (
+      event.data &&
+      (event.data.type === "PYODIDE_READY" || event.data.type === "INIT_DONE")
+    ) {
+      if (!pyodideReady) {
+        pyodideReady = true;
+        pyodideListeners.forEach((cb) => cb(true));
+      }
     }
   });
 }
@@ -103,6 +108,7 @@ export const db = new class {
     };
   }
   async importFiles(fileName: string, fileContent: string | Uint8Array) {
+    console.log('[db] Sending IMPORT_FILES to worker', { fileName, fileContent });
     await sendMessageToWorker({ type: "IMPORT_FILES", fileName, fileContent });
     return await this.loadFiles();
   }
