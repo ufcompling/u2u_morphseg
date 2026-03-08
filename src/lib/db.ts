@@ -107,7 +107,7 @@ export const db = new class {
       if (idx !== -1) pyodideListeners.splice(idx, 1);
     };
   }
-  async importFiles(fileName: string, fileContent: string | Uint8Array) {
+  async importFile(fileName: string, fileContent: string | Uint8Array) {
     console.log('[db] Sending IMPORT_FILES to worker', { fileName, fileContent });
     await sendMessageToWorker({ type: "IMPORT_FILES", fileName, fileContent });
     return await this.loadFiles();

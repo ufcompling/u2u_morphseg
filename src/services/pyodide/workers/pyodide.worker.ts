@@ -22,7 +22,7 @@
 // Type-only imports are erased at compile time — safe for workers.
 import type { TrainingCycleConfig } from "../../../lib/types";
 import type { WorkerInMessage, WorkerOutMessage } from "../../../lib/worker-protocol";
-import { importFiles } from "../../database/importFiles";
+import { importFile } from "../../database/importFile";
 import { deleteFile } from "../../database/deleteFile";
 import { saveFile } from "../../database/saveFile";
 import { loadFiles } from "../../database/loadFiles";
@@ -372,7 +372,7 @@ try {
       case "IMPORT_FILES":
         try {
           if (!pyodide) await initPyodide();
-          await importFiles(msg.fileName, msg.fileContent);
+          await importFile(msg.fileName, msg.fileContent);
           post({ type: "FILES_IMPORTED" });
         } catch (err) {
           post({ type: "FILE_IMPORT_ERROR", error: String(err) });

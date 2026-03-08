@@ -182,7 +182,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
             const buffer = await file.arrayBuffer();
             content = new Uint8Array(buffer);
           }
-          await projectDB.importFiles(file.name, content);
+          await projectDB.importFile(file.name, content);
         }
       } finally {
         setIsUploading(false);

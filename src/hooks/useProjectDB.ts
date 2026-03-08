@@ -52,7 +52,7 @@ export interface UseProjectDBReturn {
 
   // ── Files ──
   saveFile: (fileName: string, fileContent: string) => Promise<void>;
-  importFiles: (fileName: string, fileContent: string | Uint8Array) => Promise<void>;
+  importFile: (fileName: string, fileContent: string | Uint8Array) => Promise<void>;
   deleteFile: (filePath: string) => Promise<void>;
   clearFiles: (directory?: string) => Promise<void>;
   readFile: (filePath: string) => Promise<{fileContent: string; fileType: 'text' | 'pdf' | 'docx'}>;
@@ -216,13 +216,13 @@ export function useProjectDB(): UseProjectDBReturn {
 
 
   // Import a single file (new API)
-  const importFiles = useCallback(async (fileName: string, fileContent: string | Uint8Array): Promise<void> => {
+  const importFile = useCallback(async (fileName: string, fileContent: string | Uint8Array): Promise<void> => {
     if (!pyodideReady) {
-      logger.warn("[useProjectDB] Pyodide not ready, blocking importFiles");
+      logger.warn("[useProjectDB] Pyodide not ready, blocking importFile");
       return;
     }
     try {
-      await db.importFiles(fileName, fileContent);
+      await db.importFile(fileName, fileContent);
       const updatedFiles = await db.loadFiles();
       setFiles(updatedFiles);
     } catch (err) {
@@ -483,7 +483,7 @@ export function useProjectDB(): UseProjectDBReturn {
     initProject,
     saveProjectMeta,
     saveFile,
-    importFiles,
+    importFile,
     deleteFile,
     clearFiles,
     loadFiles,
