@@ -68,8 +68,8 @@ export interface UseTurtleshellReturn {
   files: StoredFile[];
   isUploading: boolean;
   handleUpload: (files: FileList | null) => void;
-  handleAssignRole: (fileId: string, role: FileRole) => void;
-  handleRemoveFile: (fileId: string) => void;
+  handleAssignRole: (filePath: string, role: FileRole) => void;
+  handleRemoveFile: (filePath: string) => void;
 
   // Config
   modelConfig: ModelConfig;
@@ -192,16 +192,19 @@ export function useTurtleshell(): UseTurtleshellReturn {
   );
 
   const handleAssignRole = useCallback(
-    (_fileId: string, _role: FileRole) => {
+    (_filePath: string, _role: FileRole) => {
     },
     []
   );
 
   const handleRemoveFile = useCallback(
-    (fileName: string) => {
-      projectDB.deleteFile(fileName);
+    async (filePath: string) => {
+      await projectDB.deleteFile(filePath);
+      if (typeof projectDB.loadFiles === 'function') {
+        await projectDB.loadFiles();
+      }
     },
-    [projectDB]
+    [projectDB, files]
   );
 
   // ── Subsystem hooks ─────────────────────────────────────────────────────
