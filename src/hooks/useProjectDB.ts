@@ -106,6 +106,7 @@ export function useProjectDB(): UseProjectDBReturn {
 
   // ── Initial load ───────────────────────────────────────────────────────────
   useEffect(() => {
+    if (!pyodideReady) return;
     let cancelled = false;
     async function load() {
       try {
@@ -142,7 +143,7 @@ export function useProjectDB(): UseProjectDBReturn {
     }
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [pyodideReady]);
 
   // ── Project metadata ───────────────────────────────────────────────────────
 
