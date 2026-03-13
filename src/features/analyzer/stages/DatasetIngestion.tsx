@@ -1,5 +1,5 @@
 import { useState, type DragEvent, type ChangeEvent } from "react";
-import type { StoredFile, FileRole } from "../../../lib/types";
+import type { fileData, FileRole } from "../../../lib/types";
 import { formatSize } from "../../../lib/format-utils";
 import { UploadIcon, FileIcon, TrashIcon, ArrowIcon } from "../../../components/ui/icons";
 
@@ -8,22 +8,28 @@ import { UploadIcon, FileIcon, TrashIcon, ArrowIcon } from "../../../components/
 // Upload files, assign roles, view validation status
 // ============================================================
 
+
 interface DatasetIngestionProps {
-  files: StoredFile[];
+  files: fileData[];
   onUpload: (fileList: FileList | null) => void;
-  onAssignRole: (fileId: string, role: FileRole) => void;
-  onRemoveFile: (fileId: string) => void;
-  onNext: () => void;
+  onAssignRole: (filePath: string, role: FileRole) => void;
+  onRemoveFile: (filePath: string) => void;
+  onStartTraining: () => void;
+  onBack: () => void;
   isUploading: boolean;
   pyodideReady: boolean;
+  language?: string;
+  onLanguageChange?: (lang: string) => void;
 }
+
 
 export function DatasetIngestion({
   files,
   onUpload,
   onAssignRole,
   onRemoveFile,
-  onNext,
+  onStartTraining,
+  onBack,
   isUploading,
   pyodideReady,
 }: DatasetIngestionProps) {
@@ -34,6 +40,7 @@ export function DatasetIngestion({
 
   return (
     <div className="flex flex-col gap-0">
+
       {/* Upload zone */}
       <UploadZone onUpload={onUpload} isUploading={isUploading} pyodideReady={pyodideReady} />
 
@@ -61,8 +68,8 @@ export function DatasetIngestion({
               <FileRow
                 key={file.filePath}
                 file={file}
-                onAssignRole={onAssignRole}
-                onRemove={onRemoveFile}
+                  onAssignRole={onAssignRole}
+                  onRemove={onRemoveFile}
               />
             ))}
           </div>
@@ -77,11 +84,17 @@ export function DatasetIngestion({
             : "Assign at least one annotated and one unannotated file to continue"}
         </p>
         <button
-          onClick={onNext}
-          disabled={!hasRequiredFiles}
+          onClick={onBack}
+          className="px-4 py-2.5 rounded-xl font-mono text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/20 transition-all"
+        >
+          Back
+        </button>
+          <button
+            onClick={onStartTraining}
+            disabled={!hasRequiredFiles}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-mono text-xs font-semibold tracking-wide transition-all hover:bg-primary/90 active:scale-[0.97] disabled:opacity-30 disabled:pointer-events-none"
         >
-          <span>Continue</span>
+          <span>Start Training</span>
           <ArrowIcon />
         </button>
       </footer>
@@ -95,7 +108,7 @@ function UploadZone({
   onUpload,
   isUploading,
   pyodideReady,
-}: {
+  }: {
   onUpload: (files: FileList | null) => void;
   isUploading: boolean;
   pyodideReady: boolean;
@@ -180,9 +193,9 @@ function FileRow({
   onAssignRole,
   onRemove,
 }: {
-  file: StoredFile;
-  onAssignRole: (fileId: string, role: FileRole) => void;
-  onRemove: (fileId: string) => void;
+  file: fileData;
+  onAssignRole: (filePath: string, role: FileRole) => void;
+  onRemove: (filePath: string) => void;
 }) {
   const extension = (file.fileName ?? '').split(".").pop()?.toLowerCase() || "";
 

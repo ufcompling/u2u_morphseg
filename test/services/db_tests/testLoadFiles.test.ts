@@ -46,13 +46,13 @@ describe('loadFiles', () => {
     expect(result).toEqual([
       {
         fileName: 'file1.txt',
-        filePath: '/data/models/file1.txt',
+        filePath: '/data/languages/file1.txt',
         fileSize: undefined,
         createdAt: undefined,
       },
       {
         fileName: 'file2.txt',
-        filePath: '/data/models/file2.txt',
+        filePath: '/data/languages/file2.txt',
         fileSize: undefined,
         createdAt: undefined,
       },
@@ -67,7 +67,7 @@ describe('loadFiles', () => {
     expect(result).toEqual([
       {
         fileName: 'binary.bin',
-        filePath: '/data/models/binary.bin',
+        filePath: '/data/languages/binary.bin',
         fileSize: undefined,
         createdAt: undefined,
       },
@@ -80,7 +80,7 @@ describe('loadFiles', () => {
     expect(result).toEqual([
       {
         fileName: 'empty.txt',
-        filePath: '/data/models/empty.txt',
+        filePath: '/data/languages/empty.txt',
         fileSize: undefined,
         createdAt: undefined,
       },
@@ -93,7 +93,7 @@ describe('loadFiles', () => {
     expect(result).toEqual([
       {
         fileName: 'file.txt',
-        filePath: '/data/models/file.txt',
+        filePath: '/data/languages/file.txt',
         fileSize: undefined,
         createdAt: undefined,
       },

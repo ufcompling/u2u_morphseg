@@ -2,6 +2,7 @@ import {describe, it, expect, vi, beforeEach} from 'vitest';
 // Type declaration for globalThis.pyodide
 declare global {
   var pyodide: any;
+  var language: string;
 }
 globalThis.pyodide = {
   runPythonAsync: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock('../../../src/services/pyodide/pyodideService', () => ({
 }));
 
 function mockPython(filename: string, content: string) {
-  return `import db_worker; db_worker.save_file('/data/${filename}', """${content}""") `;
+  return `import db_worker; db_worker.save_file('${filename}', """${content}""") `;
 }
 
 describe('saveFile', () => {

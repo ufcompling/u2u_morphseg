@@ -1,5 +1,12 @@
+// Extend Window interface to include 'language' property
+declare global {
+  interface Window {
+    language?: string;
+  }
+}
 import type { ModelConfig, QueryStrategy } from "../../../lib/types";
 import { ArrowIcon, Tooltip } from "../../../components/ui";
+import { useEffect } from "react";
 
 // ============================================================
 // Model Configuration Stage
@@ -9,28 +16,10 @@ import { ArrowIcon, Tooltip } from "../../../components/ui";
 interface ModelConfigProps {
   config: ModelConfig;
   onUpdateConfig: (config: ModelConfig) => void;
-  onBack: () => void;
-  onStartTraining: () => void;
+  onNext: () => void;
 }
 
-const COMMON_LANGUAGES = [
-  "English",
-  "Swahili",
-  "Zulu",
-  "Amharic",
-  "Hausa",
-  "Yoruba",
-  "Turkish",
-  "Finnish",
-  "Hungarian",
-  "Korean",
-  "Japanese",
-  "Arabic",
-  "Persian",
-  "Quechua",
-  "Nahuatl",
-  "Georgian",
-];
+
 
 // Strategy descriptions for tooltips
 const STRATEGY_INFO: Record<QueryStrategy, { label: string; description: string }> = {
@@ -54,18 +43,27 @@ const STRATEGY_INFO: Record<QueryStrategy, { label: string; description: string 
 export function ModelConfigStage({
   config,
   onUpdateConfig,
-  onBack,
-  onStartTraining,
+  onNext,
 }: ModelConfigProps) {
+  // Set global language variable on window whenever targetLanguage changes
+  useEffect(() => {
+    if (typeof window !== "undefined" && config.targetLanguage) {
+      window.language = config.targetLanguage;
+    }
+  }, [config.targetLanguage]);
   const updateField = <K extends keyof ModelConfig>(
     key: K,
     value: ModelConfig[K]
   ) => {
     onUpdateConfig({ ...config, [key]: value });
+    if (key === "targetLanguage" && typeof window !== "undefined" && typeof value === "string") {
+      window.language = value;
+    }
   };
 
   const activeStrategy = STRATEGY_INFO[config.queryStrategy];
   const canStart = config.targetLanguage.trim().length > 0;
+
 
   return (
     <div className="flex flex-col gap-0">
@@ -95,21 +93,6 @@ export function ModelConfigStage({
             placeholder="e.g. Swahili, Turkish, Zulu..."
             className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground placeholder:text-foreground/25 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
           />
-          <div className="flex flex-wrap gap-1.5">
-            {COMMON_LANGUAGES.map((lang) => (
-              <button
-                key={lang}
-                onClick={() => updateField("targetLanguage", lang)}
-                className={`px-2.5 py-1 rounded-md font-mono text-[10px] transition-all border ${
-                  config.targetLanguage === lang
-                    ? "bg-primary/15 border-primary/30 text-primary font-semibold"
-                    : "bg-secondary/5 border-border/10 text-muted-foreground/35 hover:text-foreground/60 hover:border-border/20"
-                }`}
-              >
-                {lang}
-              </button>
-            ))}
-          </div>
         </fieldset>
       </div>
 
@@ -208,17 +191,11 @@ export function ModelConfigStage({
       {/* Footer */}
       <footer className="px-6 py-4 flex items-center justify-between">
         <button
-          onClick={onBack}
-          className="px-4 py-2.5 rounded-xl font-mono text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/20 transition-all"
-        >
-          Back
-        </button>
-        <button
-          onClick={onStartTraining}
+          onClick={onNext}
           disabled={!canStart}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-mono text-xs font-semibold tracking-wide transition-all hover:bg-primary/90 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none"
         >
-          <span>Start Training</span>
+          <span>Upload Files</span>
           <ArrowIcon />
         </button>
       </footer>
