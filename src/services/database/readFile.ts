@@ -1,8 +1,9 @@
 declare const pyodide: any;
+declare const language: string;
 
 export async function readFile(filePath: string): Promise<{ fileContent: string; fileType: 'text' | 'pdf' | 'docx' }> {
   // Read file from Python db_worker
-  const fileContentRaw = await pyodide.runPythonAsync(`import db_worker; db_worker.read_file('${filePath}')`);
+  const fileContentRaw = await pyodide.runPythonAsync(`import db_worker; db_worker.read_file('/${language}/${filePath}')`);
   const fileObj = JSON.parse(fileContentRaw);
 
   if (fileObj.type === 'text') {
