@@ -26,7 +26,8 @@ def save_text(file_name: str, data) -> None:
         raise ValueError('Unsupported data type for saving file')
 
     os.makedirs('/data', exist_ok=True)
-    file_path = os.path.join('/data', file_name)
+    # Use file_name as full path if it starts with '/', else join with /data
+    file_path = file_name if file_name.startswith('/') else os.path.join('/data', file_name)
     with open(file_path, 'wb') as f:
         f.write(data_bytes)
 
@@ -37,7 +38,7 @@ def save_binary(file_name: str, data) -> None:
     except Exception:
         raise ValueError('Data must be bytish for save_binary')
     os.makedirs('/data', exist_ok=True)
-    file_path = os.path.join('/data', file_name)
+    file_path = file_name if file_name.startswith('/') else os.path.join('/data', file_name)
     with open(file_path, 'wb') as f:
         f.write(data_bytes)
 
@@ -48,7 +49,7 @@ def create_pdf(file_name: str, file_content: str) -> None:
     from reportlab.lib.pagesizes import letter  # type: ignore
     import os
     new_name = file_name.rsplit('.', 1)[0] + '_processed.pdf' if '.' in file_name else file_name + '_processed.pdf'
-    processed_file = os.path.join('/data', new_name)
+    processed_file = new_name if new_name.startswith('/') else os.path.join('/data', new_name)
     file = canvas.Canvas(processed_file, pagesize=letter)
     file.setFont("Helvetica", 12)
     top_margin = 750
@@ -72,9 +73,9 @@ def create_pdf(file_name: str, file_content: str) -> None:
 def create_docx(file_name: str, file_content: str) -> None:
     """Creates a DOCX file hopefully with the original format."""
     from docx import Document # type: ignore
-    old_file = os.path.join('/data', file_name)
+    old_file = file_name if file_name.startswith('/') else os.path.join('/data', file_name)
     new_name = file_name.rsplit('.', 1)[0] + '_processed.docx' if '.' in file_name else file_name + '_processed.docx'
-    processed_file = os.path.join('/data', new_name)
+    processed_file = new_name if new_name.startswith('/') else os.path.join('/data', new_name)
     # Load original DOCX
     doc = Document(old_file)
     # Remove all existing paragraphs
@@ -95,7 +96,7 @@ def read_file(file_name: str, detect_text: bool = True, encoding: str = 'utf-8')
     This avoids passing raw bytes across the JS/Py boundary and lets the JS
     side decide how to display or download the data.
     """
-    file_path = os.path.join('/data', file_name)
+    file_path = file_name if file_name.startswith('/') else os.path.join('/data', file_name)
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File '{file_name}' not found in /data directory")
 
@@ -113,9 +114,8 @@ def read_file(file_name: str, detect_text: bool = True, encoding: str = 'utf-8')
     return json.dumps({'type': 'Uint8Array', 'content': list(b)})
 
 
-def delete_file(file_name: str) -> None:
+def delete_file(file_path: str) -> None:
     """Deletes a file from the /data directory in the Pyodide virtual filesystem."""
-    file_path = os.path.join('/data', file_name)
     if os.path.exists(file_path):
         os.remove(file_path)
 
