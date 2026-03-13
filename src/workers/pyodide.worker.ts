@@ -7,7 +7,7 @@
  *
  *   IDBFS Persistence:
  *     The Emscripten IDBFS filesystem is mounted at /data. All model artifacts
- *     (crf.model, training files) are written to /data/model_x so they
+ *     (crf.model, training files) are written to /data/ so they
  *     survive page refresh. FS.syncfs() is called after every cycle and can be
  *     triggered manually via the SYNC_VFS message.
  *
@@ -34,7 +34,7 @@ const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.27.4/full/";
 const CRFSUITE_WHL = `${self.location.origin}/u2u_morphseg/wheels/python_crfsuite-0.9.12-cp312-cp312-pyodide_2024_0_wasm32.whl`;
 
 const DATA_ROOT = "/data";
-const DEFAULT_WORK_DIR = `${DATA_ROOT}/models`;
+const DEFAULT_WORK_DIR = `${DATA_ROOT}`;
 const MODEL_FILENAME = "crf.model";
 
 // ── IDBFS helpers ───────────────────────────────────────────────────────────

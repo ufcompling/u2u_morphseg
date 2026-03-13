@@ -12,7 +12,7 @@
 
 import { useState, useCallback } from "react";
 import type {
-  StoredFile,
+  fileData,
   ModelConfig,
   TrainingStep,
   TrainingResult,
@@ -33,7 +33,7 @@ const logger = log('training');
 
 export interface TrainingOrchestratorDeps {
   /** Current uploaded files with role assignments */
-  files: StoredFile[];
+  files: fileData[];
   modelConfig: ModelConfig;
   currentIteration: number;
   /** Running total of words selected across all cycles */

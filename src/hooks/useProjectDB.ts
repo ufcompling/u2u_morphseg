@@ -1,3 +1,5 @@
+// Declare global language variable (set by UI, e.g. DatasetIngestion)
+declare const language: string;
 /**
  * useProjectDB.ts
  * Location: src/hooks/useProjectDB.ts
@@ -10,7 +12,7 @@
  *
  */
 
-import { type fileData } from "../services/database/dataHelpers";
+import { type fileData } from "../lib/types";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { db, type CycleRow, type AnnotationRow } from "../lib/db";
 import {
@@ -111,7 +113,7 @@ export function useProjectDB(): UseProjectDBReturn {
     async function load() {
       try {
         // Project metadata
-        const projectResult = await db.readFile("project.json");
+        const projectResult = await db.readFile(`/data/${language}/project.json`);
         if (projectResult && projectResult.fileContent && !cancelled) {
           const meta = JSON.parse(projectResult.fileContent);
           setProject({
@@ -152,6 +154,9 @@ export function useProjectDB(): UseProjectDBReturn {
       logger.warn("[useProjectDB] Pyodide not ready, blocking initProject");
       return;
     }
+    if (!language) {
+      throw new Error("[useProjectDB] Language is not set. Please select a language before initializing the project.");
+    }
     const now = Date.now();
     const meta = {
       currentStage: "ingestion" as WorkflowStage,
@@ -161,7 +166,7 @@ export function useProjectDB(): UseProjectDBReturn {
       createdAt: now,
       updatedAt: now,
     };
-    await db.saveFile("project.json", JSON.stringify(meta));
+    await db.saveFile(`project.json`, JSON.stringify(meta));
     setProject({
       currentStage: meta.currentStage,
       modelConfig: meta.modelConfig,
@@ -178,7 +183,7 @@ export function useProjectDB(): UseProjectDBReturn {
     // Read current project meta from file
     let existing: any = null;
     try {
-      const projectResult = await db.readFile("project.json");
+      const projectResult = await db.readFile(`/data/${language}/project.json`);
       if (projectResult && projectResult.fileContent) {
         existing = JSON.parse(projectResult.fileContent);
       }
@@ -192,7 +197,7 @@ export function useProjectDB(): UseProjectDBReturn {
       ...partial,
       updatedAt: Date.now(),
     };
-    await db.saveFile("project.json", JSON.stringify(updated));
+    await db.saveFile(`$project.json`, JSON.stringify(updated));
     setProject((prev) => prev ? { ...prev, ...partial } : null);
   }, [initProject, pyodideReady]);
 
@@ -456,13 +461,13 @@ export function useProjectDB(): UseProjectDBReturn {
     }
     // Remove all persistent files for project, cycles, annotations, and files
     try {
-      await db.deleteFile("project.json");
+      await db.deleteFile(`/data/${language}/project.json`);
     } catch {}
     try {
-      await db.deleteFile("cycles.json");
+      await db.deleteFile(`/data/${language}/cycles.json`);
     } catch {}
     try {
-      await db.deleteFile("annotations.json");
+      await db.deleteFile(`/data/${language}/annotations.json`);
     } catch {}
     try {
       await db.clearFiles();

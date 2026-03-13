@@ -11,14 +11,14 @@
  *   annotationToTgtLine - Convert annotated word back to .tgt format
  *   triggerDownload    - Initiate a browser file download from a string
  *   getFileContent     - Look up a file's content by its role
- *   getFileByRole      - Look up a full StoredFile by its role
+ *   getFileByRole      - Look up a full fileData by its role
  *   deriveCompletedStages - Compute which workflow stages are complete
  *   validateTgtFormat  - Check whether a string is valid .tgt content
  *
  * Dependencies: types.ts
  */
 
-import type { StoredFile, FileRole, WorkflowStage, AnnotationWord } from "./types";
+import type { fileData, FileRole, WorkflowStage, AnnotationWord } from "./types";
 
 /**
  * Derive .src from .tgt — strips boundary markers so each line is just
@@ -66,12 +66,12 @@ export function triggerDownload(content: string, filename: string): void {
 }
 
 /** Look up a file's raw content by its assigned role. Returns "" if not found. */
-export function getFileContent(files: StoredFile[], role: FileRole): string {
+export function getFileContent(files: fileData[], role: FileRole): string {
   return files.find((f) => f.fileRole === role)?.fileContent ?? "";
 }
 
-/** Look up the full StoredFile object by its assigned role. */
-export function getFileByRole(files: StoredFile[], role: FileRole): StoredFile | undefined {
+/** Look up the full fileData object by its assigned role. */
+export function getFileByRole(files: fileData[], role: FileRole): fileData | undefined {
   return files.find((f) => f.fileRole === role);
 }
 

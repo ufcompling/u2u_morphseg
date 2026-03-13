@@ -28,7 +28,7 @@ import {
   type WorkflowStage,
   type ModelConfig,
   type FileRole,
-  type StoredFile,
+  type fileData,
   type TrainingStep,
   type TrainingResult,
   type AnnotationWord,
@@ -65,7 +65,7 @@ export interface UseTurtleshellReturn {
   indexedDBReady: boolean;
 
   // Files
-  files: StoredFile[];
+  files: fileData[];
   isUploading: boolean;
   handleUpload: (files: FileList | null) => void;
   handleAssignRole: (filePath: string, role: FileRole) => void;
@@ -118,8 +118,8 @@ export function useTurtleshell(): UseTurtleshellReturn {
     usePyodideWorker();
   const hasRestored = useRef(false);
 
-  // Map projectDB.files (fileData[]) to StoredFile[] with all required fields
-  const files: StoredFile[] = projectDB.files.map(fd => ({
+  // Map projectDB.files (fileData[]) to fileData[] with all required fields
+  const files: fileData[] = projectDB.files.map(fd => ({
     fileName: fd.fileName,
     fileSize: fd.fileSize ?? 0,
     fileContent: typeof fd.fileContent === "string" ? fd.fileContent : "",
@@ -132,7 +132,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
 
   // ── Workflow navigation ─────────────────────────────────────────────────
 
-  const [currentStage, setCurrentStage] = useState<WorkflowStage>("ingestion");
+  const [currentStage, setCurrentStage] = useState<WorkflowStage>("config");
   const [completedStages, setCompletedStages] = useState<WorkflowStage[]>([]);
 
   const goToStage = useCallback(

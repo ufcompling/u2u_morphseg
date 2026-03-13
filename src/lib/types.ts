@@ -17,8 +17,8 @@ export const WORKFLOW_STAGES: {
   label: string;
   shortLabel: string;
 }[] = [
-  { id: "ingestion", label: "Dataset Ingestion", shortLabel: "Upload" },
   { id: "config", label: "Model Configuration", shortLabel: "Config" },
+  { id: "ingestion", label: "Dataset Ingestion", shortLabel: "Upload" },
   { id: "training", label: "Training Progress", shortLabel: "Training" },
   { id: "annotation", label: "Annotation Workspace", shortLabel: "Annotate" },
   { id: "results", label: "Results & Export", shortLabel: "Results" },
@@ -30,7 +30,7 @@ export type FileRole = "annotated" | "unannotated" | "evaluation";
 
 export type ValidationStatus = "pending" | "valid" | "invalid";
 
-export interface StoredFile {
+export interface fileData {
   fileName: string;
   fileSize: number;
   fileContent: string;
@@ -38,6 +38,7 @@ export interface StoredFile {
   validationStatus: ValidationStatus;
   createdAt: Date;
   filePath: string;
+  fileType: string;
 }
 
 // --- Model Configuration ---
