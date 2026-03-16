@@ -4,13 +4,17 @@ import os
 import json
 from typing import Union
 
-def save_text(file_name: str, data) -> None:
+def save_text(file_path: str, data) -> None:
     """Saves a file to the /data directory in the Pyodide virtual filesystem.
 
     Accepts bytes, str, bytearray, memoryview, or lists of ints. Strings are
     encoded as UTF-8 before writing. This keeps the Python API simple for
     callers coming from JS.
+    Ensures parent directory exists before writing.
     """
+    # Ensure parent directory exists
+    import os
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
     # Normalize incoming data to bytes
     if isinstance(data, bytes):
         data_bytes = data
@@ -24,21 +28,18 @@ def save_text(file_name: str, data) -> None:
         data_bytes = bytes(data)
     else:
         raise ValueError('Unsupported data type for saving file')
-
-    os.makedirs('/data', exist_ok=True)
-    # Use file_name as full path if it starts with '/', else join with /data
-    file_path = file_name if file_name.startswith('/') else os.path.join('/data', file_name)
     with open(file_path, 'wb') as f:
         f.write(data_bytes)
 
 def save_binary(file_name: str, data) -> None:
-    """Save the bytes to string."""
+    """Save the bytes to string. Ensures parent directory exists before writing."""
+    import os
     try:
         data_bytes = bytes(data)
     except Exception:
         raise ValueError('Data must be bytish for save_binary')
-    os.makedirs('/data', exist_ok=True)
     file_path = file_name if file_name.startswith('/') else os.path.join('/data', file_name)
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, 'wb') as f:
         f.write(data_bytes)
 
@@ -86,7 +87,7 @@ def create_docx(file_name: str, file_content: str) -> None:
         doc.add_paragraph(line)
     doc.save(processed_file)
 
-def read_file(file_name: str, detect_text: bool = True, encoding: str = 'utf-8') -> str:
+def read_file(file_path: str, detect_text: bool = True, encoding: str = 'utf-8') -> str:
     """Reads a file and returns a JSON string describing the result.
 
     Returns a JSON-encoded dict with two keys:
@@ -96,9 +97,11 @@ def read_file(file_name: str, detect_text: bool = True, encoding: str = 'utf-8')
     This avoids passing raw bytes across the JS/Py boundary and lets the JS
     side decide how to display or download the data.
     """
-    file_path = file_name if file_name.startswith('/') else os.path.join('/data', file_name)
+
+    # Debug: print contents of /data and /data/English
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"File '{file_name}' not found in /data directory")
+        print(f"[db_worker] File not found: {file_path}")
+        raise FileNotFoundError(f"File '{file_path}' not found in /data directory")
 
     with open(file_path, 'rb') as f:
         b = f.read()

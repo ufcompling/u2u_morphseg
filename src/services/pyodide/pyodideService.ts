@@ -1,84 +1,37 @@
-let pyodideInstance: any = null;
-let initPromise: Promise<any> | null = null;
-export const initPyodide = async () => {
-  if (pyodideInstance) return pyodideInstance;
-  if (initPromise) return initPromise;
+declare const pyodide: any;
 
-  // Prevent race conditions by caching the initPromise to prevent concurrent calls from creating multiple different Pyodide instances
-  initPromise = (async () => {
-    pyodideInstance = await (self as any).loadPyodide({
-      indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.4/full/"
-    });
-
-    // Load micropip and install packages
-    await pyodideInstance.loadPackage('micropip');
-    
-    // Install python-crfsuite from whl and sklearn-crfsuite from PyPI
-    await pyodideInstance.runPythonAsync(`
-      import micropip
-      await micropip.install('${self.location.origin}/u2u_morphseg/wheels/python_crfsuite-0.9.12-cp312-cp312-pyodide_2024_0_wasm32.whl')
-      await micropip.install('sklearn-crfsuite')
-      await micropip.install('PyPDF2')
-      await micropip.install('reportlab')
-      await micropip.install('python-docx')
-    `);
-    pyodideInstance.FS.mkdir('/scripts');
-    try {
-      pyodideInstance.FS.mkdir('/data');
-    } catch (e) {
-      // Ignore if already exists
-    }  
-    await pyodideInstance.runPythonAsync("import sys; sys.path.append('/scripts')");
-
-    // Load db_worker.py into Pyodide's filesystem and import it
-    const response = await fetch('/u2u_morphseg/scripts/db_worker.py');
-    const code = await response.text();
-    pyodideInstance.FS.mount(pyodideInstance.FS.filesystems.IDBFS, {}, '/data');
-    pyodideInstance.FS.writeFile('/scripts/db_worker.py', code);
-
-    // Load binary_extractor.py into Pyodide's filesystem and import it
-    const binaryResponse = await fetch('/u2u_morphseg/scripts/binary_extractor.py');
-    const binaryCode = await binaryResponse.text();
-    pyodideInstance.FS.writeFile('/scripts/binary_extractor.py', binaryCode);
-
-    await syncPyodideFS();
-    initPromise = null;
-    return pyodideInstance;
-  })();
-
-  return initPromise;
-};
-export async function syncPyodideFS(): Promise<void> {
+/**
+ * Sync the Emscripten FS with IndexedDB.
+ * :param populate: when true, populate the in-memory FS from IndexedDB (load); when false, persist memory to IndexedDB (save).
+ */
+export function syncPyodideFS(populate: boolean = false): Promise<void> {
+  if (!pyodide) throw new Error("Pyodide not initialized for FS sync");
   return new Promise((resolve, reject) => {
-      pyodideInstance.FS.syncfs(false, (err: any) => {
-      if (err) {
-        reject(err);
-        console.error('Error syncing FS to IndexedDB:', err);
-      } else {
-        resolve();
-        console.log('FS synced to IndexedDB');
-      }
-    });
+    try {
+      pyodide.FS.syncfs(populate, (err: any) => {
+        if (err) {
+          reject(err);
+          console.error('[worker] Error syncing FS to IndexedDB:', err);
+        } else {
+          resolve();
+        }
+      });
+    } catch (err) {
+      reject(err);
+      console.error('[worker] FS.syncfs threw:', err);
+    }
   });
 }
-
-export const getPyodide = () => {
-  if (!pyodideInstance) {
-    throw new Error("Pyodide has not been initialized yet.");
-  }
-  return pyodideInstance;
-};
-
 
 export const runPythonCode = async (fileContent: string, pycodeLoc: string, funcName: string): Promise<string> => {
   const response = await fetch(pycodeLoc);
   const scriptText = await response.text();
 
   // 2. Load the content into Python
-  pyodideInstance.globals.set('file_content', fileContent);
+  pyodide.globals.set('file_content', fileContent);
 
   // 3. Run the script and call the specific function
-  pyodideInstance.runPython(scriptText);
-  // return pyodideInstance.runPython('process_data(file_content)');
-  return pyodideInstance.runPython(funcName+'(file_content)');
+  pyodide.runPython(scriptText);
+  // return pyodide.runPython('process_data(file_content)');
+  return pyodide.runPython(funcName+'(file_content)');
 };

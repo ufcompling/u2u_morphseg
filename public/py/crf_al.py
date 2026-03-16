@@ -56,18 +56,31 @@ def main() -> None:
 	args: argparse.Namespace = parse_arguments()
 	sub_datadir: str = setup_datadirs(args)
 
+	# Normalize datadir_lang and avoid duplicating the language when
+	# args.datadir already includes the language component.
+	try:
+		norm_base = os.path.normpath(args.datadir)
+		norm_lang = os.path.normpath(args.lang)
+	except Exception:
+		norm_base = args.datadir
+		norm_lang = args.lang
+	if norm_base.endswith(norm_lang):
+		datadir_lang = args.datadir
+	else:
+		datadir_lang = f'{args.datadir}/{args.lang}'
+
 	# Define file paths
 	PATHS: dict[str, str] = {
 		# Data gathering file paths
 		'TRAIN_TGT': f'{sub_datadir}/train.{args.initial_size}.tgt',
-		'TEST_TGT': f'{args.datadir}/{args.lang}/test.full.tgt',
+		'TEST_TGT': f'{datadir_lang}/test.full.tgt',
 		'SELECT_TGT': f'{sub_datadir}/select.{args.initial_size}.tgt',
 		# Prediction saving file paths
 		'TEST_PRED': f'{sub_datadir}/test.full.pred',
 		'SELECT_PRED': f'{sub_datadir}/select.{args.initial_size}.pred',
 		# Source file paths
 		'TRAIN_SRC': f'{sub_datadir}/train.{args.initial_size}.src',
-		'TEST_SRC': f'{args.datadir}/{args.lang}/test.full.src',
+		'TEST_SRC': f'{datadir_lang}/test.full.src',
 		'SELECT_SRC': f'{sub_datadir}/select.{args.initial_size}.src',
 		# Evaluation file paths
 		'EVAL_FILE': f'{sub_datadir}/eval.txt'	
@@ -157,14 +170,29 @@ def setup_datadirs(args: argparse.Namespace) -> str:
 	:return: File path of the sub data directory
 	:rtype: str
 	"""
+	# Normalize base datadir and avoid duplicating the language component
+	base_datadir = args.datadir
+	# If datadir already ends with the language, don't append it again
+	try:
+		norm_base = os.path.normpath(base_datadir)
+		norm_lang = os.path.normpath(args.lang)
+	except Exception:
+		norm_base = base_datadir
+		norm_lang = args.lang
+	if norm_base.endswith(norm_lang):
+		lang_prefix = base_datadir
+	else:
+		lang_prefix = f'{base_datadir}/{args.lang}'
+
 	# Data directory for the current iteration
-	sub_datadir: str = f'{args.datadir}/{args.lang}/{args.initial_size}/{args.seed}/{args.method}/{args.select_interval}/select{args.select_size}'
+	sub_datadir: str = f'{lang_prefix}/{args.initial_size}/{args.seed}/{args.method}/{args.select_interval}/select{args.select_size}'
 	if not os.path.exists(sub_datadir):
 		os.makedirs(sub_datadir)
 
 	if args.select_size != 0:
-		# Data directory for the previous iteration
-		prev_datadir: str = f'{args.datadir}/{args.lang}/{args.initial_size}/{args.seed}/{args.method}/{args.select_interval}/select{int(args.select_size) - int(args.select_interval)}'
+		# Data directory for the previous iteration (use lang_prefix to
+		# avoid duplicating the language component)
+		prev_datadir: str = f'{lang_prefix}/{args.initial_size}/{args.seed}/{args.method}/{args.select_interval}/select{int(args.select_size) - int(args.select_interval)}'
 		
 		# Labeled set = previous training set + previous increment
 		train_src: str = read_file(f'{prev_datadir}/train.{args.initial_size}.src')

@@ -72,9 +72,14 @@ def run_training_cycle(config_json: str) -> str:
 
         # Build an argparse.Namespace that crf_al.output_crf expects
         import argparse
+        try:
+            lang_from_workdir = os.path.basename(os.path.normpath(work_dir)) or 'dataset'
+        except Exception:
+            lang_from_workdir = 'dataset'
+
         args = argparse.Namespace(
             datadir=work_dir,
-            lang='dataset',
+            lang=lang_from_workdir,
             initial_size='train',
             seed='0',
             method='al',
@@ -108,13 +113,34 @@ def run_training_cycle(config_json: str) -> str:
 
         # Evaluate against gold test set
         test_predictions = crf_al.reconstruct_predictions(Y_test_predict, data['test']['words'])
-        precision, recall, f1 = crf_al.evaluate_predictions(
-            data['test']['morphs'], test_predictions,
-        )
+        evaluation_error = None
+        try:
+            precision, recall, f1 = crf_al.evaluate_predictions(
+                data['test']['morphs'], test_predictions,
+            )
+        except Exception as e:
+            import traceback
+            # Don't let a statistics.StatisticsError abort the entire cycle.
+            evaluation_error = (
+                f"Evaluation failed: {e}; "
+                f"test_words={len(data.get('test', {}).get('words', []))}, "
+                f"predictions={len(test_predictions)}; "
+                f"trace={traceback.format_exc()}"
+            )
+            precision, recall, f1 = 0.0, 0.0, 0.0
 
-        # Read back the increment/residual files output_crf wrote
-        increment_path = os.path.join(work_dir, 'increment.tgt')
-        residual_path = os.path.join(work_dir, 'residual.tgt')
+        # Read back the increment/residual files output_crf wrote. The
+        # training code writes into a nested subdirectory; search the
+        # work_dir tree to locate the actual files so bridge and AL agree.
+        def _find_file(base_dir: str, filename: str) -> str:
+            for root, dirs, files in os.walk(base_dir):
+                if filename in files:
+                    return os.path.join(root, filename)
+            # Fallback to root-level path (may not exist)
+            return os.path.join(base_dir, filename)
+
+        increment_path = _find_file(work_dir, 'increment.tgt')
+        residual_path = _find_file(work_dir, 'residual.tgt')
         increment_words = _parse_increment_for_annotation(increment_path, crf, args.d)
         residual_count = _count_lines(residual_path)
 
@@ -138,6 +164,7 @@ def run_training_cycle(config_json: str) -> str:
             'residualContent': residual_content,
             'evaluationContent': evaluation_content,
             'error': None,
+            'evalError': evaluation_error,
         })
 
     except Exception:
@@ -306,6 +333,27 @@ def _parse_increment_for_annotation(increment_tgt_path: str, crf, delta: int) ->
     words, morphs, bmes = crf_al.load_file_data(increment_tgt_path)
     if not words:
         return []
+
+    # Sanitize loaded words: sometimes non-word content (JSON/eval dumps)
+    # can end up in the file due to earlier path mismatches or concatenation
+    # bugs. Filter out obviously invalid entries before computing features.
+    sanitized_words: list[str] = []
+    sanitized_morphs: list[list[str]] = []
+    for w, m in zip(words, morphs):
+        # Reject entries that look like JSON/evaluation dumps or contain
+        # structural characters unlikely to be valid surface words.
+        if any(ch in w for ch in ('{', '}', '[', ']', '"', ':', '#')):
+            # skip suspicious entry
+            continue
+        if not w.strip():
+            continue
+        sanitized_words.append(w)
+        sanitized_morphs.append(m)
+
+    if not sanitized_words:
+        return []
+
+    words, morphs = sanitized_words, sanitized_morphs
 
     X, _, _ = crf_al.get_features(words, bmes, delta)
     Y_predict = crf.predict(X)
