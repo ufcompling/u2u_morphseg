@@ -18,8 +18,6 @@ interface DatasetIngestionProps {
   onBack: () => void;
   isUploading: boolean;
   pyodideReady: boolean;
-  language?: string;
-  onLanguageChange?: (lang: string) => void;
 }
 
 
@@ -33,19 +31,23 @@ export function DatasetIngestion({
   isUploading,
   pyodideReady,
 }: DatasetIngestionProps) {
-  const annotatedCount = files.filter((f) => f.fileRole === "annotated").length;
-  const unannotatedCount = files.filter((f) => f.fileRole === "unannotated").length;
-  const evaluationCount = files.filter((f) => f.fileRole === "evaluation").length;
+  // Hide internal project files from the user-facing file viewer
+  const hiddenNames = new Set(["project.json", "cycles.json", "annotations.json"]);
+  const visibleFiles = files.filter((f) => !hiddenNames.has(f.fileName));
+  const annotatedCount = visibleFiles.filter((f) => f.fileRole === "annotated").length;
+  const unannotatedCount = visibleFiles.filter((f) => f.fileRole === "unannotated").length;
+  const evaluationCount = visibleFiles.filter((f) => f.fileRole === "evaluation").length;
   const hasRequiredFiles = annotatedCount > 0 && unannotatedCount > 0;
 
   return (
     <div className="flex flex-col gap-0">
 
+
       {/* Upload zone */}
       <UploadZone onUpload={onUpload} isUploading={isUploading} pyodideReady={pyodideReady} />
 
       {/* Role summary bar */}
-      {files.length > 0 && (
+      {visibleFiles.length > 0 && (
         <div className="px-6 py-3 border-b border-border/20 bg-secondary/5 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <RoleCount label="Annotated" count={annotatedCount} color="text-primary" />
@@ -64,7 +66,7 @@ export function DatasetIngestion({
           <EmptyState />
         ) : (
           <div className="divide-y divide-border/10">
-            {files.map((file) => (
+            {visibleFiles.map((file) => (
               <FileRow
                 key={file.filePath}
                 file={file}

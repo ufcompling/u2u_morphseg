@@ -76,7 +76,7 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
     let worker: Worker;
     try {
       worker = new Worker(
-        new URL('../workers/pyodide.worker.ts', import.meta.url),
+        new URL('../services/pyodide/workers/pyodide.worker.ts', import.meta.url),
         { type: 'module' }
       );
       setPyodideWorker(worker);
@@ -121,6 +121,9 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
           setModelRestored(true); // Model now definitely exists
           pendingCycle.current?.resolve(msg.result);
           pendingCycle.current = null;
+          break;
+        case 'CYCLE_RAW':
+          logger.info(' Raw cycle JSON from worker:', msg.payload?.slice?.(0, 2000) ?? '[too large]');
           break;
 
         case 'CYCLE_ERROR':
@@ -224,6 +227,7 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
         resolve(); // Nothing to wipe
         return;
       }
+      logger.info(' wipeVfs() invoked — sending WIPE_VFS to worker');
       pendingWipe.current = { resolve, reject };
       getWorker().postMessage({ type: 'WIPE_VFS' });
     });

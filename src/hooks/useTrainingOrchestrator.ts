@@ -23,7 +23,8 @@ import type {
   InferenceResult,
 } from "../lib/types";
 import { INITIAL_TRAINING_STEPS, CRF_MAX_ITERATIONS, CRF_FEATURE_DELTA } from "../lib/types";
-import { getFileContent, tgtToSrc } from "../lib/format-utils";
+import { getFileContent, tgtToSrc, getFileByRole } from "../lib/format-utils";
+import { db } from "../lib/db";
 import { log } from "../lib/logger";
 import type { StepProgressCallback } from "./usePyodideWorker";
 
@@ -120,10 +121,53 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
     setTrainingSteps(INITIAL_TRAINING_STEPS);
     setIsTrainingComplete(false);
 
+    // remove when model accesses file data directly
+    for (const f of files) {
+      // Skip known binary artifacts that the UI shouldn't try to decode as text
+      if (f.filePath && (f.filePath.endsWith('.model') || f.fileName?.toLowerCase().endsWith('.whl') || f.fileName?.toLowerCase().endsWith('.wasm'))) {
+        console.debug('[useTrainingOrchestrator] skipping binary artifact during pre-populate', f.filePath);
+        continue;
+      }
+      if ((!f.fileContent || f.fileContent.length === 0) && f.filePath) {
+        try {
+          const res = await db.readFile(f.filePath);
+          f.fileContent = res.fileContent;
+          f.fileType = res.fileType;
+          console.log('[useTrainingOrchestrator] populated file', { filePath: f.filePath, length: f.fileContent?.length, fileType: f.fileType });
+        } catch (err) {
+          logger.warn(`readFile failed for ${f.filePath}`, err);
+        }
+      }
+    }
+
     const trainTgt = getFileContent(files, "annotated");
     const testTgt = getFileContent(files, "evaluation");
-    const selectTgt = getFileContent(files, "unannotated");
+    let selectTgt = getFileContent(files, "unannotated");
+    // If in-memory unannotated content looks empty or tiny, re-read from DB
+    const unannotatedFile = getFileByRole(files, "unannotated");
+    if ((selectTgt ?? "").split("\n").filter(Boolean).length < 2 && unannotatedFile?.filePath) {
+      try {
+        const res = await db.readFile(unannotatedFile.filePath);
+        selectTgt = res.fileContent;
+        console.debug('[useTrainingOrchestrator] refreshed unannotated file from DB', { filePath: unannotatedFile.filePath, length: selectTgt?.length });
+      } catch (err) {
+        logger.warn(`Failed to refresh unannotated file ${unannotatedFile.filePath}`, err);
+      }
+    }
     const selectSrc = tgtToSrc(selectTgt);
+
+    // Diagnostics: log counts and abort early if unannotated pool is empty
+    const trainCount = (trainTgt ?? "").split("\n").filter(Boolean).length;
+    const testCount = (testTgt ?? "").split("\n").filter(Boolean).length;
+    const selectCount = (selectTgt ?? "").split("\n").filter(Boolean).length;
+    console.debug('[training] file counts', { trainCount, testCount, selectCount });
+    if (selectCount === 0) {
+      console.warn('[training] Aborting: unannotated pool is empty');
+      setTrainingSteps((prev) =>
+        prev.map((s) => (s.id === 'select' ? { ...s, status: 'error', detail: 'Unannotated pool is empty' } : s))
+      );
+      return;
+    }
 
     const cycleConfig: TrainingCycleConfig = {
       trainTgt,
@@ -139,6 +183,16 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
     try {
       const result = await runCycle(cycleConfig, (stepId, done, detail) => {
         updateStep(stepId, done, detail);
+      });
+
+      // Debug: surface key parts of the cycle result to help diagnose empty increments
+      console.debug('[useTrainingOrchestrator] cycle result summary', {
+        incrementWordsLen: result.incrementWords?.length ?? 0,
+        incrementContentLen: (result.incrementContent ?? '').length,
+        residualCount: result.residualCount,
+        sentIncrementSize: cycleConfig.incrementSize,
+        sentSelectSize: cycleConfig.selectSize,
+        selectPoolCount: selectCount,
       });
 
       cumulativeSelectSize.current += result.incrementWords.length;

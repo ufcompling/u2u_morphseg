@@ -46,12 +46,15 @@ import { useProjectDB } from "./useProjectDB";
 import { usePyodideWorker } from "./usePyodideWorker";
 import { useTrainingOrchestrator } from "./useTrainingOrchestrator";
 import { useAnnotationState } from "./useAnnotationState";
+import { setLanguage } from "../lib/db";
 
 const logger = log('turtleshell');
 
 // -- Compositor return type ---------------------------------------------------
 
 export interface UseTurtleshellReturn {
+    language: string;
+    onLanguageChange: (lang: string) => void;
   // Workflow
   currentStage: WorkflowStage;
   completedStages: WorkflowStage[];
@@ -113,7 +116,18 @@ export interface UseTurtleshellReturn {
 // ── Hook ────────────────────────────────────────────────────────────────────
 
 export function useTurtleshell(): UseTurtleshellReturn {
+  // Language state (default to '', or pick your default)
+  const [language, setLanguageState] = useState<string>("");
+  // Ensure worker is always in sync
+  const handleLanguageChange = useCallback((lang: string) => {
+    setLanguageState(lang);
+    setLanguage(lang);
+  }, []);
   const projectDB = useProjectDB();
+  // Local map of file roles (in-memory). Persisting roles is a separate task.
+  const [rolesMap, setRolesMap] = useState<Record<string, FileRole | null>>({});
+  // Sync language to worker on mount and whenever it changes
+  useEffect(() => { setLanguage(language); }, [language]);
   const { pyodideReady, pyodideLoading, pyodideError, modelRestored, runCycle, runInference, wipeVfs } =
     usePyodideWorker();
   const hasRestored = useRef(false);
@@ -123,7 +137,8 @@ export function useTurtleshell(): UseTurtleshellReturn {
     fileName: fd.fileName,
     fileSize: fd.fileSize ?? 0,
     fileContent: typeof fd.fileContent === "string" ? fd.fileContent : "",
-    fileRole: null,
+    // Use rolesMap to reflect any UI-assigned roles
+    fileRole: (rolesMap as Record<string, FileRole | null>)[fd.filePath] ?? null,
     fileType: fd.fileType ?? "text",
     createdAt: new Date(fd.createdAt ?? Date.now()),
     filePath: fd.filePath ?? "",
@@ -192,7 +207,8 @@ export function useTurtleshell(): UseTurtleshellReturn {
   );
 
   const handleAssignRole = useCallback(
-    (_filePath: string, _role: FileRole) => {
+    (filePath: string, role: FileRole) => {
+      setRolesMap((prev) => ({ ...prev, [filePath]: role }));
     },
     []
   );
@@ -203,8 +219,14 @@ export function useTurtleshell(): UseTurtleshellReturn {
       if (typeof projectDB.loadFiles === 'function') {
         await projectDB.loadFiles();
       }
+      // Remove any in-memory role for the deleted file
+      setRolesMap((prev) => {
+        const copy = { ...prev };
+        delete copy[filePath];
+        return copy;
+      });
     },
-    [projectDB, files]
+    [projectDB]
   );
 
   // ── Subsystem hooks ─────────────────────────────────────────────────────
@@ -353,13 +375,13 @@ export function useTurtleshell(): UseTurtleshellReturn {
     if (annotatedFile) {
       const newTgtLines = annotations.annotationWords.map(annotationToTgtLine).join("\n");
       const merged = annotatedFile.fileContent.trimEnd() + "\n" + newTgtLines;
-      await projectDB.saveFile(annotatedFile.fileName, merged);
+      await projectDB.saveFile(annotatedFile.filePath, merged);
     }
 
     // Replace unannotated pool with residual
     const unannotatedFile = getFileByRole(files, "unannotated");
     if (unannotatedFile && training.residualContent) {
-      await projectDB.saveFile(unannotatedFile.fileName, training.residualContent);
+      await projectDB.saveFile(unannotatedFile.filePath, training.residualContent);
     }
 
     goToStage("results");
@@ -437,6 +459,8 @@ export function useTurtleshell(): UseTurtleshellReturn {
   // ── Return (same shape — no breaking changes to consumers) ──────────────
 
   return {
+      language,
+      onLanguageChange: handleLanguageChange,
     // Workflow
     currentStage,
     completedStages,

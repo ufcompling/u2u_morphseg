@@ -31,8 +31,9 @@ export type WorkerInMessage =
   | { type: "LOAD_FILES" }
   | { type: "READ_FILE"; filePath: string }
   | { type: "DELETE_FILE"; filePath: string }
-  | { type: "SAVE_FILE"; fileName: string; fileContent: string }
-  | { type: "CLEAR_FILES"; directory?: string };
+  | { type: "SAVE_FILE"; filePath: string; fileContent: string }
+  | { type: "CLEAR_FILES"; directory?: string }
+  | { type: "SET_LANGUAGE"; language: string };
 
 
 // ── Messages: Worker → Main Thread ────────────────────────────────────────────
@@ -44,6 +45,7 @@ export type WorkerOutMessage =
   | { type: "STEP_START"; stepId: string }
   | { type: "STEP_DONE"; stepId: string; detail?: string }
   | { type: "CYCLE_DONE"; result: TrainingCycleResult }
+  | { type: "CYCLE_RAW"; payload: string }
   | { type: "CYCLE_ERROR"; error: string }
   | { type: "INFERENCE_DONE"; result: InferenceResult }
   | { type: "INFERENCE_ERROR"; error: string }
@@ -57,7 +59,7 @@ export type WorkerOutMessage =
   | { type: "FILE_READ_ERROR"; error: string }
   | { type: "FILE_DELETED"; filePath: string }
   | { type: "FILE_DELETE_ERROR"; error: string }
-  | { type: "FILE_SAVED"; fileName: string }
+  | { type: "FILE_SAVED"; filePath: string }
   | { type: "FILE_SAVE_ERROR"; error: string }
   | { type: "FILES_CLEARED"; directory?: string }
   | { type: "FILE_CLEAR_ERROR"; error: string }

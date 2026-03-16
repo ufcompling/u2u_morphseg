@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { TrainingStep } from "../../../lib/types";
 import { ArrowIcon, CheckIcon } from "../../../components/ui/icons";
 
@@ -29,6 +30,19 @@ export function TrainingProgressStage({
       ? activeIndex + 0.5
       : completedCount;
   const pct = steps.length > 0 ? (progressUnits / steps.length) * 100 : 0;
+
+  useEffect(() => {
+    console.debug("TrainingProgress props:", {
+      stepsCount: steps.length,
+      completedCount,
+      activeIndex,
+      progressUnits,
+      pct: Number(pct.toFixed(2)),
+      currentIteration,
+      totalIterations,
+      isComplete,
+    });
+  }, [steps, completedCount, activeIndex, progressUnits, pct, currentIteration, totalIterations, isComplete]);
 
   return (
     <div className="flex flex-col">

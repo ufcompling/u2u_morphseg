@@ -111,7 +111,7 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           onAssignRole={ts.handleAssignRole}
           onRemoveFile={ts.handleRemoveFile}
           onBack={() => ts.goToStage("config")}
-          onStartTraining={() => ts.goToStage("training")}
+          onStartTraining={ts.handleStartTraining}
           isUploading={ts.isUploading}
           pyodideReady={ts.pyodideReady}
         />
