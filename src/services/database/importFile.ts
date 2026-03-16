@@ -5,7 +5,12 @@ declare const language: string;
 
 
 export async function importFile(fileName: string, fileContent: string | Uint8Array): Promise<void> {
-  console.log(language)
+  if (!language) {
+    console.error('Language not set. Cannot import file.');
+    return;
+  } else {
+    console.error(`Importing file for language: ${language}`);
+  }
   // Ensure the language directory exists
   await pyodide.runPythonAsync(`import os; os.makedirs('/data/${language}', exist_ok=True)`);
   // List files in the language subdirectory
@@ -32,5 +37,5 @@ export async function importFile(fileName: string, fileContent: string | Uint8Ar
   } catch (error) {
     console.error(`Error importing file ${fileName}:`, error);
   }
-  await syncPyodideFS();
+    await syncPyodideFS();
 }

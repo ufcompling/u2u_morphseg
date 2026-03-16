@@ -57,7 +57,10 @@ export interface AnnotationRow {
 // ── Database class ───────────────────────────────────────────────────────────
 
 
+
 let pyodide: Worker | undefined;
+let currentLanguage: string | undefined = undefined;
+let lastSentLanguage: string | undefined = undefined;
 
 // Pyodide readiness state and listeners
 let pyodideReady = false;
@@ -65,7 +68,6 @@ const pyodideListeners: Array<(ready: boolean) => void> = [];
 
 export function setPyodideWorker(worker: Worker) {
   pyodide = worker;
-  // Listen for PYODIDE_READY or INIT_DONE message from worker
   pyodide.addEventListener("message", (event: MessageEvent) => {
     if (
       event.data &&
@@ -79,17 +81,79 @@ export function setPyodideWorker(worker: Worker) {
   });
 }
 
+
+export function setLanguage(language: string) {
+  const norm = (language || '').trim();
+  currentLanguage = norm;
+  if (!pyodide) return;
+  // Only post if language changed since last send to avoid duplicates
+  if (lastSentLanguage === norm) return;
+  lastSentLanguage = norm;
+  (pyodide as Worker).postMessage({ type: "SET_LANGUAGE", language: norm });
+}
+
 async function sendMessageToWorker(message: any): Promise<any> {
   if (!pyodide) throw new Error("Pyodide worker not set");
-  return new Promise((resolve) => {
+  const w = pyodide as Worker;
+  // Language should be set explicitly via `setLanguage()` to avoid duplicates.
+  return new Promise((resolve, reject) => {
+    // Map request types to expected worker response event types
+    const expectedMap: Record<string, string> = {
+      IMPORT_FILES: 'FILES_IMPORTED',
+      LOAD_FILES: 'FILES_LOADED',
+      READ_FILE: 'FILE_READ',
+      DELETE_FILE: 'FILE_DELETED',
+      SAVE_FILE: 'FILE_SAVED',
+      CLEAR_FILES: 'FILES_CLEARED',
+      SYNC_VFS: 'VFS_SYNCED',
+      WIPE_VFS: 'VFS_WIPED',
+      INIT: 'INIT_DONE',
+    };
+    const expected = expectedMap[message.type];
+
+    let timeout: ReturnType<typeof setTimeout> | null = null;
     const handleMessage = (event: MessageEvent) => {
-      if (event.data.type === `${message.type}_RESPONSE`) {
-        pyodide!.removeEventListener("message", handleMessage);
+      const t = event.data?.type as string | undefined;
+
+      // Generic error responses (FILE_*_ERROR, *_ERROR)
+      if (t && t.endsWith('_ERROR')) {
+        if (timeout) { clearTimeout(timeout); timeout = null; }
+        w.removeEventListener('message', handleMessage);
+        const errMsg = event.data.error || event.data.message || JSON.stringify(event.data);
+        console.warn('[db] sendMessageToWorker ERROR', t, errMsg);
+        reject(new Error(errMsg));
+        return;
+      }
+
+      // If we have a mapped expected type, resolve on match
+      if (expected && t === expected) {
+        if (timeout) { clearTimeout(timeout); timeout = null; }
+        w.removeEventListener('message', handleMessage);
         resolve(event.data.payload);
+        return;
+      }
+
+      // Fallback: allow FILE_READ for READ_FILE
+      if (message.type === 'READ_FILE' && t === 'FILE_READ') {
+        if (timeout) { clearTimeout(timeout); timeout = null; }
+        w.removeEventListener('message', handleMessage);
+        resolve(event.data.payload);
+        return;
       }
     };
-    pyodide!.addEventListener("message", handleMessage);
-    pyodide!.postMessage(message);
+    w.addEventListener('message', handleMessage);
+    // If this message needs a language context, ensure worker has it first
+    const needsLanguage = ['IMPORT_FILES','LOAD_FILES','READ_FILE','SAVE_FILE','DELETE_FILE','CLEAR_FILES'] as const;
+    if (currentLanguage && lastSentLanguage !== currentLanguage && needsLanguage.includes(message.type)) {
+      w.postMessage({ type: 'SET_LANGUAGE', language: currentLanguage });
+      lastSentLanguage = currentLanguage;
+    }
+    w.postMessage(message);
+    timeout = setTimeout(() => {
+      w.removeEventListener('message', handleMessage);
+      console.warn('[db] sendMessageToWorker TIMEOUT', { message });
+      reject(new Error('Worker response timeout'));
+    }, 15000);
   });
 }
 
@@ -108,23 +172,37 @@ export const db = new class {
     };
   }
   async importFile(fileName: string, fileContent: string | Uint8Array) {
-    console.log('[db] Sending IMPORT_FILES to worker', { fileName, fileContent });
+    if (currentLanguage) setLanguage(currentLanguage);
     await sendMessageToWorker({ type: "IMPORT_FILES", fileName, fileContent });
     return await this.loadFiles();
   }
   async deleteFile(filePath: string) {
+    if (currentLanguage) setLanguage(currentLanguage);
     return await sendMessageToWorker({ type: "DELETE_FILE", filePath });
   }
-  async saveFile(fileName: string, fileContent: string) {
-    return await sendMessageToWorker({ type: "SAVE_FILE", fileName, fileContent });
+  async saveFile(filePath: string, fileContent: string) {
+    if (currentLanguage) setLanguage(currentLanguage);
+    return await sendMessageToWorker({ type: "SAVE_FILE", filePath, fileContent });
   }
   async loadFiles() {
+    if (currentLanguage) setLanguage(currentLanguage);
     return await sendMessageToWorker({ type: "LOAD_FILES" });
   }
   async readFile(filePath: string) {
-    return await sendMessageToWorker({ type: "READ_FILE", filePath });
+    if (currentLanguage) setLanguage(currentLanguage);
+    try {
+      return await sendMessageToWorker({ type: "READ_FILE", filePath });
+    } catch (err: any) {
+      // Robust error handling for file not found
+      const msg = err?.message || err?.toString() || '';
+      if (msg.includes('File not found') || msg.includes('ENOENT')) {
+        throw new Error(`File not found: ${filePath}`);
+      }
+      throw err;
+    }
   }
   async clearFiles(directory?: string) {
+    if (currentLanguage) setLanguage(currentLanguage);
     return await sendMessageToWorker({ type: "CLEAR_FILES", directory });
   }
 }();

@@ -14,7 +14,7 @@ declare const language: string;
 
 import { type fileData } from "../lib/types";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { db, type CycleRow, type AnnotationRow } from "../lib/db";
+import { db, setLanguage, type CycleRow, type AnnotationRow } from "../lib/db";
 import {
   type WorkflowStage,
   type ModelConfig,
@@ -25,7 +25,7 @@ import {
 } from "../lib/types";
 import { log } from "../lib/logger";
 
-const logger = log('project-db');
+  const logger = log('project-db');
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
@@ -53,7 +53,7 @@ export interface UseProjectDBReturn {
   saveProjectMeta: (partial: Partial<ProjectState>) => Promise<void>;
 
   // ── Files ──
-  saveFile: (fileName: string, fileContent: string) => Promise<void>;
+  saveFile: (filePath: string, fileContent: string) => Promise<void>;
   importFile: (fileName: string, fileContent: string | Uint8Array) => Promise<void>;
   deleteFile: (filePath: string) => Promise<void>;
   clearFiles: (directory?: string) => Promise<void>;
@@ -112,8 +112,68 @@ export function useProjectDB(): UseProjectDBReturn {
     let cancelled = false;
     async function load() {
       try {
+        // Ensure the worker knows the selected language before any FS ops
+        try {
+          if (language) setLanguage(language);
+        } catch (err: any) {
+          logger.warn('[useProjectDB] Failed to set worker language before initial load', err);
+        }
+        // Ensure FS is populated and synced by loading files first
+        let loadedFiles: fileData[] = [];
+        try {
+          logger.info(language);
+          loadedFiles = await db.loadFiles();
+        } catch (err: any) {
+          logger.warn("[useProjectDB] Failed to load files (initial):", err);
+        }
+        if (!cancelled) setFiles(loadedFiles);
+
         // Project metadata
-        const projectResult = await db.readFile(`/data/${language}/project.json`);
+        // Always create project.json if missing before reading
+        let projectResult = null;
+        let projectFileExists = true;
+        try {
+          await db.readFile(`/data/${language}/project.json`);
+        } catch (err: any) {
+          projectFileExists = false;
+        }
+        if (!projectFileExists) {
+          const now = Date.now();
+          const meta = {
+            currentStage: "ingestion" as WorkflowStage,
+            modelConfig: DEFAULT_MODEL_CONFIG,
+            currentIteration: 1,
+            cumulativeSelectSize: 0,
+            createdAt: now,
+            updatedAt: now,
+          };
+          logger.info(JSON.stringify(meta), typeof JSON.stringify(meta));
+          await db.saveFile(`/data/${language}/project.json`, JSON.stringify(meta));
+          // Ensure cycles and annotations files exist for a fresh project
+          try {
+            await db.saveFile(`/data/${language}/cycles.json`, JSON.stringify([]));
+          } catch (err) {
+            logger.warn('[useProjectDB] Failed to create cycles.json during initProject', err);
+          }
+          try {
+            await db.saveFile(`/data/${language}/annotations.json`, JSON.stringify([]));
+          } catch (err) {
+            logger.warn('[useProjectDB] Failed to create annotations.json during initProject', err);
+          }
+        }
+        logger.info("[useProjectDB] Calling db.readFile for project.json...", { ts: Date.now() });
+        try {
+          projectResult = await db.readFile(`/data/${language}/project.json`);
+          logger.info("[useProjectDB] db.readFile result for project.json:", {
+            ts: Date.now(),
+            typeofResult: typeof projectResult,
+            hasContent: !!projectResult?.fileContent,
+            contentLength: projectResult?.fileContent?.length,
+          });
+        } catch (err: any) {
+          console.error("[useProjectDB] db.readFile threw for project.json:", { err: err?.message || err, stack: err?.stack });
+          throw err;
+        }
         if (projectResult && projectResult.fileContent && !cancelled) {
           const meta = JSON.parse(projectResult.fileContent);
           setProject({
@@ -124,14 +184,39 @@ export function useProjectDB(): UseProjectDBReturn {
           });
         }
 
-        // Files
-        const loadedFiles = await db.loadFiles();
-        if (!cancelled) setFiles(loadedFiles);
         // Cycles
-        const cyclesResult = await db.readFile("cycles.json");
+        // Always create cycles.json if missing before reading
+        let cyclesFileExists = true;
+        try {
+          await db.readFile(`/data/${language}/cycles.json`);
+        } catch (err: any) {
+          if (err && err.message && err.message.startsWith('File not found:')) {
+            cyclesFileExists = false;
+          } else {
+            throw err;
+          }
+        }
+        if (!cyclesFileExists) {
+          await db.saveFile(`/data/${language}/cycles.json`, JSON.stringify([]));
+        }
+        let cyclesResult = await db.readFile(`/data/${language}/cycles.json`);
         if (cyclesResult && cyclesResult.fileContent && !cancelled) {
           const cyclesArr = JSON.parse(cyclesResult.fileContent);
           setCycleHistory(Array.isArray(cyclesArr) ? cyclesArr.map(cycleRowToSnapshot) : []);
+        }
+        // Annotations: ensure annotations.json exists before any annotation ops
+        let annotationsFileExists = true;
+        try {
+          await db.readFile(`/data/${language}/annotations.json`);
+        } catch (err: any) {
+          if (err && err.message && err.message.startsWith('File not found:')) {
+            annotationsFileExists = false;
+          } else {
+            throw err;
+          }
+        }
+        if (!annotationsFileExists) {
+          await db.saveFile(`/data/${language}/annotations.json`, JSON.stringify([]));
         }
         ready.current = true;
         if (!cancelled) setDbReady(true);
@@ -166,7 +251,7 @@ export function useProjectDB(): UseProjectDBReturn {
       createdAt: now,
       updatedAt: now,
     };
-    await db.saveFile(`project.json`, JSON.stringify(meta));
+    await db.saveFile(`/data/${language}/project.json`, JSON.stringify(meta));
     setProject({
       currentStage: meta.currentStage,
       modelConfig: meta.modelConfig,
@@ -197,7 +282,7 @@ export function useProjectDB(): UseProjectDBReturn {
       ...partial,
       updatedAt: Date.now(),
     };
-    await db.saveFile(`$project.json`, JSON.stringify(updated));
+    await db.saveFile(`/data/${language}/project.json`, JSON.stringify(updated));
     setProject((prev) => prev ? { ...prev, ...partial } : null);
   }, [initProject, pyodideReady]);
 
@@ -205,13 +290,13 @@ export function useProjectDB(): UseProjectDBReturn {
 
 
   // Save a single file
-  const saveFile = useCallback(async (fileName: string, fileContent: string): Promise<void> => {
+  const saveFile = useCallback(async (filePath: string, fileContent: string): Promise<void> => {
     if (!pyodideReady) {
       logger.warn("[useProjectDB] Pyodide not ready, blocking saveFile");
       return;
     }
     try {
-      await db.saveFile(fileName, fileContent);
+      await db.saveFile(`${filePath}`, fileContent);
       const updatedFiles = await db.loadFiles();
       setFiles(updatedFiles);
     } catch (err) {
@@ -314,11 +399,17 @@ export function useProjectDB(): UseProjectDBReturn {
     // Load cycles array
     let cycles: CycleRow[] = [];
     try {
-      const result = await db.readFile("cycles.json");
+      const result = await db.readFile(`/data/${language}/cycles.json`);
       if (result && result.fileContent) {
         cycles = JSON.parse(result.fileContent);
       }
-    } catch {}
+    } catch (err: any) {
+      if (err && err.message && err.message.startsWith('File not found:')) {
+        cycles = [];
+      } else {
+        throw err;
+      }
+    }
     // Upsert or add
     const idx = cycles.findIndex(c => c.cycleNumber === cycle.iteration);
     const row: CycleRow = {
@@ -337,7 +428,7 @@ export function useProjectDB(): UseProjectDBReturn {
     } else {
       cycles.push(row);
     }
-    await db.saveFile("cycles.json", JSON.stringify(cycles));
+    await db.saveFile(`/data/${language}/cycles.json`, JSON.stringify(cycles));
     setCycleHistory(cycles.map(cycleRowToSnapshot));
   }, [pyodideReady]);
 
@@ -348,7 +439,7 @@ export function useProjectDB(): UseProjectDBReturn {
     }
     let cycles: CycleRow[] = [];
     try {
-      const result = await db.readFile("cycles.json");
+      const result = await db.readFile(`/data/${language}/cycles.json`);
       if (result && result.fileContent) {
         cycles = JSON.parse(result.fileContent);
       }
@@ -374,7 +465,7 @@ export function useProjectDB(): UseProjectDBReturn {
     }
     let annotations: AnnotationRow[] = [];
     try {
-      const result = await db.readFile("annotations.json");
+      const result = await db.readFile(`/data/${language}/annotations.json`);
       if (result && result.fileContent) {
         annotations = JSON.parse(result.fileContent);
       }
@@ -391,7 +482,7 @@ export function useProjectDB(): UseProjectDBReturn {
       confirmed: false,
     }));
     annotations.push(...rows);
-    await db.saveFile("annotations.json", JSON.stringify(annotations));
+    await db.saveFile(`/data/${language}/annotations.json`, JSON.stringify(annotations));
   }, [pyodideReady]);
 
   const confirmAnnotation = useCallback(async (
@@ -405,7 +496,7 @@ export function useProjectDB(): UseProjectDBReturn {
     }
     let annotations: AnnotationRow[] = [];
     try {
-      const result = await db.readFile("annotations.json");
+      const result = await db.readFile(`/data/${language}/annotations.json`);
       if (result && result.fileContent) {
         annotations = JSON.parse(result.fileContent);
       }
@@ -413,7 +504,7 @@ export function useProjectDB(): UseProjectDBReturn {
     const idx = annotations.findIndex(a => a.cycleNumber === cycleNumber && a.wordId === wordId);
     if (idx >= 0) {
       annotations[idx] = { ...annotations[idx], boundaries, confirmed: true };
-      await db.saveFile("annotations.json", JSON.stringify(annotations));
+      await db.saveFile(`/data/${language}/annotations.json`, JSON.stringify(annotations));
     }
   }, [pyodideReady]);
 
@@ -424,7 +515,7 @@ export function useProjectDB(): UseProjectDBReturn {
     }
     let annotations: AnnotationRow[] = [];
     try {
-      const result = await db.readFile("annotations.json");
+      const result = await db.readFile(`/data/${language}/annotations.json`);
       if (result && result.fileContent) {
         annotations = JSON.parse(result.fileContent);
       }
@@ -444,7 +535,7 @@ export function useProjectDB(): UseProjectDBReturn {
     }
     let annotations: AnnotationRow[] = [];
     try {
-      const result = await db.readFile("annotations.json");
+      const result = await db.readFile(`/data/${language}/annotations.json`);
       if (result && result.fileContent) {
         annotations = JSON.parse(result.fileContent);
       }
@@ -460,6 +551,7 @@ export function useProjectDB(): UseProjectDBReturn {
       return;
     }
     // Remove all persistent files for project, cycles, annotations, and files
+    logger.info('[useProjectDB] clearAll() invoked — deleting project/cycles/annotations and clearing files for language:', language);
     try {
       await db.deleteFile(`/data/${language}/project.json`);
     } catch {}
@@ -470,6 +562,7 @@ export function useProjectDB(): UseProjectDBReturn {
       await db.deleteFile(`/data/${language}/annotations.json`);
     } catch {}
     try {
+      logger.info('[useProjectDB] calling db.clearFiles()');
       await db.clearFiles();
     } catch {}
     setProject(null);
