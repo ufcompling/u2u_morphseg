@@ -74,7 +74,7 @@ export function ModelConfigStage({
         <h2 className="font-mono text-sm font-semibold text-foreground">
           Configure Active Learning
         </h2>
-        <p className="font-mono text-[11px] text-muted-foreground/50 mt-1">
+        <p className="font-mono text-[11px] text-muted-foreground/70 mt-1">
           These parameters control how the model selects data for annotation
         </p>
       </div>
@@ -83,7 +83,7 @@ export function ModelConfigStage({
       <div className="px-6 pt-6 pb-5 border-b border-border/20">
         <fieldset className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <legend className="font-mono text-[10px] text-muted-foreground/50 uppercase tracking-widest font-semibold">
+            <legend className="font-mono text-[11px] text-muted-foreground uppercase tracking-widest font-semibold">
               Target Language
             </legend>
             <Tooltip text="The language of your morphological data. This helps the model select appropriate features for segmentation." />
@@ -93,7 +93,7 @@ export function ModelConfigStage({
             value={config.targetLanguage}
             onChange={(e) => updateField("targetLanguage", e.target.value)}
             placeholder="e.g. Swahili, Turkish, Zulu..."
-            className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground placeholder:text-foreground/25 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
+            className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground placeholder:text-foreground/70 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
           />
           <div className="flex flex-wrap gap-1.5">
             {COMMON_LANGUAGES.map((lang) => (
@@ -103,7 +103,7 @@ export function ModelConfigStage({
                 className={`px-2.5 py-1 rounded-md font-mono text-[10px] transition-all border ${
                   config.targetLanguage === lang
                     ? "bg-primary/15 border-primary/30 text-primary font-semibold"
-                    : "bg-secondary/5 border-border/10 text-muted-foreground/35 hover:text-foreground/60 hover:border-border/20"
+                    : "bg-secondary/5 border-border/10 text-muted-foreground/70 hover:text-foreground/70 hover:border-border/20"
                 }`}
               >
                 {lang}
@@ -120,7 +120,7 @@ export function ModelConfigStage({
           {/* Increment size */}
           <div className="flex flex-col gap-2.5">
             <div className="flex items-center gap-2">
-              <label className="font-mono text-[11px] text-muted-foreground/70 uppercase tracking-wider">
+              <label className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
                 Increment Size
               </label>
               <Tooltip text="How many new samples the model requests for human annotation each cycle. Smaller values mean more frequent but lighter annotation rounds." />
@@ -137,7 +137,7 @@ export function ModelConfigStage({
               min={1}
               className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
             />
-            <p className="font-mono text-[10px] text-muted-foreground/30">
+            <p className="font-mono text-[11px] text-muted-foreground/70">
               Words queried each round
             </p>
           </div>
@@ -145,7 +145,7 @@ export function ModelConfigStage({
           {/* Iterations */}
           <div className="flex flex-col gap-2.5">
             <div className="flex items-center gap-2">
-              <label className="font-mono text-[11px] text-muted-foreground/70 uppercase tracking-wider">
+              <label className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
                 Iterations
               </label>
               <Tooltip text="Total number of annotation cycles. After each cycle the model retrains and selects new uncertain samples." />
@@ -159,7 +159,7 @@ export function ModelConfigStage({
               min={1}
               className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
             />
-            <p className="font-mono text-[10px] text-muted-foreground/30">
+            <p className="font-mono text-[11px] text-muted-foreground/70">
               Train-annotate-retrain rounds
             </p>
           </div>
@@ -168,7 +168,7 @@ export function ModelConfigStage({
         {/* Query strategy - full width with description */}
         <div className="flex flex-col gap-2.5">
           <div className="flex items-center gap-2">
-            <label className="font-mono text-[11px] text-muted-foreground/70 uppercase tracking-wider">
+            <label className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
               Query Strategy
             </label>
             <Tooltip text="The algorithm used to decide which unlabeled samples are most valuable for the human to annotate next." />
@@ -181,10 +181,10 @@ export function ModelConfigStage({
                 <button
                   key={strategy}
                   onClick={() => updateField("queryStrategy", strategy)}
-                  className={`flex-1 px-3 py-2.5 rounded-md font-mono text-[11px] transition-all ${
+                  className={`flex-1 px-3 py-2.5 rounded-md font-mono text-[12px] transition-all ${
                     config.queryStrategy === strategy
                       ? "bg-primary text-primary-foreground font-semibold shadow-sm"
-                      : "text-muted-foreground/50 hover:text-foreground hover:bg-secondary/10"
+                      : "text-muted-foreground/70 hover:text-foreground hover:bg-secondary/10"
                   }`}
                 >
                   {STRATEGY_INFO[strategy].label.split(" ")[0]}
@@ -195,10 +195,10 @@ export function ModelConfigStage({
 
           {/* Active strategy description */}
           <div className="px-3 py-2.5 bg-secondary/5 border border-border/10 rounded-lg">
-            <p className="font-mono text-[11px] text-foreground/80 font-medium">
+            <p className="font-mono text-[12px] text-foreground font-medium">
               {activeStrategy.label}
             </p>
-            <p className="font-mono text-[10px] text-muted-foreground/40 mt-1 leading-relaxed">
+            <p className="font-mono text-[11px] text-muted-foreground/70 mt-1 leading-relaxed">
               {activeStrategy.description}
             </p>
           </div>

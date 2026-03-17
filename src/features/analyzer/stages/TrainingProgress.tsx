@@ -40,7 +40,7 @@ export function TrainingProgressStage({
               {isComplete ? "Training complete" : "Training in progress"}
             </h2>
             {!isComplete && (
-              <p className="font-mono text-[10px] text-muted-foreground/30 mt-1">
+              <p className="font-mono text-[10px] text-muted-foreground/70 mt-1">
                 Usually takes under a minute
               </p>
             )}
@@ -62,7 +62,7 @@ export function TrainingProgressStage({
                 />
               ))}
             </div>
-            <span className="font-mono text-[10px] text-muted-foreground/40 tabular-nums">
+            <span className="font-mono text-[10px] text-muted-foreground/70 tabular-nums">
               {currentIteration}/{totalIterations}
             </span>
           </div>
@@ -76,7 +76,7 @@ export function TrainingProgressStage({
               style={{ width: `${pct}%`, transition: "width 600ms ease-out" }}
             />
           </div>
-          <span className="font-mono text-[9px] text-muted-foreground/25 tabular-nums">
+          <span className="font-mono text-[9px] text-muted-foreground/70 tabular-nums">
             {completedCount}/{steps.length}
           </span>
         </div>
@@ -131,14 +131,14 @@ export function TrainingProgressStage({
                       isActive
                         ? "text-foreground font-medium"
                         : isCompleted
-                          ? "text-primary/70"
-                          : "text-muted-foreground/20"
+                          ? "text-primary"
+                          : "text-muted-foreground/70"
                     }`}
                   >
                     {step.label}
                   </p>
                   {isActive && isLast && (
-                    <p className="font-mono text-[9px] text-muted-foreground/25 mt-1">
+                    <p className="font-mono text-[9px] text-muted-foreground/70 mt-1">
                       Final step
                     </p>
                   )}
@@ -154,7 +154,7 @@ export function TrainingProgressStage({
       <footer className="px-6 py-4">
         {isComplete ? (
           <div className="flex items-center justify-between">
-            <p className="font-mono text-[11px] text-muted-foreground/40">
+            <p className="font-mono text-[11px] text-muted-foreground/70">
               Ready to annotate low-confidence words
             </p>
             <button
@@ -167,7 +167,7 @@ export function TrainingProgressStage({
           </div>
         ) : (
           <div className="flex items-center justify-end">
-            <span className="font-mono text-[10px] text-muted-foreground/20">
+            <span className="font-mono text-[10px] text-muted-foreground/70">
               Waiting for training to finish
             </span>
           </div>

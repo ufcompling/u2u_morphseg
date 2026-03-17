@@ -43,7 +43,7 @@ export function DatasetIngestion({
             <RoleCount label="Unannotated" count={unannotatedCount} color="text-foreground" />
             <RoleCount label="Evaluation" count={evaluationCount} color="text-muted-foreground" />
           </div>
-          <span className="font-mono text-[10px] text-muted-foreground/40">
+          <span className="font-mono text-[10px] text-muted-foreground/70">
             {files.length} total
           </span>
         </div>
@@ -69,7 +69,7 @@ export function DatasetIngestion({
 
       {/* Footer */}
       <footer className="px-6 py-4 border-t border-border/20 flex items-center justify-between">
-        <p className="font-mono text-[10px] text-muted-foreground/40 max-w-xs">
+        <p className="font-mono text-[10px] text-muted-foreground/70 max-w-xs">
           {hasRequiredFiles
             ? "Ready to proceed"
             : "Assign at least one annotated and one unannotated file to continue"}
@@ -151,12 +151,12 @@ function UploadZone({
           <p className="font-mono text-sm font-medium text-foreground">
             {isUploading ? "Uploading..." : "Add dataset files"}
           </p>
-          <p className="font-mono text-[11px] text-muted-foreground/40 mt-0.5">
+          <p className="font-mono text-[11px] text-muted-foreground/70 mt-0.5">
             Drag and drop or click to browse
           </p>
         </div>
 
-        <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/10 text-muted-foreground/40 font-mono text-[10px] uppercase tracking-wider">
+        <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/10 text-muted-foreground/70 font-mono text-[10px] uppercase tracking-wider">
           <span>.tgt</span>
           <span className="text-border/50">|</span>
           <span>.txt</span>
@@ -185,7 +185,7 @@ function FileRow({
     <div className="group flex items-center gap-4 px-6 py-3.5 hover:bg-secondary/5 transition-colors">
       {/* File extension badge */}
       <div className="w-10 h-10 rounded-lg bg-secondary/15 flex items-center justify-center shrink-0">
-        <span className="font-mono text-[10px] text-muted-foreground/60 uppercase font-semibold">
+        <span className="font-mono text-[10px] text-muted-foreground/70 uppercase font-semibold">
           {extension}
         </span>
       </div>
@@ -194,7 +194,7 @@ function FileRow({
       <div className="flex-1 min-w-0">
         <p className="font-mono text-sm text-foreground truncate">{file.name}</p>
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="font-mono text-[10px] text-muted-foreground/40">
+          <span className="font-mono text-[10px] text-muted-foreground/70">
             {formatSize(file.size)}
           </span>
           <ValidationBadge status={file.validationStatus} />
@@ -218,7 +218,7 @@ function FileRow({
       {/* Remove button */}
       <button
         onClick={() => onRemove(file.id)}
-        className="p-2 rounded-lg text-muted-foreground/30 hover:text-red-400 hover:bg-red-400/10 transition-all opacity-0 group-hover:opacity-100"
+        className="p-2 rounded-lg text-muted-foreground/70 hover:text-red-400 hover:bg-red-400/10 transition-all opacity-0 group-hover:opacity-100"
         aria-label="Remove file"
       >
         <TrashIcon />
@@ -255,7 +255,7 @@ function RoleCount({
       <span className={`font-mono text-xs font-semibold tabular-nums ${color}`}>
         {count}
       </span>
-      <span className="font-mono text-[10px] text-muted-foreground/50">
+      <span className="font-mono text-[10px] text-muted-foreground/70">
         {label}
       </span>
     </div>
@@ -268,10 +268,10 @@ function EmptyState() {
       <div className="w-16 h-16 rounded-2xl bg-secondary/10 border border-border/10 flex items-center justify-center mx-auto mb-4">
         <FileIcon className="w-7 h-7 text-muted-foreground/15" />
       </div>
-      <p className="font-mono text-sm text-muted-foreground/30 font-medium">
+      <p className="font-mono text-sm text-muted-foreground/70 font-medium">
         No files yet
       </p>
-      <p className="font-mono text-[11px] text-muted-foreground/20 mt-1">
+      <p className="font-mono text-[11px] text-muted-foreground/70 mt-1">
         Upload your dataset files to get started
       </p>
     </div>
