@@ -20,7 +20,7 @@ def run_training_cycle(config_json: str) -> str:
 		- selectSrc: str
 		- workDir: str
 		- method: str
-		- increment_size (selectSize): int
+		- incrementSize: int
 		- current_cycle: int
 		- max_crf_iterations (maxIterations): int
 		- delta: int
@@ -61,12 +61,11 @@ def run_training_cycle(config_json: str) -> str:
 		marginals: DatasetMarginals = crf.predict_marginals(X_select)
 		confidence_data: list[ConfidenceData] = get_confidence_data(data['select']['words'], y_select_predict, marginals)
 
-		increment_size: int = config['selectSize']
-		increment_words: list[str] = [word for word, _, _ in confidence_data[:increment_size]]
+		increment_words: list[str] = [word for word, _, _ in confidence_data[:config['incrementSize']]]
 		increment_content: str = '\n'.join(increment_words)
-		increment_data: str = format_increment(confidence_data[:increment_size])
+		increment_data: str = format_increment(confidence_data[:config['incrementSize']])
 
-		residual_words: list[str] = [word for word, _, _ in confidence_data[increment_size:]]
+		residual_words: list[str] = [word for word, _, _ in confidence_data[config['incrementSize']:]]
 		residual_count: int = len(residual_words)
 		residual_content: str = '\n'.join(residual_words)
 

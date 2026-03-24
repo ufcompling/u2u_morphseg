@@ -19,7 +19,7 @@ def format_increment(confidence_data: list[ConfidenceData]) -> list[dict[str, st
 	for i, (word, labels, confscore) in enumerate(confidence_data):
 		increment.append({
 			'id': f'w{i}',
-			'word': word,
+			'word': word.replace(' ', ''),
 			'confidence': round(confscore, 4),
 			'boundaries': [{'index': b} for b in _get_morph_boundaries(word, labels)]
         })
