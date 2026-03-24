@@ -168,5 +168,5 @@ bun run dev
 ---
 
 ## 9. Testing
-bun run vitest (<fileName>)
+bun test
 ```
