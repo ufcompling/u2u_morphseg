@@ -8,17 +8,13 @@ export async function importFile(fileName: string, fileContent: string | Uint8Ar
   if (!language) {
     console.error('Language not set. Cannot import file.');
     return;
-  } else {
-    console.error(`Importing file for language: ${language}`);
   }
   // Ensure the language directory exists
   await pyodide.runPythonAsync(`import os; os.makedirs('/data/${language}', exist_ok=True)`);
-  // List files in the language subdirectory
-  const allFiles = await pyodide.runPythonAsync(`import os, json; json.dumps(os.listdir('/data/${language}'))`);
-  const fileNames = new Set(JSON.parse(allFiles));
-  if (fileNames.has(fileName)) {
-    return;
-  }
+
+  // Always overwrite — never skip if file exists. The old guard caused stale
+  // IDBFS content to persist across sessions, making training operate on the
+  // wrong file contents even after the user re-uploaded corrected files.
   try {
     const filePath = `/data/${language}/${fileName}`;
     if (fileContent instanceof Uint8Array) {
@@ -37,5 +33,5 @@ export async function importFile(fileName: string, fileContent: string | Uint8Ar
   } catch (error) {
     console.error(`Error importing file ${fileName}:`, error);
   }
-    await syncPyodideFS();
+  await syncPyodideFS();
 }

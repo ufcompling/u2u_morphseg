@@ -19,29 +19,64 @@ export async function loadFiles(): Promise<fileData[]> {
     console.error('[loadFiles] Error creating language directory:', e);
     return [];
   }
-  let fileIdsStr = '';
   let fileIds: string[] = [];
   try {
-    fileIdsStr = await pyodide.runPythonAsync(`import os; import json; json.dumps(os.listdir('/data/${language}'))`);
+    const fileIdsStr: string = await pyodide.runPythonAsync(
+      `import os, json; json.dumps(os.listdir('/data/${language}'))`
+    );
     fileIds = JSON.parse(fileIdsStr) as string[];
   } catch (e) {
     console.error('[loadFiles] Error listing files:', e);
     return [];
   }
-  let statsStr = '';
-  let fileStats: any = {};
+
+  // Read all file metadata + content in one Python call to avoid N round-trips
+  // to the worker. Returns { fileName: { size, createdAt, content } }.
+  let fileData: Record<string, { fileSize: number; createdAt: number; content: string }> = {};
   try {
-    statsStr = await pyodide.runPythonAsync(`\nimport os, json\nfile_stats = {}\nfor fname in os.listdir('/data/${language}'):\n    stat = os.stat(f'/data/${language}/{fname}')\n    file_stats[fname] = {\n        'fileSize': stat.st_size,\n        'createdAt': int(stat.st_ctime * 1000)\n    }\njson.dumps(file_stats)\n`);
-    fileStats = JSON.parse(statsStr);
+    const dataStr: string = await pyodide.runPythonAsync(`
+import os, json, db_worker
+result = {}
+for fname in os.listdir('/data/${language}'):
+    fpath = f'/data/${language}/{fname}'
+    stat = os.stat(fpath)
+    try:
+        raw = db_worker.read_file(fpath)
+        parsed = json.loads(raw)
+        content = parsed.get('content', '') if parsed.get('type') == 'text' else ''
+    except Exception:
+        content = ''
+    result[fname] = {
+        'fileSize': stat.st_size,
+        'createdAt': int(stat.st_ctime * 1000),
+        'content': content,
+    }
+json.dumps(result)
+`);
+    fileData = JSON.parse(dataStr);
   } catch (e) {
-    console.error('[loadFiles] Error getting file stats:', e);
-    return [];
+    console.error('[loadFiles] Error reading file data:', e);
+    // Fall back to metadata-only (content will be empty, startTraining will re-read)
+    return fileIds.map((fileName) => ({
+      fileName,
+      filePath: `/data/${language}/${fileName}`,
+      fileSize: 0,
+      createdAt: Date.now(),
+      fileContent: '',
+      fileRole: null,
+      fileType: 'text',
+      validationStatus: 'pending',
+    } as import("../../lib/types").fileData));
   }
-  const result = fileIds.map((fileName: string) => ({
+
+  return fileIds.map((fileName) => ({
     fileName,
     filePath: `/data/${language}/${fileName}`,
-    fileSize: fileStats[fileName]?.fileSize,
-    createdAt: fileStats[fileName]?.createdAt
-  } as fileData));
-  return result;
+    fileSize: fileData[fileName]?.fileSize ?? 0,
+    createdAt: fileData[fileName]?.createdAt ?? Date.now(),
+    fileContent: fileData[fileName]?.content ?? '',
+    fileRole: null,       // roles are in-memory only (rolesMap in useTurtleShell)
+    fileType: 'text',
+    validationStatus: 'pending',
+  } as import("../../lib/types").fileData));
 }

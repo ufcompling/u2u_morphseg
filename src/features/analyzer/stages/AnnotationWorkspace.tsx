@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { AnnotationWord } from "../../../lib/types";
 import { ArrowIcon, UploadSmallIcon, CheckAllIcon } from "../../../components/ui/icons";
 
@@ -14,47 +14,63 @@ import { ArrowIcon, UploadSmallIcon, CheckAllIcon } from "../../../components/ui
 // ============================================================
 
 /**
- * Parse a gold .tgt file into a lookup map of word → boundary indices.
- * Handles both formats:
- *   - "un!happy"           (raw annotated)
- *   - "u n ! h a p p y"   (space-separated .tgt)
+ * Parse a gold .tgt / annotated file into surface-word → boundary indices.
  *
- * :param content: Raw text content of the gold file
- * :returns: Map where key = surface word, value = boundary index array
+ * Auto-detects the boundary marker by scanning the first 20 non-empty lines
+ * and picking whichever of !  +  |  -  _  appears most often.
+ * Falls back to treating the whole line as an unsegmented word if none found.
+ *
+ * Both space-separated char format ("u n ! h a p p y") and compact format
+ * ("un!happy") are handled — internal whitespace is stripped before splitting.
+ *
+ * :returns: { lookup, separator, sampleLines }
+ *   lookup      — Map<normalizedWord, boundaryIndices[]>
+ *   separator   — the char that was detected (for debug display)
+ *   sampleLines — first 3 raw lines (for debug display)
  */
-function parseGoldFile(content: string): Map<string, number[]> {
-  const lookup = new Map<string, number[]>();
+function parseGoldFile(content: string): {
+  lookup: Map<string, number[]>;
+  separator: string;
+  sampleLines: string[];
+} {
+  const lines = (content ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"));
 
-  for (const rawLine of (content ?? '').split("\n")) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
+  const sampleLines = lines.slice(0, 3);
 
-    // Detect format: space-separated chars vs compact morphemes
-    let morphemes: string[];
-    if (line.includes(" ")) {
-      // Space-separated .tgt: "u n ! h a p p y" → join → "un!happy" → split by !
-      const joined = line.replace(/\s+/g, "");
-      morphemes = joined.split("!");
-    } else {
-      // Compact: "un!happy"
-      morphemes = line.split("!");
+  // Auto-detect separator from first 20 lines
+  const CANDIDATES = ["!", "+", "|", "-", "_"];
+  const counts: Record<string, number> = {};
+  for (const c of CANDIDATES) counts[c] = 0;
+  for (const l of lines.slice(0, 20)) {
+    const collapsed = l.replace(/\s+/g, "");
+    for (const c of CANDIDATES) {
+      if (collapsed.includes(c)) counts[c]++;
     }
+  }
+  const separator = CANDIDATES.reduce((best, c) => (counts[c] > counts[best] ? c : best), "!");
 
+  const lookup = new Map<string, number[]>();
+  for (const line of lines) {
+    const collapsed = line.replace(/\s+/g, "");
+    if (!collapsed) continue;
+
+    const morphemes = collapsed.split(separator);
     const word = morphemes.join("");
     if (!word) continue;
 
-    // Convert morpheme list to boundary indices (index of char AFTER which split occurs)
     const boundaries: number[] = [];
     let offset = 0;
     for (let i = 0; i < morphemes.length - 1; i++) {
       offset += morphemes[i].length;
       boundaries.push(offset - 1);
     }
-
     lookup.set(word.toLowerCase(), boundaries);
   }
 
-  return lookup;
+  return { lookup, separator, sampleLines };
 }
 
 interface AnnotationWorkspaceProps {
@@ -83,7 +99,23 @@ export function AnnotationWorkspaceStage({
   // Dev/testing: gold file auto-annotation
   const goldInputRef = useRef<HTMLInputElement>(null);
   const [goldMatchCount, setGoldMatchCount] = useState<number | null>(null);
+  const [goldDebug, setGoldDebug] = useState<{
+    separator: string;
+    lookupSize: number;
+    sampleLines: string[];
+    sampleWordKey: string;
+  } | null>(null);
   const [showDevTools, setShowDevTools] = useState(false);
+
+  // Keep a ref so the async FileReader.onload always sees the latest words
+  // without needing words/annotatedSet in useCallback deps.
+  const wordsRef = useRef(words);
+  useEffect(() => {
+    wordsRef.current = words;
+    // Clear stale debug/match info when the word batch changes (new cycle)
+    setGoldMatchCount(null);
+    setGoldDebug(null);
+  }, [words]);
 
   const currentWord = words[focusIndex] ?? null;
   const annotatedCount = annotatedSet.size;
@@ -110,8 +142,9 @@ export function AnnotationWorkspaceStage({
   }, [focusIndex, words.length]);
 
   /**
-   * Load a gold-standard file and auto-fill boundaries for all matching words.
-   * Accepts .tgt or plain annotated format (e.g. "un!happy" or "u n ! h a p p y").
+   * Load a gold-standard file and auto-fill boundaries for all matching words,
+   * then confirm ALL words in the batch so the submit button enables immediately.
+   * Matched words get gold boundaries; unmatched keep the CRF-predicted boundaries.
    */
   const handleGoldFile = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,37 +154,53 @@ export function AnnotationWorkspaceStage({
       const reader = new FileReader();
       reader.onload = () => {
         const content = reader.result as string;
-        const goldLookup = parseGoldFile(content);
+        const { lookup: goldLookup, separator, sampleLines } = parseGoldFile(content);
+        const currentWords = wordsRef.current;
+
+        const sampleWordKey = currentWords.length > 0
+          ? currentWords[0].word.replace(/\s+/g, "").toLowerCase()
+          : "";
+
+        setGoldDebug({
+          separator,
+          lookupSize: goldLookup.size,
+          sampleLines,
+          sampleWordKey,
+        });
 
         let matched = 0;
-        const newAnnotated = new Set(annotatedSet);
-
-        for (const w of words) {
-          const key = w.word.toLowerCase();
+        for (const w of currentWords) {
+          const key = w.word.replace(/\s+/g, "").toLowerCase();
           const goldBoundaries = goldLookup.get(key);
           if (goldBoundaries !== undefined) {
             onUpdateBoundaries(w.id, goldBoundaries);
-            newAnnotated.add(w.id);
             matched++;
           }
         }
 
-        setAnnotatedSet(newAnnotated);
+        // Confirm ALL words regardless of match — matched get gold boundaries,
+        // unmatched keep CRF predictions. Submit always enables after gold load.
+        setAnnotatedSet(new Set(currentWords.map((w) => w.id)));
         setGoldMatchCount(matched);
+
+        console.debug(`[gold] sep="${separator}" lookup=${goldLookup.size} matched=${matched}/${currentWords.length}`,
+          "\n  sample word key:", JSON.stringify(sampleWordKey),
+          "\n  sample gold lines:", sampleLines,
+          "\n  first gold key:", [...goldLookup.keys()][0]);
+      };
+      reader.onerror = () => {
+        console.error("[AnnotationWorkspace] Failed to read gold file:", reader.error);
       };
       reader.readAsText(file);
-
-      // Reset so the same file can be re-selected if needed
       e.target.value = "";
     },
-    [words, annotatedSet, onUpdateBoundaries]
+    [onUpdateBoundaries]
   );
 
-  /** Confirm all words at once — useful when model predictions are already correct. */
+  /** Confirm all words at once using current boundaries (CRF predictions as-is). */
   const handleConfirmAll = useCallback(() => {
-    const all = new Set(words.map((w) => w.id));
-    setAnnotatedSet(all);
-  }, [words]);
+    setAnnotatedSet(new Set(wordsRef.current.map((w) => w.id)));
+  }, []);
 
   return (
     <div className="flex flex-col gap-0">
@@ -237,13 +286,29 @@ export function AnnotationWorkspaceStage({
 
                 {/* Status message */}
                 {goldMatchCount !== null && (
-                  <span className="font-mono text-[10px] text-primary/70">
-                    ✓ {goldMatchCount}/{totalWords} words matched from gold file
+                  <span className={`font-mono text-[10px] ${goldMatchCount > 0 ? "text-primary/70" : "text-red-400/70"}`}>
+                    {goldMatchCount > 0 ? "✓" : "✗"} {goldMatchCount}/{totalWords} words matched from gold file
                   </span>
                 )}
               </div>
+
+              {/* Debug dump — shown when 0 matches so we can diagnose the format mismatch */}
+              {goldDebug && goldMatchCount === 0 && (
+                <div className="mt-2 p-2 rounded bg-red-400/5 border border-red-400/15 space-y-1">
+                  <p className="font-mono text-[9px] text-red-400/80 font-semibold">Format mismatch — debug info:</p>
+                  <p className="font-mono text-[9px] text-muted-foreground/50">
+                    Detected separator: <span className="text-foreground/70">&quot;{goldDebug.separator}&quot;</span>
+                    {" · "}Gold entries: <span className="text-foreground/70">{goldDebug.lookupSize}</span>
+                    {" · "}Batch word key: <span className="text-foreground/70">&quot;{goldDebug.sampleWordKey}&quot;</span>
+                  </p>
+                  <p className="font-mono text-[9px] text-muted-foreground/40">Gold file lines (raw):</p>
+                  {goldDebug.sampleLines.map((l, i) => (
+                    <p key={i} className="font-mono text-[9px] text-muted-foreground/60 pl-2">{l}</p>
+                  ))}
+                </div>
+              )}
               <p className="font-mono text-[9px] text-muted-foreground/30 mt-2">
-                Gold file sets correct boundaries and auto-confirms matched words.
+                Gold file applies correct boundaries to matched words and confirms the entire batch.
                 Confirm All marks every word as done without changing boundaries.
               </p>
             </div>
@@ -428,10 +493,10 @@ function WordEditor({
   onUpdateBoundaries: (wordId: string, boundaryIndices: number[]) => void;
 }) {
   const characters = word.word.split("");
-  const boundarySet = new Set(word.boundaries.map((b) => b.index));
+  const boundarySet = new Set<number>(word.boundaries.map((b) => b.index));
 
   const toggleBoundary = (charIndex: number) => {
-    const newBoundaries = boundarySet.has(charIndex)
+    const newBoundaries: number[] = boundarySet.has(charIndex)
       ? [...boundarySet].filter((i) => i !== charIndex)
       : [...boundarySet, charIndex].sort((a, b) => a - b);
     onUpdateBoundaries(word.id, newBoundaries);
@@ -440,7 +505,7 @@ function WordEditor({
   // Build morpheme preview
   const morphemes: string[] = [];
   let start = 0;
-  const sorted = [...boundarySet].sort((a, b) => a - b);
+  const sorted: number[] = [...boundarySet].sort((a, b) => a - b);
   for (const b of sorted) {
     morphemes.push(word.word.slice(start, b + 1));
     start = b + 1;
