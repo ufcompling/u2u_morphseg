@@ -27,6 +27,18 @@ import { log } from "../lib/logger";
 
   const logger = log('project-db');
 
+/**
+ * Strip characters that JSON.stringify fails to escape in all environments.
+ * Null bytes (\0) and other C0 control chars (except \t \n \r) coming back
+ * from Python can silently corrupt cycles.json, causing JSON.parse to throw
+ * "Bad control character in string literal" on the next read.
+ */
+function sanitizeContent(s: string): string {
+  if (!s) return s;
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+}
+
 // ── Public types ─────────────────────────────────────────────────────────────
 
 export interface ProjectState {
@@ -401,7 +413,14 @@ export function useProjectDB(): UseProjectDBReturn {
     try {
       const result = await db.readFile(`/data/${language}/cycles.json`);
       if (result && result.fileContent) {
-        cycles = JSON.parse(result.fileContent);
+        try {
+          cycles = JSON.parse(result.fileContent);
+        } catch (parseErr) {
+          // Corrupt JSON (e.g. null bytes from a prior bad write) — reset rather
+          // than hard-crashing and blocking all future cycle saves.
+          logger.warn("[useProjectDB] cycles.json is corrupt, resetting:", parseErr);
+          cycles = [];
+        }
       }
     } catch (err: any) {
       if (err && err.message && err.message.startsWith('File not found:')) {
@@ -418,9 +437,11 @@ export function useProjectDB(): UseProjectDBReturn {
       recall: cycle.recall,
       f1: cycle.f1,
       annotatedCount: cycle.annotatedCount,
-      incrementContent: cycle.incrementContent,
-      residualContent: cycle.residualContent,
-      evaluationContent: cycle.evaluationContent,
+      // Sanitize content from Python — null bytes and other C0 control chars
+      // are not valid JSON and cause parse failures on the next read.
+      incrementContent: sanitizeContent(cycle.incrementContent),
+      residualContent: sanitizeContent(cycle.residualContent),
+      evaluationContent: sanitizeContent(cycle.evaluationContent),
       completedAt: Date.now(),
     };
     if (idx >= 0) {
