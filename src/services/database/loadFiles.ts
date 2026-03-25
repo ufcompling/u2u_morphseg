@@ -61,7 +61,7 @@ json.dumps(result)
       fileName,
       filePath: `/data/${language}/${fileName}`,
       fileSize: 0,
-      createdAt: Date.now(),
+      createdAt: new Date(),
       fileContent: '',
       fileRole: null,
       fileType: 'text',
@@ -73,7 +73,7 @@ json.dumps(result)
     fileName,
     filePath: `/data/${language}/${fileName}`,
     fileSize: fileData[fileName]?.fileSize ?? 0,
-    createdAt: fileData[fileName]?.createdAt ?? Date.now(),
+    createdAt: new Date(fileData[fileName]?.createdAt ?? Date.now()),
     fileContent: fileData[fileName]?.content ?? '',
     fileRole: null,       // roles are in-memory only (rolesMap in useTurtleShell)
     fileType: 'text',
