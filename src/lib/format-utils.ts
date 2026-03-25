@@ -1,23 +1,3 @@
-/**
- * format-utils.ts
- * Location: src/lib/format-utils.ts
- *
- * Purpose:
- *   Pure utility functions for data format conversion, file operations,
- *   and workflow state derivation. Stateless and independently testable.
- *
- * Key functions:
- *   tgtToSrc          - Strip boundary markers from .tgt to produce .src format
- *   annotationToTgtLine - Convert annotated word back to .tgt format
- *   triggerDownload    - Initiate a browser file download from a string
- *   getFileContent     - Look up a file's content by its role
- *   getFileByRole      - Look up a full fileData by its role
- *   deriveCompletedStages - Compute which workflow stages are complete
- *   validateTgtFormat  - Check whether a string is valid .tgt content
- *
- * Dependencies: types.ts
- */
-
 import type { fileData, FileRole, WorkflowStage, AnnotationWord } from "./types";
 
 /**
@@ -75,9 +55,15 @@ export function getFileByRole(files: fileData[], role: FileRole): fileData | und
   return files.find((f) => f.fileRole === role);
 }
 
-/** Derive which stages the user has completed based on the current stage position. */
+/**
+ * Derive which stages the user has completed based on the current stage position.
+ *
+ * Stage order must match the actual workflow: config → ingestion → training → annotation → results.
+ * The old order had "ingestion" before "config", which caused the upload step to be
+ * marked complete on page load when restoring currentStage: "config" from IndexedDB.
+ */
 export function deriveCompletedStages(current: WorkflowStage): WorkflowStage[] {
-  const order: WorkflowStage[] = ["ingestion", "config", "training", "annotation", "results"];
+  const order: WorkflowStage[] = ["config", "ingestion", "training", "annotation", "results"];
   const idx = order.indexOf(current);
   return idx > 0 ? order.slice(0, idx) : [];
 }

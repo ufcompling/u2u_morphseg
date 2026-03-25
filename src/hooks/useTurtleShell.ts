@@ -34,6 +34,7 @@ import {
   type AnnotationWord,
   type CycleSnapshot,
   DEFAULT_MODEL_CONFIG,
+  WORKFLOW_STAGES,
 } from "../lib/types";
 import {
   annotationToTgtLine,
@@ -152,13 +153,28 @@ export function useTurtleshell(): UseTurtleshellReturn {
 
   const goToStage = useCallback(
     (stage: WorkflowStage) => {
-      if (!completedStages.includes(currentStage)) {
-        setCompletedStages((prev) => [...prev, currentStage]);
+      const stageOrder = WORKFLOW_STAGES.map((s) => s.id);
+      const currentIndex = stageOrder.indexOf(currentStage);
+      const targetIndex = stageOrder.indexOf(stage);
+
+      if (targetIndex > currentIndex) {
+        // Forward: mark current stage as done
+        setCompletedStages((prev) =>
+          prev.includes(currentStage) ? prev : [...prev, currentStage]
+        );
+      } else {
+        // Backward: strip the target stage and everything after it from completed.
+        // The user is re-entering that part of the flow, so nothing past the
+        // destination should appear ticked.
+        setCompletedStages((prev) =>
+          prev.filter((s) => stageOrder.indexOf(s) < targetIndex)
+        );
       }
+
       setCurrentStage(stage);
       projectDB.saveProjectMeta({ currentStage: stage });
     },
-    [currentStage, completedStages, projectDB]
+    [currentStage, projectDB]
   );
 
   // ── Core state ──────────────────────────────────────────────────────────
