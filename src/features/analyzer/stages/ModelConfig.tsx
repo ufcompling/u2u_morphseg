@@ -5,7 +5,7 @@ declare global {
   }
 }
 import type { ModelConfig, QueryStrategy } from "../../../lib/types";
-import { ArrowIcon, Tooltip } from "../../../components/ui";
+import { ArrowIcon, Tooltip, SnapshotIcon } from "../../../components/ui";
 import { useEffect } from "react";
 
 // ============================================================
@@ -197,6 +197,15 @@ export function ModelConfigStage({
         >
           <span>Upload Files</span>
           <ArrowIcon />
+        </button>
+        {/* TODO: implement snapshot functionality */}
+        <button
+          disabled
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/60 cursor-not-allowed select-none"
+          title="Snapshot (coming soon)"
+        >
+          <SnapshotIcon />
+          <span>Snapshot</span>
         </button>
       </footer>
     </div>

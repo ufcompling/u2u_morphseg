@@ -1,7 +1,7 @@
 import { useState, type DragEvent, type ChangeEvent } from "react";
 import type { fileData, FileRole } from "../../../lib/types";
 import { formatSize } from "../../../lib/format-utils";
-import { UploadIcon, FileIcon, TrashIcon, ArrowIcon } from "../../../components/ui/icons";
+import { UploadIcon, FileIcon, TrashIcon, ArrowIcon, SnapshotIcon } from "../../../components/ui/icons";
 
 // ============================================================
 // Dataset Ingestion Stage
@@ -80,25 +80,38 @@ export function DatasetIngestion({
 
       {/* Footer */}
       <footer className="px-6 py-4 border-t border-border/20 flex items-center justify-between">
-        <p className="font-mono text-[10px] text-muted-foreground/40 max-w-xs">
-          {hasRequiredFiles
-            ? "Ready to proceed"
-            : "Assign at least one annotated and one unannotated file to continue"}
-        </p>
-        <button
-          onClick={onBack}
-          className="px-4 py-2.5 rounded-xl font-mono text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/20 transition-all"
-        >
-          Back
-        </button>
+        <div className="flex items-center gap-3">
+          <p className="font-mono text-[10px] text-muted-foreground/40 max-w-xs">
+            {hasRequiredFiles
+              ? "Ready to proceed"
+              : "Assign at least one annotated and one unannotated file to continue"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onBack}
+            className="px-4 py-2.5 rounded-xl font-mono text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/20 transition-all"
+          >
+            Back
+          </button>
+          {/* TODO: implement snapshot functionality */}
+          <button
+            disabled
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/60 cursor-not-allowed select-none"
+            title="Snapshot (coming soon)"
+          >
+            <SnapshotIcon />
+            <span>Snapshot</span>
+          </button>
           <button
             onClick={onStartTraining}
             disabled={!hasRequiredFiles}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-mono text-xs font-semibold tracking-wide transition-all hover:bg-primary/90 active:scale-[0.97] disabled:opacity-30 disabled:pointer-events-none"
-        >
-          <span>Start Training</span>
-          <ArrowIcon />
-        </button>
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-mono text-xs font-semibold tracking-wide transition-all hover:bg-primary/90 active:scale-[0.97] disabled:opacity-30 disabled:pointer-events-none"
+          >
+            <span>Start Training</span>
+            <ArrowIcon />
+          </button>
+        </div>
       </footer>
     </div>
   );

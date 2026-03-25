@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { TrainingStep } from "../../../lib/types";
-import { ArrowIcon, CheckIcon } from "../../../components/ui/icons";
+import { ArrowIcon, CheckIcon, SnapshotIcon } from "../../../components/ui/icons";
 
 // ============================================================
 // Training Progress Stage
@@ -171,16 +171,36 @@ export function TrainingProgressStage({
             <p className="font-mono text-[11px] text-muted-foreground/40">
               Ready to annotate low-confidence words
             </p>
-            <button
-              onClick={onContinue}
-              className="flex items-center gap-2 pl-4 pr-5 py-2.5 rounded-xl bg-primary/10 border border-primary/30 text-primary font-mono text-[11px] font-semibold tracking-wide transition-all hover:bg-primary hover:text-primary-foreground hover:border-primary active:scale-[0.97]"
-            >
-              <span>Continue to Annotation</span>
-              <ArrowIcon />
-            </button>
+            <div className="flex items-center gap-2">
+              {/* TODO: implement snapshot functionality */}
+              <button
+                disabled
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/60 cursor-not-allowed select-none"
+                title="Snapshot (coming soon)"
+              >
+                <SnapshotIcon />
+                <span>Snapshot</span>
+              </button>
+              <button
+                onClick={onContinue}
+                className="flex items-center gap-2 pl-4 pr-5 py-2.5 rounded-xl bg-primary/10 border border-primary/30 text-primary font-mono text-[11px] font-semibold tracking-wide transition-all hover:bg-primary hover:text-primary-foreground hover:border-primary active:scale-[0.97]"
+              >
+                <span>Continue to Annotation</span>
+                <ArrowIcon />
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-between">
+            {/* TODO: implement snapshot functionality */}
+            <button
+              disabled
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/60 cursor-not-allowed select-none"
+              title="Snapshot (coming soon)"
+            >
+              <SnapshotIcon />
+              <span>Snapshot</span>
+            </button>
             <span className="font-mono text-[10px] text-muted-foreground/20">
               Waiting for training to finish
             </span>

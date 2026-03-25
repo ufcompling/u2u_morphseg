@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { TrainingResult, CycleSnapshot } from "../../../lib/types";
-import { DownloadIcon, InferenceIcon, PlayIcon, SpinnerIcon, LoopIcon } from "../../../components/ui/icons";
+import { DownloadIcon, InferenceIcon, PlayIcon, SpinnerIcon, LoopIcon, SnapshotIcon } from "../../../components/ui/icons";
 import { Tooltip } from "../../../components/ui/tooltip";
 
 // ============================================================
@@ -289,6 +289,15 @@ export function ResultsExportStage({
           className="font-mono text-[10px] text-muted-foreground/25 hover:text-muted-foreground/50 transition-colors"
         >
           Reset project
+        </button>
+        {/* TODO: implement snapshot functionality */}
+        <button
+          disabled
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/60 cursor-not-allowed select-none"
+          title="Snapshot (coming soon)"
+        >
+          <SnapshotIcon />
+          <span>Snapshot</span>
         </button>
         {isViewingCurrent && (
           <button

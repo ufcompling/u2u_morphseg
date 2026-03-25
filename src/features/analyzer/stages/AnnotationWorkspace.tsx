@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { AnnotationWord } from "../../../lib/types";
-import { ArrowIcon, UploadSmallIcon, CheckAllIcon } from "../../../components/ui/icons";
+import { ArrowIcon, UploadSmallIcon, CheckAllIcon, SnapshotIcon } from "../../../components/ui/icons";
 
 // ============================================================
 // Annotation Workspace Stage
@@ -292,19 +292,20 @@ export function AnnotationWorkspaceStage({
                 )}
               </div>
 
-              {/* Debug dump — shown when 0 matches so we can diagnose the format mismatch */}
+              {/* Debug dump — shown when 0 matches to explain coverage gap */}
               {goldDebug && goldMatchCount === 0 && (
-                <div className="mt-2 p-2 rounded bg-red-400/5 border border-red-400/15 space-y-1">
-                  <p className="font-mono text-[9px] text-red-400/80 font-semibold">Format mismatch — debug info:</p>
+                <div className="mt-2 p-2 rounded bg-secondary/10 border border-border/20 space-y-1">
+                  <p className="font-mono text-[9px] text-muted-foreground/70 font-semibold">Coverage gap — gold file loaded correctly but no overlap with this batch:</p>
                   <p className="font-mono text-[9px] text-muted-foreground/50">
-                    Detected separator: <span className="text-foreground/70">&quot;{goldDebug.separator}&quot;</span>
-                    {" · "}Gold entries: <span className="text-foreground/70">{goldDebug.lookupSize}</span>
-                    {" · "}Batch word key: <span className="text-foreground/70">&quot;{goldDebug.sampleWordKey}&quot;</span>
+                    Gold entries: <span className="text-foreground/70">{goldDebug.lookupSize}</span>
+                    {" · "}Separator: <span className="text-foreground/70">&quot;{goldDebug.separator}&quot;</span>
+                    {" · "}Sample batch word: <span className="text-foreground/70">&quot;{goldDebug.sampleWordKey}&quot;</span>
                   </p>
-                  <p className="font-mono text-[9px] text-muted-foreground/40">Gold file lines (raw):</p>
-                  {goldDebug.sampleLines.map((l, i) => (
-                    <p key={i} className="font-mono text-[9px] text-muted-foreground/60 pl-2">{l}</p>
-                  ))}
+                  <p className="font-mono text-[9px] text-muted-foreground/40">
+                    The CRF selected words from your unannotated pool that aren&apos;t in this gold file.
+                    Use <span className="text-foreground/60">Confirm All As-Is</span> to accept CRF predictions, or load a gold file that covers your unannotated pool.
+                  </p>
+                  <p className="font-mono text-[9px] text-muted-foreground/30">Gold file sample: {goldDebug.sampleLines.join(" · ")}</p>
                 </div>
               )}
               <p className="font-mono text-[9px] text-muted-foreground/30 mt-2">
@@ -469,6 +470,16 @@ export function AnnotationWorkspaceStage({
             </button>
           )}
         </div>
+
+        {/* TODO: implement snapshot functionality */}
+        <button
+          disabled
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/60 cursor-not-allowed select-none"
+          title="Snapshot (coming soon)"
+        >
+          <SnapshotIcon />
+          <span>Snapshot</span>
+        </button>
 
         <button
           onClick={onSubmit}
