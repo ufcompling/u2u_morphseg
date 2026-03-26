@@ -13,12 +13,14 @@
  *     useTrainingOrchestrator() → Training cycle + inference execution
  *     useAnnotationState()      → Word list + boundary editing
  *
- *   Cycle data flow:
- *     Cycle N trains on [original annotated + all prior user annotations].
+ *   Cycle data flow (new order: training → results → annotation):
+ *     After training completes, trainingResult is set immediately so the
+ *     results page has metrics to display before the user annotates.
  *     After the user submits annotations:
  *       1. Boundary decisions are converted to .tgt lines
  *       2. Those lines are appended to the "annotated" file in IndexedDB
  *       3. The "unannotated" file is replaced with the residual
+ *       4. The next cycle auto-starts (training stage)
  *     So cycle N+1 naturally reads a larger training set and smaller pool.
  *
  */
@@ -28,7 +30,7 @@ import {
   type WorkflowStage,
   type ModelConfig,
   type FileRole,
-  type StoredFile,
+  type fileData,
   type TrainingStep,
   type TrainingResult,
   type AnnotationWord,
@@ -40,19 +42,21 @@ import {
   getFileByRole,
   deriveCompletedStages,
   triggerDownload,
-  validateTgtFormat,
 } from "../lib/format-utils";
 import { log } from "../lib/logger";
 import { useProjectDB } from "./useProjectDB";
 import { usePyodideWorker } from "./usePyodideWorker";
 import { useTrainingOrchestrator } from "./useTrainingOrchestrator";
 import { useAnnotationState } from "./useAnnotationState";
+import { setLanguage } from "../lib/db";
 
 const logger = log('turtleshell');
 
 // -- Compositor return type ---------------------------------------------------
 
 export interface UseTurtleshellReturn {
+  language: string;
+  onLanguageChange: (lang: string) => void;
   // Workflow
   currentStage: WorkflowStage;
   completedStages: WorkflowStage[];
@@ -66,11 +70,11 @@ export interface UseTurtleshellReturn {
   indexedDBReady: boolean;
 
   // Files
-  files: StoredFile[];
+  files: fileData[];
   isUploading: boolean;
   handleUpload: (files: FileList | null) => void;
-  handleAssignRole: (fileId: string, role: FileRole) => void;
-  handleRemoveFile: (fileId: string) => void;
+  handleAssignRole: (filePath: string, role: FileRole) => void;
+  handleRemoveFile: (filePath: string) => void;
 
   // Config
   modelConfig: ModelConfig;
@@ -114,14 +118,37 @@ export interface UseTurtleshellReturn {
 // ── Hook ────────────────────────────────────────────────────────────────────
 
 export function useTurtleshell(): UseTurtleshellReturn {
+  const [language, setLanguageState] = useState<string>("");
+
+  const handleLanguageChange = useCallback((lang: string) => {
+    setLanguageState(lang);
+    setLanguage(lang);
+  }, []);
+
   const projectDB = useProjectDB();
+  const [rolesMap, setRolesMap] = useState<Record<string, FileRole | null>>({});
+
+  // Sync language to worker on mount and whenever it changes
+  useEffect(() => { setLanguage(language); }, [language]);
+
   const { pyodideReady, pyodideLoading, pyodideError, modelRestored, runCycle, runInference, wipeVfs } =
     usePyodideWorker();
   const hasRestored = useRef(false);
 
+  const files: fileData[] = projectDB.files.map(fd => ({
+    fileName: fd.fileName,
+    fileSize: fd.fileSize ?? 0,
+    fileContent: typeof fd.fileContent === "string" ? fd.fileContent : "",
+    fileRole: (rolesMap as Record<string, FileRole | null>)[fd.filePath] ?? null,
+    fileType: fd.fileType ?? "text",
+    createdAt: new Date(fd.createdAt ?? Date.now()),
+    filePath: fd.filePath ?? "",
+    validationStatus: "pending",
+  }));
+
   // ── Workflow navigation ─────────────────────────────────────────────────
 
-  const [currentStage, setCurrentStage] = useState<WorkflowStage>("ingestion");
+  const [currentStage, setCurrentStage] = useState<WorkflowStage>("config");
   const [completedStages, setCompletedStages] = useState<WorkflowStage[]>([]);
 
   const goToStage = useCallback(
@@ -151,61 +178,49 @@ export function useTurtleshell(): UseTurtleshellReturn {
 
   // ── File management ─────────────────────────────────────────────────────
 
-  const files = projectDB.files;
   const [isUploading, setIsUploading] = useState(false);
 
   const handleUpload = useCallback(
-    (fileList: FileList | null) => {
+    async (fileList: FileList | null) => {
       if (!fileList) return;
+      if (!pyodideReady) return;
       setIsUploading(true);
-
-      const readers = Array.from(fileList).map(
-        (file) =>
-          new Promise<Omit<StoredFile, "id">>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              resolve({
-                name: file.name,
-                size: file.size,
-                content: reader.result as string,
-                role: null,
-                validationStatus: "pending",
-                uploadedAt: new Date(),
-              });
-            };
-            reader.readAsText(file);
-          })
-      );
-
-      Promise.all(readers).then(async (newFiles) => {
-        try {
-          await projectDB.saveFiles(newFiles);
-        } catch (err) {
-          logger.error(" Failed to persist files:", err);
+      try {
+        for (const file of Array.from(fileList)) {
+          let content: string | Uint8Array;
+          if (file.type.startsWith('text/')) {
+            content = await file.text();
+          } else {
+            const buffer = await file.arrayBuffer();
+            content = new Uint8Array(buffer);
+          }
+          await projectDB.importFile(file.name, content);
         }
+      } finally {
         setIsUploading(false);
-      });
+      }
     },
-    [projectDB]
+    [projectDB, pyodideReady]
   );
 
   const handleAssignRole = useCallback(
-    (fileId: string, role: FileRole) => {
-      projectDB.updateFileRole(fileId, role);
-
-      // Validate .tgt format now that we know the file's intended role
-      const file = files.find((f) => f.id === fileId);
-      if (file) {
-        const { valid } = validateTgtFormat(file.content);
-        projectDB.updateFileValidation(fileId, valid ? "valid" : "invalid");
-      }
+    (filePath: string, role: FileRole) => {
+      setRolesMap((prev) => ({ ...prev, [filePath]: role }));
     },
-    [projectDB, files]
+    []
   );
 
   const handleRemoveFile = useCallback(
-    (fileId: string) => {
-      projectDB.removeFile(fileId);
+    async (filePath: string) => {
+      await projectDB.deleteFile(filePath);
+      if (typeof projectDB.loadFiles === 'function') {
+        await projectDB.loadFiles();
+      }
+      setRolesMap((prev) => {
+        const copy = { ...prev };
+        delete copy[filePath];
+        return copy;
+      });
     },
     [projectDB]
   );
@@ -230,8 +245,8 @@ export function useTurtleshell(): UseTurtleshellReturn {
   const cycleHistory = projectDB.cycleHistory;
 
   // ── Deferred auto-start training ────────────────────────────────────────
-  // Set to true by handleNewCycle. Can't call startTraining directly because
-  // its closure would capture the stale currentIteration.
+  // Set to true by handleNewCycle / handleSubmitAnnotations. Can't call
+  // startTraining directly because its closure would capture stale currentIteration.
   const [autoStartTraining, setAutoStartTraining] = useState(false);
 
   useEffect(() => {
@@ -290,8 +305,9 @@ export function useTurtleshell(): UseTurtleshellReturn {
   }, [projectDB.dbReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Sync training orchestrator output to annotations ────────────────────
-  // When training completes, push the increment words into the annotation hook
-  // and persist them to IndexedDB.
+  // When training completes, push the increment words into the annotation hook,
+  // persist them to IndexedDB, and set trainingResult so the results page has
+  // data before the user goes through annotation.
 
   useEffect(() => {
     if (training.isTrainingComplete && training.incrementWords.length > 0) {
@@ -300,6 +316,12 @@ export function useTurtleshell(): UseTurtleshellReturn {
       projectDB.saveProjectMeta({
         cumulativeSelectSize: cumulativeSelectSize.current,
       });
+      // Set result now so the results page has data when we navigate there
+      // before the user has gone through annotation.
+      if (training.pendingCycleResult) {
+        setPreviousResult(trainingResult);
+        setTrainingResult(training.pendingCycleResult);
+      }
     }
   }, [training.isTrainingComplete]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -322,10 +344,11 @@ export function useTurtleshell(): UseTurtleshellReturn {
   );
 
   /**
-   * Submit annotations — the cycle data flow fix:
+   * Submit annotations — cycle data flow:
    * 1. Persist the cycle snapshot to IndexedDB
    * 2. Convert annotated words to .tgt and APPEND to the training file
    * 3. REPLACE the unannotated pool with the residual
+   * 4. Auto-start the next training cycle (annotation is now the last step)
    */
   const handleSubmitAnnotations = useCallback(async () => {
     const result = training.pendingCycleResult ?? {
@@ -336,9 +359,6 @@ export function useTurtleshell(): UseTurtleshellReturn {
       annotatedCount: annotations.annotationWords.length,
       iterationNumber: currentIteration,
     };
-
-    setPreviousResult(trainingResult);
-    setTrainingResult(result);
 
     await projectDB.saveCycle({
       iteration: result.iterationNumber,
@@ -355,23 +375,36 @@ export function useTurtleshell(): UseTurtleshellReturn {
     const annotatedFile = getFileByRole(files, "annotated");
     if (annotatedFile) {
       const newTgtLines = annotations.annotationWords.map(annotationToTgtLine).join("\n");
-      const merged = annotatedFile.content.trimEnd() + "\n" + newTgtLines;
-      await projectDB.updateFileContent(annotatedFile.id, merged);
+      const merged = annotatedFile.fileContent.trimEnd() + "\n" + newTgtLines;
+      await projectDB.saveFile(annotatedFile.filePath, merged);
     }
 
     // Replace unannotated pool with residual
     const unannotatedFile = getFileByRole(files, "unannotated");
     if (unannotatedFile && training.residualContent) {
-      await projectDB.updateFileContent(unannotatedFile.id, training.residualContent);
+      await projectDB.saveFile(unannotatedFile.filePath, training.residualContent);
     }
 
-    goToStage("results");
+    // Annotation is the last step — kick off the next cycle immediately.
+    // Mirrors handleNewCycle but runs after persistence so we don't lose data.
+    const nextIteration = currentIteration + 1;
+    setCurrentIteration(nextIteration);
+    annotations.resetAnnotations();
+    training.resetTrainingState();
+    training.resetInferenceState();
+    projectDB.saveProjectMeta({
+      currentIteration: nextIteration,
+      currentStage: "training",
+    });
+    setAutoStartTraining(true);
   }, [
-    goToStage, training, trainingResult, currentIteration,
+    goToStage, training, currentIteration,
     annotations, files, projectDB,
   ]);
 
   const handleSkipAnnotation = useCallback(() => {
+    // Skipping annotation returns to results rather than starting the next cycle —
+    // the user didn't label anything so we let them decide from the results page.
     goToStage("results");
   }, [goToStage]);
 
@@ -399,7 +432,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
     await training.startInference();
   }, [training]);
 
-  // ── Cycle transitions ─────────────────────────────────────────────────
+  // ── Cycle transitions ────────────────────────────────────────────────────
 
   const handleNewCycle = useCallback(() => {
     const nextIteration = currentIteration + 1;
@@ -418,7 +451,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
   }, [currentIteration, projectDB, annotations, training]);
 
   const handleStartOver = useCallback(async () => {
-    setCurrentStage("ingestion");
+    setCurrentStage("config");
     setCompletedStages([]);
     setModelConfigLocal(DEFAULT_MODEL_CONFIG);
     setCurrentIteration(1);
@@ -437,9 +470,11 @@ export function useTurtleshell(): UseTurtleshellReturn {
     hasRestored.current = true;
   }, [projectDB, wipeVfs, annotations, training]);
 
-  // ── Return (same shape — no breaking changes to consumers) ──────────────
+  // ── Return ──────────────────────────────────────────────────────────────
 
   return {
+    language,
+    onLanguageChange: handleLanguageChange,
     // Workflow
     currentStage,
     completedStages,

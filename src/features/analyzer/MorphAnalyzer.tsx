@@ -13,7 +13,6 @@ import {
 
 export function MorphAnalyzer() {
   const ts = useTurtleshell();
-
   return (
     <div className="min-h-screen flex items-center justify-center p-4 md:p-8 relative">
       <TurtleShellBackground />
@@ -95,6 +94,15 @@ function ErrorBanner({ message, hint }: { message: string; hint?: string }) {
 
 function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
   switch (ts.currentStage) {
+    case "config":
+      return (
+        <ModelConfigStage
+          config={ts.modelConfig}
+          onUpdateConfig={ts.setModelConfig}
+          onNext={() => ts.goToStage("ingestion")}
+        />
+      );
+
     case "ingestion":
       return (
         <DatasetIngestion
@@ -102,18 +110,10 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           onUpload={ts.handleUpload}
           onAssignRole={ts.handleAssignRole}
           onRemoveFile={ts.handleRemoveFile}
-          onNext={() => ts.goToStage("config")}
-          isUploading={ts.isUploading}
-        />
-      );
-
-    case "config":
-      return (
-        <ModelConfigStage
-          config={ts.modelConfig}
-          onUpdateConfig={ts.setModelConfig}
-          onBack={() => ts.goToStage("ingestion")}
+          onBack={() => ts.goToStage("config")}
           onStartTraining={ts.handleStartTraining}
+          isUploading={ts.isUploading}
+          pyodideReady={ts.pyodideReady}
         />
       );
 
@@ -124,7 +124,27 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           currentIteration={ts.currentIteration}
           totalIterations={ts.totalIterations}
           isComplete={ts.isTrainingComplete}
-          onContinue={() => ts.goToStage("annotation")}
+          onContinue={() => ts.goToStage("results")}
+        />
+      );
+
+    case "results":
+      return (
+        <ResultsExportStage
+          result={ts.trainingResult}
+          previousResult={ts.previousResult}
+          cycleHistory={ts.cycleHistory}
+          onDownloadIncrement={ts.handleDownloadIncrement}
+          onDownloadResidual={ts.handleDownloadResidual}
+          onDownloadEvaluation={ts.handleDownloadEvaluation}
+          onAnnotate={() => ts.goToStage("annotation")}
+          onNewCycle={ts.handleNewCycle}
+          onStartOver={ts.handleStartOver}
+          isRunningInference={ts.isRunningInference}
+          inferenceComplete={ts.inferenceComplete}
+          inferenceStats={ts.inferenceStats}
+          onRunInference={ts.handleRunInference}
+          onDownloadPredictions={ts.handleDownloadPredictions}
         />
       );
 
@@ -138,25 +158,6 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           totalWords={ts.totalAnnotationWords}
           currentIteration={ts.currentIteration}
           totalIterations={ts.totalIterations}
-        />
-      );
-
-    case "results":
-      return (
-        <ResultsExportStage
-          result={ts.trainingResult}
-          previousResult={ts.previousResult}
-          cycleHistory={ts.cycleHistory}
-          onDownloadIncrement={ts.handleDownloadIncrement}
-          onDownloadResidual={ts.handleDownloadResidual}
-          onDownloadEvaluation={ts.handleDownloadEvaluation}
-          onNewCycle={ts.handleNewCycle}
-          onStartOver={ts.handleStartOver}
-          isRunningInference={ts.isRunningInference}
-          inferenceComplete={ts.inferenceComplete}
-          inferenceStats={ts.inferenceStats}
-          onRunInference={ts.handleRunInference}
-          onDownloadPredictions={ts.handleDownloadPredictions}
         />
       );
   }

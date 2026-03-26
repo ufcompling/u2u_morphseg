@@ -19,6 +19,7 @@ interface ResultsExportProps {
   onDownloadIncrement: () => void;
   onDownloadResidual: () => void;
   onDownloadEvaluation: () => void;
+  onAnnotate: () => void;
   onNewCycle: () => void;
   onStartOver: () => void;
 }
@@ -35,6 +36,7 @@ export function ResultsExportStage({
   onDownloadIncrement,
   onDownloadResidual,
   onDownloadEvaluation,
+  onAnnotate,
   onNewCycle,
   onStartOver,
 }: ResultsExportProps) {
@@ -290,7 +292,7 @@ export function ResultsExportStage({
       </div>
 
       {/* ==========================================================
-          5. NEXT ACTION — clear primary CTA right-aligned
+          6. NEXT ACTION — annotate is primary CTA; new cycle = skip
           ========================================================== */}
       <footer className="px-6 py-4 flex items-center justify-between">
         <button
@@ -300,13 +302,21 @@ export function ResultsExportStage({
           Reset project
         </button>
         {isViewingCurrent && (
-          <button
-            onClick={onNewCycle}
-            className="flex items-center gap-2 pl-4 pr-5 py-2.5 rounded-xl bg-primary/10 border border-primary/30 text-primary font-mono text-[11px] font-semibold tracking-wide transition-all hover:bg-primary hover:text-primary-foreground hover:border-primary active:scale-[0.97]"
-          >
-            <LoopIcon />
-            <span>Continue to Cycle {result.iterationNumber + 1}</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onNewCycle}
+              className="font-mono text-[10px] text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors"
+            >
+              Skip annotation
+            </button>
+            <button
+              onClick={onAnnotate}
+              className="flex items-center gap-2 pl-4 pr-5 py-2.5 rounded-xl bg-primary/10 border border-primary/30 text-primary font-mono text-[11px] font-semibold tracking-wide transition-all hover:bg-primary hover:text-primary-foreground hover:border-primary active:scale-[0.97]"
+            >
+              <LoopIcon />
+              <span>Annotate Cycle {result.iterationNumber}</span>
+            </button>
+          </div>
         )}
         {!isViewingCurrent && (
           <button

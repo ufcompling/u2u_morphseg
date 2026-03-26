@@ -1,42 +1,53 @@
 import { useState, type DragEvent, type ChangeEvent } from "react";
-import type { StoredFile, FileRole } from "../../../lib/types";
+import type { fileData, FileRole } from "../../../lib/types";
 import { formatSize } from "../../../lib/format-utils";
-import { UploadIcon, FileIcon, TrashIcon, ArrowIcon } from "../../../components/ui/icons";
+import { UploadIcon, FileIcon, TrashIcon, ArrowIcon, SnapshotIcon } from "../../../components/ui/icons";
 
 // ============================================================
 // Dataset Ingestion Stage
 // Upload files, assign roles, view validation status
 // ============================================================
 
+
 interface DatasetIngestionProps {
-  files: StoredFile[];
+  files: fileData[];
   onUpload: (fileList: FileList | null) => void;
-  onAssignRole: (fileId: string, role: FileRole) => void;
-  onRemoveFile: (fileId: string) => void;
-  onNext: () => void;
+  onAssignRole: (filePath: string, role: FileRole) => void;
+  onRemoveFile: (filePath: string) => void;
+  onStartTraining: () => void;
+  onBack: () => void;
   isUploading: boolean;
+  pyodideReady: boolean;
 }
+
 
 export function DatasetIngestion({
   files,
   onUpload,
   onAssignRole,
   onRemoveFile,
-  onNext,
+  onStartTraining,
+  onBack,
   isUploading,
+  pyodideReady,
 }: DatasetIngestionProps) {
-  const annotatedCount = files.filter((f) => f.role === "annotated").length;
-  const unannotatedCount = files.filter((f) => f.role === "unannotated").length;
-  const evaluationCount = files.filter((f) => f.role === "evaluation").length;
+  // Hide internal project files from the user-facing file viewer
+  const hiddenNames = new Set(["project.json", "cycles.json", "annotations.json"]);
+  const visibleFiles = files.filter((f) => !hiddenNames.has(f.fileName));
+  const annotatedCount = visibleFiles.filter((f) => f.fileRole === "annotated").length;
+  const unannotatedCount = visibleFiles.filter((f) => f.fileRole === "unannotated").length;
+  const evaluationCount = visibleFiles.filter((f) => f.fileRole === "evaluation").length;
   const hasRequiredFiles = annotatedCount > 0 && unannotatedCount > 0;
 
   return (
     <div className="flex flex-col gap-0">
+
+
       {/* Upload zone */}
-      <UploadZone onUpload={onUpload} isUploading={isUploading} />
+      <UploadZone onUpload={onUpload} isUploading={isUploading} pyodideReady={pyodideReady} />
 
       {/* Role summary bar */}
-      {files.length > 0 && (
+      {visibleFiles.length > 0 && (
         <div className="px-6 py-3 border-b border-border/20 bg-secondary/5 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <RoleCount label="Annotated" count={annotatedCount} color="text-primary" />
@@ -55,12 +66,12 @@ export function DatasetIngestion({
           <EmptyState />
         ) : (
           <div className="divide-y divide-border/10">
-            {files.map((file) => (
+            {visibleFiles.map((file) => (
               <FileRow
-                key={file.id}
+                key={file.filePath}
                 file={file}
-                onAssignRole={onAssignRole}
-                onRemove={onRemoveFile}
+                  onAssignRole={onAssignRole}
+                  onRemove={onRemoveFile}
               />
             ))}
           </div>
@@ -69,19 +80,38 @@ export function DatasetIngestion({
 
       {/* Footer */}
       <footer className="px-6 py-4 border-t border-border/20 flex items-center justify-between">
-        <p className="font-mono text-[10px] text-muted-foreground/70 max-w-xs">
-          {hasRequiredFiles
-            ? "Ready to proceed"
-            : "Assign at least one annotated and one unannotated file to continue"}
-        </p>
-        <button
-          onClick={onNext}
-          disabled={!hasRequiredFiles}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-mono text-xs font-semibold tracking-wide transition-all hover:bg-primary/90 active:scale-[0.97] disabled:opacity-30 disabled:pointer-events-none"
-        >
-          <span>Continue</span>
-          <ArrowIcon />
-        </button>
+        <div className="flex items-center gap-3">
+          <p className="font-mono text-[10px] text-muted-foreground/40 max-w-xs">
+            {hasRequiredFiles
+              ? "Ready to proceed"
+              : "Assign at least one annotated and one unannotated file to continue"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onBack}
+            className="px-4 py-2.5 rounded-xl font-mono text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/20 transition-all"
+          >
+            Back
+          </button>
+          {/* TODO: implement snapshot functionality */}
+          <button
+            disabled
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/60 cursor-not-allowed select-none"
+            title="Snapshot (coming soon)"
+          >
+            <SnapshotIcon />
+            <span>Snapshot</span>
+          </button>
+          <button
+            onClick={onStartTraining}
+            disabled={!hasRequiredFiles}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-mono text-xs font-semibold tracking-wide transition-all hover:bg-primary/90 active:scale-[0.97] disabled:opacity-30 disabled:pointer-events-none"
+          >
+            <span>Start Training</span>
+            <ArrowIcon />
+          </button>
+        </div>
       </footer>
     </div>
   );
@@ -92,9 +122,11 @@ export function DatasetIngestion({
 function UploadZone({
   onUpload,
   isUploading,
-}: {
+  pyodideReady,
+  }: {
   onUpload: (files: FileList | null) => void;
   isUploading: boolean;
+  pyodideReady: boolean;
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -129,6 +161,7 @@ function UploadZone({
           onChange={(e: ChangeEvent<HTMLInputElement>) => onUpload(e.target.files)}
           className="hidden"
           accept=".tgt,.csv,.txt,.tsv,.json"
+          disabled={!pyodideReady}
         />
 
         <div
@@ -175,11 +208,11 @@ function FileRow({
   onAssignRole,
   onRemove,
 }: {
-  file: StoredFile;
-  onAssignRole: (fileId: string, role: FileRole) => void;
-  onRemove: (fileId: string) => void;
+  file: fileData;
+  onAssignRole: (filePath: string, role: FileRole) => void;
+  onRemove: (filePath: string) => void;
 }) {
-  const extension = file.name.split(".").pop()?.toLowerCase() || "";
+  const extension = (file.fileName ?? '').split(".").pop()?.toLowerCase() || "";
 
   return (
     <div className="group flex items-center gap-4 px-6 py-3.5 hover:bg-secondary/5 transition-colors">
@@ -192,10 +225,10 @@ function FileRow({
 
       {/* File name + size */}
       <div className="flex-1 min-w-0">
-        <p className="font-mono text-sm text-foreground truncate">{file.name}</p>
+        <p className="font-mono text-sm text-foreground truncate">{file.fileName}</p>
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="font-mono text-[10px] text-muted-foreground/70">
-            {formatSize(file.size)}
+          <span className="font-mono text-[10px] text-muted-foreground/40">
+            {formatSize(file.fileSize)}
           </span>
           <ValidationBadge status={file.validationStatus} />
         </div>
@@ -203,8 +236,8 @@ function FileRow({
 
       {/* Role selector */}
       <select
-        value={file.role ?? ""}
-        onChange={(e) => onAssignRole(file.id, e.target.value as FileRole)}
+        value={file.fileRole ?? ""}
+        onChange={(e) => onAssignRole(file.filePath, e.target.value as FileRole)}
         className="bg-card border border-border/20 rounded-lg px-3 py-2 font-mono text-[11px] text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary/30 min-w-[130px]"
       >
         <option value="" disabled className="bg-card text-foreground">
@@ -217,8 +250,8 @@ function FileRow({
 
       {/* Remove button */}
       <button
-        onClick={() => onRemove(file.id)}
-        className="p-2 rounded-lg text-muted-foreground/70 hover:text-red-400 hover:bg-red-400/10 transition-all opacity-0 group-hover:opacity-100"
+        onClick={() => onRemove(file.filePath)}
+        className="p-2 rounded-lg text-muted-foreground/30 hover:text-red-400 hover:bg-red-400/10 transition-all opacity-0 group-hover:opacity-100"
         aria-label="Remove file"
       >
         <TrashIcon />

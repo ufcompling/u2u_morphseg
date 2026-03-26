@@ -17,11 +17,11 @@ export const WORKFLOW_STAGES: {
   label: string;
   shortLabel: string;
 }[] = [
-  { id: "ingestion", label: "Dataset Ingestion", shortLabel: "Upload" },
   { id: "config", label: "Model Configuration", shortLabel: "Config" },
+  { id: "ingestion", label: "Dataset Ingestion", shortLabel: "Upload" },
   { id: "training", label: "Training Progress", shortLabel: "Training" },
-  { id: "annotation", label: "Annotation Workspace", shortLabel: "Annotate" },
   { id: "results", label: "Results & Export", shortLabel: "Results" },
+  { id: "annotation", label: "Annotation Workspace", shortLabel: "Annotate" },
 ];
 
 // --- Files ---
@@ -30,14 +30,15 @@ export type FileRole = "annotated" | "unannotated" | "evaluation";
 
 export type ValidationStatus = "pending" | "valid" | "invalid";
 
-export interface StoredFile {
-  id: string;
-  name: string;
-  size: number;
-  content: string;
-  role: FileRole | null;
+export interface fileData {
+  fileName: string;
+  fileSize: number;
+  fileContent: string;
+  fileRole: FileRole | null;
   validationStatus: ValidationStatus;
-  uploadedAt: Date;
+  createdAt: Date;
+  filePath: string;
+  fileType: string;
 }
 
 // --- Model Configuration ---
@@ -141,7 +142,7 @@ export interface TrainingCycleConfig {
   delta: number;
   /** Cumulative words selected in prior cycles (0 on first run) */
   selectSize: number;
-  /** VFS working directory â€” default '/tmp/turtleshell' */
+  /** VFS working directory — default '/tmp/turtleshell' */
   workDir?: string;
 }
 
@@ -154,17 +155,17 @@ export interface TrainingCycleResult {
   incrementWords: AnnotationWord[];
   /** Number of words remaining in the unlabeled pool */
   residualCount: number;
-  /** increment.tgt file content â€” words selected for annotation this cycle */
+  /** increment.tgt file content — words selected for annotation this cycle */
   incrementContent: string;
-  /** residual.tgt file content â€” remaining unlabeled pool after this cycle */
+  /** residual.tgt file content — remaining unlabeled pool after this cycle */
   residualContent: string;
-  /** Evaluation report â€” per-word predictions with P/R/F1 summary header */
+  /** Evaluation report — per-word predictions with P/R/F1 summary header */
   evaluationContent: string;
 }
 
 /** Config for running the trained model over all residual words (no retraining). */
 export interface InferenceConfig {
-  /** residual.tgt content â€” the remaining unannotated pool */
+  /** residual.tgt content — the remaining unannotated pool */
   residualTgt: string;
   /** Context window size for character features (default 4) */
   delta?: number;

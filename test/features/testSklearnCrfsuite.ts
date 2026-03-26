@@ -2,10 +2,7 @@ import { initPyodide } from '../../src/services/pyodide/pyodideService.ts'
 
 export const testSklearnCrfsuite = async () => {
     try {
-        console.log('Loading Pyodide...');
         const pyodide = await initPyodide();
-
-        console.log('Testing sklearn-crfsuite...')
         await pyodide.runPythonAsync(`
 from sklearn_crfsuite import CRF
 
