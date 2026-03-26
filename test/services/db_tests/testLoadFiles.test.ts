@@ -2,6 +2,7 @@ import {describe, it, expect, vi, beforeEach} from 'vitest';
 // Type declaration for globalThis.pyodide
 declare global {
   var pyodide: any;
+  var language: string;
 }
 import {loadFiles} from '../../../src/services/database/loadFiles';
 
@@ -15,6 +16,8 @@ describe('loadFiles', () => {
       runPythonAsync: vi.fn(),
       FS: { syncfs: vi.fn((flush: boolean) => Promise.resolve()) },
     };
+    globalThis.language = 'English';
+
     vi.clearAllMocks();
   });
  
@@ -46,15 +49,23 @@ describe('loadFiles', () => {
     expect(result).toEqual([
       {
         fileName: 'file1.txt',
-        filePath: '/data/languages/file1.txt',
-        fileSize: undefined,
-        createdAt: undefined,
+        filePath: '/data/English/file1.txt',
+        fileContent: '',
+        fileRole: null,
+        fileType: 'text',
+        fileSize: 0,
+        validationStatus: 'pending',
+        createdAt: expect.any(Date),
       },
       {
         fileName: 'file2.txt',
-        filePath: '/data/languages/file2.txt',
-        fileSize: undefined,
-        createdAt: undefined,
+        filePath: '/data/English/file2.txt',
+        fileContent: '',
+        fileRole: null,
+        fileType: 'text',
+        fileSize: 0,
+        validationStatus: 'pending',
+        createdAt: expect.any(Date),
       },
     ]);
   });
@@ -67,9 +78,13 @@ describe('loadFiles', () => {
     expect(result).toEqual([
       {
         fileName: 'binary.bin',
-        filePath: '/data/languages/binary.bin',
-        fileSize: undefined,
-        createdAt: undefined,
+        filePath: '/data/English/binary.bin',
+        fileContent: '',
+        fileRole: null,
+        fileType: 'text',
+        fileSize: 0,
+        validationStatus: 'pending',
+        createdAt: expect.any(Date),
       },
     ]);
   });
@@ -80,9 +95,13 @@ describe('loadFiles', () => {
     expect(result).toEqual([
       {
         fileName: 'empty.txt',
-        filePath: '/data/languages/empty.txt',
-        fileSize: undefined,
-        createdAt: undefined,
+        filePath: '/data/English/empty.txt',
+        fileContent: '',
+        fileRole: null,
+        fileType: 'text',
+        fileSize: 0,
+        validationStatus: 'pending',
+        createdAt: expect.any(Date),
       },
     ]);
   });
@@ -93,9 +112,13 @@ describe('loadFiles', () => {
     expect(result).toEqual([
       {
         fileName: 'file.txt',
-        filePath: '/data/languages/file.txt',
-        fileSize: undefined,
-        createdAt: undefined,
+        filePath: '/data/English/file.txt',
+        fileContent: '',
+        fileRole: null,
+        fileType: 'text',
+        fileSize: 0,
+        validationStatus: 'pending',
+        createdAt: expect.any(Date),
       },
     ]);
   });

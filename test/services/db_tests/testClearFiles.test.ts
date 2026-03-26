@@ -2,6 +2,7 @@ import {describe, it, expect, vi, beforeEach} from 'vitest';
 // Type declaration for globalThis.pyodide
 declare global {
   var pyodide: any;
+  var language: string;
 }
 import {clearFiles} from '../../../src/services/database/clearFiles';
 import * as pyodideService from '../../../src/services/pyodide/pyodideService';
@@ -14,6 +15,7 @@ describe('clearFiles', () => {
       runPythonAsync: vi.fn(),
       FS: { syncfs: vi.fn((flush: boolean) => Promise.resolve()) }
     };
+    globalThis.language = 'English';
     vi.clearAllMocks();
   });
 

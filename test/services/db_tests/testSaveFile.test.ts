@@ -19,8 +19,12 @@ vi.mock('../../../src/services/pyodide/pyodideService', () => ({
   syncPyodideFS: vi.fn().mockResolvedValue(undefined),
 }));
 
-function mockPython(filename: string, content: string) {
-  return `import db_worker; db_worker.save_file('${filename}', """${content}""") `;
+function mockPython(filename: string, content: string | Uint8Array) {
+  if (content instanceof Uint8Array) {
+    return `import db_worker; db_worker.save_binary('${filename}', ${content})`;
+  } else {
+    return `import db_worker; db_worker.save_text('${filename}', """${content}""")`;
+  }
 }
 
 describe('saveFile', () => {
@@ -42,12 +46,11 @@ describe('saveFile', () => {
   it('should handle binary content correctly', async () => {
     const fileName = 'binary.bin';
     const binaryContent = new Uint8Array([0x00, 0x01, 0x02]);
-    const content = String.fromCharCode(...binaryContent);
     globalThis.pyodide.runPythonAsync.mockResolvedValueOnce(undefined);
-    await saveFile(fileName, content);
-    expect(globalThis.pyodide.runPythonAsync).toHaveBeenCalledWith(mockPython(fileName, content));
+    await saveFile(fileName, binaryContent);
+    expect(globalThis.pyodide.runPythonAsync).toHaveBeenCalledWith(mockPython(fileName, binaryContent));
     expect(pyodideService.syncPyodideFS).toHaveBeenCalled();
-   });
+     });
 
   it('should handle empty content correctly', async () => {
     const fileName = 'empty.txt';
