@@ -46,10 +46,19 @@ export function ResultsExportStage({
   if (!result) {
     return (
       <div className="px-6 py-16 text-center">
-        <p className="font-mono text-sm text-muted-foreground/30">
+        <p className="font-mono text-sm text-muted-foreground/70">
           No results available yet
         </p>
+        
+        {/* TODO: EMERGENCY EXIT!! I was stuck in the result page lol */}
+        <button
+            onClick={onStartOver}
+            className="flex items-center gap-2 pl-4 pr-5 py-2.5 rounded-xl bg-primary/10 border border-primary/30 text-primary font-mono text-[11px] font-semibold tracking-wide transition-all hover:bg-primary hover:text-primary-foreground hover:border-primary active:scale-[0.97]"
+          >
+            <LoopIcon />
+          </button>
       </div>
+      
     );
   }
 
@@ -110,13 +119,13 @@ export function ResultsExportStage({
                       {/* Tooltip on hover */}
                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-10">
                         <div className="bg-card border border-border/30 rounded-lg px-3 py-2 shadow-xl shadow-black/30 whitespace-nowrap">
-                          <p className="font-mono text-[9px] text-muted-foreground/50 uppercase tracking-wider">
+                          <p className="font-mono text-[9px] text-muted-foreground uppercase tracking-wider">
                             Cycle {snap.iteration}
                           </p>
                           <p className="font-mono text-sm font-bold text-foreground tabular-nums mt-0.5">
                             F1: {(snap.f1 * 100).toFixed(1)}%
                           </p>
-                          <p className="font-mono text-[9px] text-muted-foreground/40 tabular-nums mt-0.5">
+                          <p className="font-mono text-[9px] text-muted-foreground tabular-nums mt-0.5">
                             {snap.annotatedCount} annotated
                           </p>
                         </div>
@@ -142,7 +151,7 @@ export function ResultsExportStage({
       <div className="px-6 py-6 border-b border-border/10">
         {/* Cycle label — clarifies what the user is looking at */}
         <div className="text-center mb-4">
-          <span className="font-mono text-[9px] text-muted-foreground/40 uppercase tracking-widest">
+          <span className="font-mono text-[12px] text-muted-foreground uppercase tracking-widest">
             Cycle {viewedCycle.iteration}
             {isViewingCurrent ? " (current)" : " (completed)"}
           </span>
@@ -150,14 +159,14 @@ export function ResultsExportStage({
 
         {/* F1 — dominant, vertically centered on spine */}
         <div className="flex flex-col items-center">
-          <span className="font-mono text-[8px] text-muted-foreground/25 uppercase tracking-widest mb-1">
+          <span className="font-mono text-[10px] text-muted-foreground/70 uppercase tracking-widest mb-1">
             F1 Score
           </span>
           <div className="flex items-baseline gap-1">
             <span className="font-mono text-6xl font-bold text-foreground tabular-nums tracking-tighter leading-none">
               {(viewedCycle.f1 * 100).toFixed(1)}
             </span>
-            <span className="font-mono text-lg text-muted-foreground/20">%</span>
+            <span className="font-mono text-lg text-muted-foreground/70">%</span>
           </div>
           {f1Delta !== null && isViewingCurrent && (
             <span className={`font-mono text-xs font-semibold tabular-nums mt-1.5 ${deltaColor(f1Delta)}`}>
@@ -183,8 +192,8 @@ export function ResultsExportStage({
 
         {/* Annotated count — on the spine */}
         <div className="mt-4 text-center">
-          <span className="font-mono text-[10px] text-muted-foreground/25">
-            <strong className="text-foreground/50 font-semibold">{viewedCycle.annotatedCount}</strong>{" "}
+          <span className="font-mono text-[12px] text-muted-foreground/70">
+            <strong className="text-foreground/70 font-semibold">{viewedCycle.annotatedCount}</strong>{" "}
             words annotated
           </span>
         </div>
@@ -201,7 +210,7 @@ export function ResultsExportStage({
             >
               {config.badge}
             </span>
-            <span className="font-mono text-[11px] text-muted-foreground/50">
+            <span className="font-mono text-[11px] text-muted-foreground/70">
               {config.heading}
             </span>
           </div>
@@ -216,13 +225,13 @@ export function ResultsExportStage({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center">
-                <InferenceIcon className="w-4 h-4 text-muted-foreground/40" />
+                <InferenceIcon className="w-4 h-4 text-muted-foreground/70" />
               </div>
               <div>
                 <p className="font-mono text-[11px] text-foreground/80 font-medium">
                   Predict all residuals
                 </p>
-                <p className="font-mono text-[9px] text-muted-foreground/30 mt-0.5">
+                <p className="font-mono text-[9px] text-muted-foreground/70 mt-0.5">
                   Run the trained CRF model over all remaining unannotated data
                 </p>
               </div>
@@ -230,7 +239,7 @@ export function ResultsExportStage({
 
             <div className="flex items-center gap-3">
               {inferenceComplete && inferenceStats && (
-                <span className="font-mono text-[10px] text-muted-foreground/40 tabular-nums">
+                <span className="font-mono text-[10px] text-muted-foreground/70 tabular-nums">
                   {inferenceStats.processedWords.toLocaleString()} words predicted
                 </span>
               )}
@@ -248,7 +257,7 @@ export function ResultsExportStage({
               {isRunningInference && (
                 <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary/10 border border-border/15">
                   <SpinnerIcon className="w-3 h-3 text-primary" />
-                  <span className="font-mono text-[11px] text-muted-foreground/50">Running...</span>
+                  <span className="font-mono text-[11px] text-muted-foreground/70">Running...</span>
                 </div>
               )}
 
@@ -271,7 +280,7 @@ export function ResultsExportStage({
           ========================================================== */}
       <div className="px-6 py-4 border-b border-border/10">
         <div className="flex items-center gap-3">
-          <span className="font-mono text-[9px] text-muted-foreground/25 uppercase tracking-widest shrink-0">
+          <span className="font-mono text-[10px] text-muted-foreground/70 uppercase tracking-widest shrink-0">
             Export
           </span>
           <div className="flex gap-2">
@@ -288,7 +297,7 @@ export function ResultsExportStage({
       <footer className="px-6 py-4 flex items-center justify-between">
         <button
           onClick={onStartOver}
-          className="font-mono text-[10px] text-muted-foreground/25 hover:text-muted-foreground/50 transition-colors"
+          className="font-mono text-[12px] text-muted-foreground/70 hover:text-muted-foreground/70 transition-colors"
         >
           Reset project
         </button>
@@ -371,7 +380,7 @@ const RECOMMENDATION_CONFIG = {
 function SubMetric({ label, value, delta }: { label: string; value: number; delta: number | null }) {
   return (
     <div className="flex flex-col items-center gap-0.5 min-w-[72px]">
-      <span className="font-mono text-[8px] text-muted-foreground/25 uppercase tracking-widest">
+      <span className="font-mono text-[10px] text-muted-foreground/70 uppercase tracking-widest">
         {label}
       </span>
       <span className="font-mono text-lg font-semibold text-muted-foreground/60 tabular-nums">
@@ -403,8 +412,8 @@ function ExportChip({ label, onClick }: { label: string; onClick: () => void }) 
         onClick={onClick}
         className="group flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/5 border border-border/10 hover:bg-secondary/15 hover:border-border/20 transition-all"
       >
-        <DownloadIcon className="w-3 h-3 text-muted-foreground/20 group-hover:text-primary transition-colors" />
-        <span className="font-mono text-[10px] text-muted-foreground/40 group-hover:text-foreground transition-colors">
+        <DownloadIcon className="w-3 h-3 text-muted-foreground/70 group-hover:text-primary transition-colors" />
+        <span className="font-mono text-[10px] text-muted-foreground/70 group-hover:text-foreground transition-colors">
           {label}
         </span>
       </button>

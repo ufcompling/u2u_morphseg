@@ -211,7 +211,7 @@ export function AnnotationWorkspaceStage({
             <h2 className="font-mono text-sm font-semibold text-foreground">
               Annotation Workspace
             </h2>
-            <p className="font-mono text-[11px] text-muted-foreground/50 mt-1">
+            <p className="font-mono text-[11px] text-muted-foreground/70 mt-1">
               Click between letters to mark morpheme boundaries
             </p>
           </div>
@@ -229,19 +229,19 @@ export function AnnotationWorkspaceStage({
 
         {/* Context banner */}
         <div className="px-4 py-3 rounded-lg bg-primary/5 border border-primary/10">
-          <p className="font-mono text-[11px] text-foreground/70 leading-relaxed">
+          <p className="font-mono text-[11px] text-foreground/90 leading-relaxed">
             <span className="text-primary font-medium">Why these words?</span>{" "}
             The model selected {totalWords} samples it is{" "}
             <span className="text-primary font-medium">least confident</span>{" "}
             about. Your corrections have the highest impact on accuracy.
           </p>
           {isEarlyIteration && (
-            <p className="font-mono text-[10px] text-muted-foreground/50 mt-2">
+            <p className="font-mono text-[10px] text-muted-foreground/70 mt-2">
               Early iteration -- expect more errors as the model learns basic patterns.
             </p>
           )}
           {isLateIteration && (
-            <p className="font-mono text-[10px] text-muted-foreground/50 mt-2">
+            <p className="font-mono text-[10px] text-muted-foreground/70 mt-2">
               Late iteration -- the model has stabilized. Errors should be fewer and more subtle.
             </p>
           )}
@@ -320,10 +320,10 @@ export function AnnotationWorkspaceStage({
       {/* Progress rail */}
       <div className="px-6 py-4 border-b border-border/10">
         <div className="flex items-center justify-between mb-2">
-          <span className="font-mono text-[10px] text-muted-foreground/50">
+          <span className="font-mono text-[10px] text-muted-foreground/70">
             {annotatedCount} of {totalWords} annotated
           </span>
-          <span className="font-mono text-[10px] text-muted-foreground/40 tabular-nums">
+          <span className="font-mono text-[10px] text-muted-foreground/70 tabular-nums">
             {totalWords > 0 ? Math.round((annotatedCount / totalWords) * 100) : 0}%
           </span>
         </div>
@@ -356,7 +356,7 @@ export function AnnotationWorkspaceStage({
           <div className="w-full max-w-lg">
             {/* Word number + confidence */}
             <div className="flex items-center justify-between mb-6">
-              <span className="font-mono text-[10px] text-muted-foreground/40 tabular-nums">
+              <span className="font-mono text-[10px] text-muted-foreground/70 tabular-nums">
                 Word {focusIndex + 1} of {totalWords}
               </span>
               <div className="flex items-center gap-2">
@@ -366,7 +366,7 @@ export function AnnotationWorkspaceStage({
                     style={{ width: `${currentWord.confidence * 100}%` }}
                   />
                 </div>
-                <span className="font-mono text-[10px] text-muted-foreground/40 tabular-nums">
+                <span className="font-mono text-[10px] text-muted-foreground/70 tabular-nums">
                   {(currentWord.confidence * 100).toFixed(0)}% conf
                 </span>
               </div>
@@ -383,7 +383,7 @@ export function AnnotationWorkspaceStage({
               <button
                 onClick={handlePrev}
                 disabled={focusIndex === 0}
-                className="px-4 py-2 rounded-lg font-mono text-xs text-muted-foreground/60 hover:text-foreground hover:bg-secondary/20 transition-all disabled:opacity-20 disabled:pointer-events-none"
+                className="px-4 py-2 rounded-lg font-mono text-xs text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all disabled:opacity-20 disabled:pointer-events-none"
               >
                 Prev
               </button>
@@ -402,7 +402,7 @@ export function AnnotationWorkspaceStage({
               <button
                 onClick={handleNext}
                 disabled={focusIndex === words.length - 1}
-                className="px-4 py-2 rounded-lg font-mono text-xs text-muted-foreground/60 hover:text-foreground hover:bg-secondary/20 transition-all disabled:opacity-20 disabled:pointer-events-none"
+                className="px-4 py-2 rounded-lg font-mono text-xs text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all disabled:opacity-20 disabled:pointer-events-none"
               >
                 Next
               </button>
@@ -410,7 +410,7 @@ export function AnnotationWorkspaceStage({
           </div>
         ) : (
           <div className="text-center py-8">
-            <p className="font-mono text-sm text-muted-foreground/30">
+            <p className="font-mono text-sm text-muted-foreground/70">
               No words to annotate
             </p>
           </div>
@@ -422,16 +422,16 @@ export function AnnotationWorkspaceStage({
         <div className="flex items-center gap-6 justify-center">
           <div className="flex items-center gap-2">
             <div className="w-0.5 h-3 rounded-full bg-primary" />
-            <span className="font-mono text-[10px] text-muted-foreground/40">
+            <span className="font-mono text-[10px] text-muted-foreground/70">
               boundary
             </span>
           </div>
           <span className="w-1 h-1 rounded-full bg-border/30" />
-          <span className="font-mono text-[10px] text-muted-foreground/40">
+          <span className="font-mono text-[10px] text-muted-foreground/70">
             Click gaps to toggle
           </span>
           <span className="w-1 h-1 rounded-full bg-border/30" />
-          <span className="font-mono text-[10px] text-muted-foreground/40">
+          <span className="font-mono text-[10px] text-muted-foreground/70">
             Use dots above to jump
           </span>
         </div>
@@ -453,7 +453,7 @@ export function AnnotationWorkspaceStage({
               </button>
               <button
                 onClick={() => setShowSkipConfirm(false)}
-                className="px-3 py-1 rounded-md font-mono text-[11px] text-muted-foreground/50 hover:text-foreground transition-colors"
+                className="px-3 py-1 rounded-md font-mono text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors"
               >
                 Cancel
               </button>
@@ -461,10 +461,10 @@ export function AnnotationWorkspaceStage({
           ) : (
             <button
               onClick={() => setShowSkipConfirm(true)}
-              className="group px-4 py-2.5 rounded-xl font-mono text-xs text-muted-foreground/60 hover:text-foreground hover:bg-secondary/20 transition-all"
+              className="group px-4 py-2.5 rounded-xl font-mono text-xs text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
             >
               <span>Skip batch</span>
-              <span className="block font-mono text-[9px] text-muted-foreground/30 mt-0.5 group-hover:text-muted-foreground/50 transition-colors">
+              <span className="block font-mono text-[9px] text-muted-foreground/70 mt-0.5 group-hover:text-muted-foreground/70 transition-colors">
                 Words will reappear next cycle
               </span>
             </button>
@@ -544,7 +544,7 @@ function WordEditor({
                   className={`w-0.5 rounded-full transition-all ${
                     boundarySet.has(i)
                       ? "h-10 bg-primary"
-                      : "h-6 bg-transparent group-hover:bg-muted-foreground/20"
+                      : "h-6 bg-transparent group-hover:bg-muted-foreground/0"
                   }`}
                 />
               </button>

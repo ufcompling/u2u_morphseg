@@ -16,7 +16,7 @@ The application allows users to perform sequence labeling using Conditional Rand
 ## 2. Technical Stack
 * **Frontend:** React.js + Bun.js (Runtime)
 * **Machine Learning:** Pyodide & sklearn-crfsuite
-* **Database:** IndexedDB (via IDBFS)
+* **Database:** IndexedDB (via Emscripten)
 * **Deployment:** GitHub Pages & GitHub Actions (CI/CD)
 
 ---
@@ -168,5 +168,5 @@ bun run dev
 ---
 
 ## 9. Testing
-bun run vitest (<fileName>)
+bun test
 ```
