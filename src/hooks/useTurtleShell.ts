@@ -453,7 +453,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
   }, [currentIteration, projectDB, annotations, training]);
 
   const handleStartOver = useCallback(async () => {
-    setCurrentStage("ingestion");
+    setCurrentStage("config");
     setCompletedStages([]);
     setModelConfigLocal(DEFAULT_MODEL_CONFIG);
     setCurrentIteration(1);

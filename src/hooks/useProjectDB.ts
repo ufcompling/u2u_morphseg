@@ -152,7 +152,7 @@ export function useProjectDB(): UseProjectDBReturn {
         if (!projectFileExists) {
           const now = Date.now();
           const meta = {
-            currentStage: "ingestion" as WorkflowStage,
+            currentStage: "config" as WorkflowStage,
             modelConfig: DEFAULT_MODEL_CONFIG,
             currentIteration: 1,
             cumulativeSelectSize: 0,
@@ -256,7 +256,7 @@ export function useProjectDB(): UseProjectDBReturn {
     }
     const now = Date.now();
     const meta = {
-      currentStage: "ingestion" as WorkflowStage,
+      currentStage: "config" as WorkflowStage,
       modelConfig: DEFAULT_MODEL_CONFIG,
       currentIteration: 1,
       cumulativeSelectSize: 0,
