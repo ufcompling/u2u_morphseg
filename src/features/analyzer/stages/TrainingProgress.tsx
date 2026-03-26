@@ -185,7 +185,7 @@ export function TrainingProgressStage({
                 onClick={onContinue}
                 className="flex items-center gap-2 pl-4 pr-5 py-2.5 rounded-xl bg-primary/10 border border-primary/30 text-primary font-mono text-[11px] font-semibold tracking-wide transition-all hover:bg-primary hover:text-primary-foreground hover:border-primary active:scale-[0.97]"
               >
-                <span>Continue to Annotation</span>
+                <span>Continue to Results</span>
                 <ArrowIcon />
               </button>
             </div>

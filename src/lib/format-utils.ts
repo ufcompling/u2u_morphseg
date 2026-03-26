@@ -58,12 +58,12 @@ export function getFileByRole(files: fileData[], role: FileRole): fileData | und
 /**
  * Derive which stages the user has completed based on the current stage position.
  *
- * Stage order must match the actual workflow: config → ingestion → training → annotation → results.
+ * Stage order must match the actual workflow: config → ingestion → training → results → annotation.
  * The old order had "ingestion" before "config", which caused the upload step to be
  * marked complete on page load when restoring currentStage: "config" from IndexedDB.
  */
 export function deriveCompletedStages(current: WorkflowStage): WorkflowStage[] {
-  const order: WorkflowStage[] = ["config", "ingestion", "training", "annotation", "results"];
+  const order: WorkflowStage[] = ["config", "ingestion", "training", "results", "annotation"];
   const idx = order.indexOf(current);
   return idx > 0 ? order.slice(0, idx) : [];
 }

@@ -124,7 +124,27 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           currentIteration={ts.currentIteration}
           totalIterations={ts.totalIterations}
           isComplete={ts.isTrainingComplete}
-          onContinue={() => ts.goToStage("annotation")}
+          onContinue={() => ts.goToStage("results")}
+        />
+      );
+
+    case "results":
+      return (
+        <ResultsExportStage
+          result={ts.trainingResult}
+          previousResult={ts.previousResult}
+          cycleHistory={ts.cycleHistory}
+          onDownloadIncrement={ts.handleDownloadIncrement}
+          onDownloadResidual={ts.handleDownloadResidual}
+          onDownloadEvaluation={ts.handleDownloadEvaluation}
+          onAnnotate={() => ts.goToStage("annotation")}
+          onNewCycle={ts.handleNewCycle}
+          onStartOver={ts.handleStartOver}
+          isRunningInference={ts.isRunningInference}
+          inferenceComplete={ts.inferenceComplete}
+          inferenceStats={ts.inferenceStats}
+          onRunInference={ts.handleRunInference}
+          onDownloadPredictions={ts.handleDownloadPredictions}
         />
       );
 
@@ -138,25 +158,6 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           totalWords={ts.totalAnnotationWords}
           currentIteration={ts.currentIteration}
           totalIterations={ts.totalIterations}
-        />
-      );
-
-    case "results":
-      return (
-        <ResultsExportStage
-          result={ts.trainingResult}
-          previousResult={ts.previousResult}
-          cycleHistory={ts.cycleHistory}
-          onDownloadIncrement={ts.handleDownloadIncrement}
-          onDownloadResidual={ts.handleDownloadResidual}
-          onDownloadEvaluation={ts.handleDownloadEvaluation}
-          onNewCycle={ts.handleNewCycle}
-          onStartOver={ts.handleStartOver}
-          isRunningInference={ts.isRunningInference}
-          inferenceComplete={ts.inferenceComplete}
-          inferenceStats={ts.inferenceStats}
-          onRunInference={ts.handleRunInference}
-          onDownloadPredictions={ts.handleDownloadPredictions}
         />
       );
   }

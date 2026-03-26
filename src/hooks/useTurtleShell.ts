@@ -13,12 +13,14 @@
  *     useTrainingOrchestrator() → Training cycle + inference execution
  *     useAnnotationState()      → Word list + boundary editing
  *
- *   Cycle data flow:
- *     Cycle N trains on [original annotated + all prior user annotations].
+ *   Cycle data flow (new order: training → results → annotation):
+ *     After training completes, trainingResult is set immediately so the
+ *     results page has metrics to display before the user annotates.
  *     After the user submits annotations:
  *       1. Boundary decisions are converted to .tgt lines
  *       2. Those lines are appended to the "annotated" file in IndexedDB
  *       3. The "unannotated" file is replaced with the residual
+ *       4. The next cycle auto-starts (training stage)
  *     So cycle N+1 naturally reads a larger training set and smaller pool.
  *
  */
@@ -34,7 +36,6 @@ import {
   type AnnotationWord,
   type CycleSnapshot,
   DEFAULT_MODEL_CONFIG,
-  WORKFLOW_STAGES,
 } from "../lib/types";
 import {
   annotationToTgtLine,
@@ -54,8 +55,8 @@ const logger = log('turtleshell');
 // -- Compositor return type ---------------------------------------------------
 
 export interface UseTurtleshellReturn {
-    language: string;
-    onLanguageChange: (lang: string) => void;
+  language: string;
+  onLanguageChange: (lang: string) => void;
   // Workflow
   currentStage: WorkflowStage;
   completedStages: WorkflowStage[];
@@ -117,28 +118,27 @@ export interface UseTurtleshellReturn {
 // ── Hook ────────────────────────────────────────────────────────────────────
 
 export function useTurtleshell(): UseTurtleshellReturn {
-  // Language state (default to '', or pick your default)
   const [language, setLanguageState] = useState<string>("");
-  // Ensure worker is always in sync
+
   const handleLanguageChange = useCallback((lang: string) => {
     setLanguageState(lang);
     setLanguage(lang);
   }, []);
+
   const projectDB = useProjectDB();
-  // Local map of file roles (in-memory). Persisting roles is a separate task.
   const [rolesMap, setRolesMap] = useState<Record<string, FileRole | null>>({});
+
   // Sync language to worker on mount and whenever it changes
   useEffect(() => { setLanguage(language); }, [language]);
+
   const { pyodideReady, pyodideLoading, pyodideError, modelRestored, runCycle, runInference, wipeVfs } =
     usePyodideWorker();
   const hasRestored = useRef(false);
 
-  // Map projectDB.files (fileData[]) to fileData[] with all required fields
   const files: fileData[] = projectDB.files.map(fd => ({
     fileName: fd.fileName,
     fileSize: fd.fileSize ?? 0,
     fileContent: typeof fd.fileContent === "string" ? fd.fileContent : "",
-    // Use rolesMap to reflect any UI-assigned roles
     fileRole: (rolesMap as Record<string, FileRole | null>)[fd.filePath] ?? null,
     fileType: fd.fileType ?? "text",
     createdAt: new Date(fd.createdAt ?? Date.now()),
@@ -153,28 +153,13 @@ export function useTurtleshell(): UseTurtleshellReturn {
 
   const goToStage = useCallback(
     (stage: WorkflowStage) => {
-      const stageOrder = WORKFLOW_STAGES.map((s) => s.id);
-      const currentIndex = stageOrder.indexOf(currentStage);
-      const targetIndex = stageOrder.indexOf(stage);
-
-      if (targetIndex > currentIndex) {
-        // Forward: mark current stage as done
-        setCompletedStages((prev) =>
-          prev.includes(currentStage) ? prev : [...prev, currentStage]
-        );
-      } else {
-        // Backward: strip the target stage and everything after it from completed.
-        // The user is re-entering that part of the flow, so nothing past the
-        // destination should appear ticked.
-        setCompletedStages((prev) =>
-          prev.filter((s) => stageOrder.indexOf(s) < targetIndex)
-        );
+      if (!completedStages.includes(currentStage)) {
+        setCompletedStages((prev) => [...prev, currentStage]);
       }
-
       setCurrentStage(stage);
       projectDB.saveProjectMeta({ currentStage: stage });
     },
-    [currentStage, projectDB]
+    [currentStage, completedStages, projectDB]
   );
 
   // ── Core state ──────────────────────────────────────────────────────────
@@ -197,12 +182,8 @@ export function useTurtleshell(): UseTurtleshellReturn {
 
   const handleUpload = useCallback(
     async (fileList: FileList | null) => {
-      if (!fileList) {
-        return;
-      }
-      if (!pyodideReady) {
-        return;
-      }
+      if (!fileList) return;
+      if (!pyodideReady) return;
       setIsUploading(true);
       try {
         for (const file of Array.from(fileList)) {
@@ -235,7 +216,6 @@ export function useTurtleshell(): UseTurtleshellReturn {
       if (typeof projectDB.loadFiles === 'function') {
         await projectDB.loadFiles();
       }
-      // Remove any in-memory role for the deleted file
       setRolesMap((prev) => {
         const copy = { ...prev };
         delete copy[filePath];
@@ -265,8 +245,8 @@ export function useTurtleshell(): UseTurtleshellReturn {
   const cycleHistory = projectDB.cycleHistory;
 
   // ── Deferred auto-start training ────────────────────────────────────────
-  // Set to true by handleNewCycle. Can't call startTraining directly because
-  // its closure would capture the stale currentIteration.
+  // Set to true by handleNewCycle / handleSubmitAnnotations. Can't call
+  // startTraining directly because its closure would capture stale currentIteration.
   const [autoStartTraining, setAutoStartTraining] = useState(false);
 
   useEffect(() => {
@@ -325,8 +305,9 @@ export function useTurtleshell(): UseTurtleshellReturn {
   }, [projectDB.dbReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Sync training orchestrator output to annotations ────────────────────
-  // When training completes, push the increment words into the annotation hook
-  // and persist them to IndexedDB.
+  // When training completes, push the increment words into the annotation hook,
+  // persist them to IndexedDB, and set trainingResult so the results page has
+  // data before the user goes through annotation.
 
   useEffect(() => {
     if (training.isTrainingComplete && training.incrementWords.length > 0) {
@@ -335,6 +316,12 @@ export function useTurtleshell(): UseTurtleshellReturn {
       projectDB.saveProjectMeta({
         cumulativeSelectSize: cumulativeSelectSize.current,
       });
+      // Set result now so the results page has data when we navigate there
+      // before the user has gone through annotation.
+      if (training.pendingCycleResult) {
+        setPreviousResult(trainingResult);
+        setTrainingResult(training.pendingCycleResult);
+      }
     }
   }, [training.isTrainingComplete]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -357,10 +344,11 @@ export function useTurtleshell(): UseTurtleshellReturn {
   );
 
   /**
-   * Submit annotations — the cycle data flow fix:
+   * Submit annotations — cycle data flow:
    * 1. Persist the cycle snapshot to IndexedDB
    * 2. Convert annotated words to .tgt and APPEND to the training file
    * 3. REPLACE the unannotated pool with the residual
+   * 4. Auto-start the next training cycle (annotation is now the last step)
    */
   const handleSubmitAnnotations = useCallback(async () => {
     const result = training.pendingCycleResult ?? {
@@ -371,9 +359,6 @@ export function useTurtleshell(): UseTurtleshellReturn {
       annotatedCount: annotations.annotationWords.length,
       iterationNumber: currentIteration,
     };
-
-    setPreviousResult(trainingResult);
-    setTrainingResult(result);
 
     await projectDB.saveCycle({
       iteration: result.iterationNumber,
@@ -400,13 +385,26 @@ export function useTurtleshell(): UseTurtleshellReturn {
       await projectDB.saveFile(unannotatedFile.filePath, training.residualContent);
     }
 
-    goToStage("results");
+    // Annotation is the last step — kick off the next cycle immediately.
+    // Mirrors handleNewCycle but runs after persistence so we don't lose data.
+    const nextIteration = currentIteration + 1;
+    setCurrentIteration(nextIteration);
+    annotations.resetAnnotations();
+    training.resetTrainingState();
+    training.resetInferenceState();
+    projectDB.saveProjectMeta({
+      currentIteration: nextIteration,
+      currentStage: "training",
+    });
+    setAutoStartTraining(true);
   }, [
-    goToStage, training, trainingResult, currentIteration,
+    goToStage, training, currentIteration,
     annotations, files, projectDB,
   ]);
 
   const handleSkipAnnotation = useCallback(() => {
+    // Skipping annotation returns to results rather than starting the next cycle —
+    // the user didn't label anything so we let them decide from the results page.
     goToStage("results");
   }, [goToStage]);
 
@@ -434,7 +432,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
     await training.startInference();
   }, [training]);
 
-  // ── Cycle transitions ─────────────────────────────────────────────────
+  // ── Cycle transitions ────────────────────────────────────────────────────
 
   const handleNewCycle = useCallback(() => {
     const nextIteration = currentIteration + 1;
@@ -453,7 +451,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
   }, [currentIteration, projectDB, annotations, training]);
 
   const handleStartOver = useCallback(async () => {
-    setCurrentStage("config");
+    setCurrentStage("ingestion");
     setCompletedStages([]);
     setModelConfigLocal(DEFAULT_MODEL_CONFIG);
     setCurrentIteration(1);
@@ -472,11 +470,11 @@ export function useTurtleshell(): UseTurtleshellReturn {
     hasRestored.current = true;
   }, [projectDB, wipeVfs, annotations, training]);
 
-  // ── Return (same shape — no breaking changes to consumers) ──────────────
+  // ── Return ──────────────────────────────────────────────────────────────
 
   return {
-      language,
-      onLanguageChange: handleLanguageChange,
+    language,
+    onLanguageChange: handleLanguageChange,
     // Workflow
     currentStage,
     completedStages,
