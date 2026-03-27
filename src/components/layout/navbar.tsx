@@ -1,5 +1,4 @@
 import { useRef, useEffect, useState } from "react";
-import { TurtleLogo } from "./turtle-logo";
 
 interface Props {
   view: "home" | "app";
