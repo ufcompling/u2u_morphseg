@@ -17,6 +17,9 @@ const EXAMPLES = [
   { word: "kebahagiaan", segments: ["ke", "bahagia", "an"], lang: "Indonesian" },
 ];
 
+const [first, ...rest] = EXAMPLES;
+const SHUFFLED_EXAMPLES = [first, ...rest.sort(() => Math.random() - 0.5)];
+
 type Phase = "typing" | "pause" | "splitting" | "done";
 
 export function DemoWidget() {
@@ -25,7 +28,7 @@ export function DemoWidget() {
   const [typedLength, setTypedLength] = useState(0);
   const [showSegments, setShowSegments] = useState(false);
 
-  const current = EXAMPLES[exampleIndex];
+  const current = SHUFFLED_EXAMPLES[exampleIndex];
 
   useEffect(() => {
     if (phase === "typing") {
@@ -52,7 +55,7 @@ export function DemoWidget() {
         setPhase("typing");
         setTypedLength(0);
         setShowSegments(false);
-        setExampleIndex((i) => (i + 1) % EXAMPLES.length);
+        setExampleIndex((i) => (i + 1) % SHUFFLED_EXAMPLES.length);
       }, 4000);
       return () => clearTimeout(t);
     }
@@ -63,8 +66,8 @@ export function DemoWidget() {
       {/* Input */}
       <div className="text-center">
         <div className="flex items-center justify-center gap-3 mb-3">
-          <p className="text-[11px] font-mono text-foreground/40 uppercase tracking-[0.25em]">Input</p>
-          <span className="text-[10px] font-mono text-primary/60 px-2 py-0.5 rounded-full bg-primary/10">
+          <p className="text-[11px] font-mono text-foreground/80 uppercase tracking-[0.25em]">Input</p>
+          <span className="text-[10px] font-mono text-primary/80 px-2 py-0.5 rounded-full bg-primary/10">
             {current.lang}
           </span>
         </div>
@@ -87,7 +90,7 @@ export function DemoWidget() {
 
       {/* Output */}
       <div className="text-center">
-        <p className="text-[11px] font-mono text-foreground/40 uppercase tracking-[0.25em] mb-3">Output</p>
+        <p className="text-[11px] font-mono text-foreground/80 uppercase tracking-[0.25em] mb-3">Output</p>
         <div className="h-[50px] flex items-center justify-center gap-3">
           {showSegments ? (
             current.segments.map((seg, i) => (
