@@ -1,53 +1,102 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: 44, 110, 73;
-  --foreground: 228 230 226;
-  --card: 76, 149, 108;
-  --card-foreground: 228 230 226;
-  --popover: 54 62 64;
-  --popover-foreground: 228 230 226;
-  --primary: 255, 201, 185;
-  --primary-foreground: 36 42 44;
-  --secondary: 62 72 74;
-  --secondary-foreground: 190 198 192;
-  --muted: 62 72 74;
-  --muted-foreground: 254, 254, 227;
-  --accent: 120 175 210;
-  --accent-foreground: 36 42 44;
-  --border: 218, 215, 205;
-  --input: 54 62 64;
-  --ring: 165 195 130;
+  --background: #344e41;
+  --foreground: #dad7cd;
+  --card: #3a5a40;
+  --card-foreground: #dad7cd;
+  --popover: #3a5a40;
+  --popover-foreground: #dad7cd;
+  --primary: #a3b18a;
+  --primary-foreground: #344e41;
+  --secondary: #588157;
+  --secondary-foreground: #dad7cd;
+  --muted: #588157;
+  --muted-foreground: #a3b18a;
+  --accent: #a3b18a;
+  --accent-foreground: #344e41;
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: #dad7cd;
+  --border: #588157;
+  --input: #3a5a40;
+  --ring: #a3b18a;
   --radius: 0.5rem;
 }
 
-@theme {
-  --color-background: rgb(var(--background));
-  --color-foreground: rgb(var(--foreground));
-  --color-card: rgb(var(--card));
-  --color-card-foreground: rgb(var(--card-foreground));
-  --color-popover: rgb(var(--popover));
-  --color-popover-foreground: rgb(var(--popover-foreground));
-  --color-primary: rgb(var(--primary));
-  --color-primary-foreground: rgb(var(--primary-foreground));
-  --color-secondary: rgb(var(--secondary));
-  --color-secondary-foreground: rgb(var(--secondary-foreground));
-  --color-muted: rgb(var(--muted));
-  --color-muted-foreground: rgb(var(--muted-foreground));
-  --color-accent: rgb(var(--accent));
-  --color-accent-foreground: rgb(var(--accent-foreground));
-  --color-border: rgb(var(--border));
-  --color-input: rgb(var(--input));
-  --color-ring: rgb(var(--ring));
+@theme inline {
+  --font-sans: system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-border outline-ring/50;
   }
-
   body {
     @apply bg-background text-foreground;
-    font-family: system-ui, -apple-system, sans-serif;
   }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+}
+
+@keyframes ripple {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+  100% { transform: translate(-50%, -50%) scale(12); opacity: 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) translateX(0); opacity: 0.3; }
+  25%  { transform: translateY(-15px) translateX(5px); opacity: 0.5; }
+  50%  { transform: translateY(-25px) translateX(-3px); opacity: 0.4; }
+  75%  { transform: translateY(-10px) translateX(-8px); opacity: 0.5; }
+}
+
+@keyframes cta-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(163, 177, 138, 0.3), 0 0 40px rgba(163, 177, 138, 0.1); }
+  50%       { box-shadow: 0 0 25px rgba(163, 177, 138, 0.5), 0 0 50px rgba(163, 177, 138, 0.2); }
+}
+
+.animate-ripple { animation: ripple 1s ease-out forwards; }
+.animate-float  { animation: float 6s ease-in-out infinite; }
+
+.cta-glow {
+  animation: cta-glow 3s ease-in-out infinite;
+}
+.cta-glow:hover {
+  animation: none;
+  box-shadow: 0 0 30px rgba(163, 177, 138, 0.6), 0 0 60px rgba(163, 177, 138, 0.3);
+  transform: scale(1.02);
+  filter: brightness(1.1);
 }

@@ -154,15 +154,13 @@ export function useTurtleshell(): UseTurtleshellReturn {
   const [completedStages, setCompletedStages] = useState<WorkflowStage[]>([]);
 
   const goToStage = useCallback(
-    (stage: WorkflowStage) => {
-      if (!completedStages.includes(currentStage)) {
-        setCompletedStages((prev) => [...prev, currentStage]);
-      }
-      setCurrentStage(stage);
-      projectDB.saveProjectMeta({ currentStage: stage });
-    },
-    [currentStage, completedStages, projectDB]
-  );
+  (stage: WorkflowStage) => {
+    setCompletedStages(deriveCompletedStages(stage));
+    setCurrentStage(stage);
+    projectDB.saveProjectMeta({ currentStage: stage });
+  },
+  [projectDB]
+);
 
   // ── Core state ──────────────────────────────────────────────────────────
 
