@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTurtleshell, type UseTurtleshellReturn } from "../../hooks/useTurtleShell";
 import { TurtleLogo, TurtleShellBackground, StepIndicator } from "../../components/layout";
 import { StatusIndicator } from "../../components/ui";
-import { WORKFLOW_STAGES, type WorkflowStage } from "../../lib/types";
+import { type WorkflowStage } from "../../lib/types";
 import {
   DatasetIngestion,
   ModelConfigStage,
@@ -81,8 +81,6 @@ export function MorphAnalyzer() {
   );
 }
 
-const STAGE_ORDER = WORKFLOW_STAGES.map((s) => s.id);
-
 function AnimatedStageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
   const [displayedStage, setDisplayedStage] = useState<WorkflowStage>(ts.currentStage);
   const [transitioning, setTransitioning] = useState(false);
@@ -127,11 +125,6 @@ function AnimatedStageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
     </div>
   );
 }
-
-// Kept for reference — used to derive slide direction if directional animation is re-added
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _getDirection = (from: WorkflowStage, to: WorkflowStage) =>
-  STAGE_ORDER.indexOf(to) > STAGE_ORDER.indexOf(from) ? "forward" : "back";
 
 function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
   switch (ts.currentStage) {
