@@ -5,7 +5,7 @@ interface Props {
   onEnter: () => void;
 }
 
-const BADGES = ["Privacy-first", "No account required", "Works offline"];
+const BADGES = ["Privacy-first", "No account required", "Multi-Language Support"];
 
 export function LandingPage({ onEnter }: Props) {
   return (
