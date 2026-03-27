@@ -43,6 +43,28 @@ def save_binary(file_name: str, data) -> None:
     with open(file_path, 'wb') as f:
         f.write(data_bytes)
 
+def get_snapshot(dir: str) -> str:
+    """Creates a serialized snapshot of the specified directory defualting to /data. Returns a JSON string with the file names and their contents as lists of bytes."""
+    if dir is None:
+        dir = '/data'
+    snapshot = {}
+    if os.path.exists(dir):
+        for file_name in os.listdir(dir):
+            file_path = os.path.join(dir, file_name)
+            if os.path.isfile(file_path):
+                with open(file_path, 'rb') as f:
+                    snapshot[file_name] = list(f.read())
+    return json.dumps(snapshot)
+
+def read_snapshot(snapshot_json: str, dir: str) -> None:
+    """Reads a serialized snapshot JSON string and writes the files to the specified directory."""
+    if dir is None:
+        dir = '/data'
+    snapshot = json.loads(snapshot_json)
+    for file_name, content in snapshot.items():
+        file_path = os.path.join(dir, file_name)
+        save_binary(file_path, bytes(content))
+
 
 def create_pdf(file_name: str, file_content: str) -> None:
     """Creates a PDF file with only the processed text as content, using default formatting."""

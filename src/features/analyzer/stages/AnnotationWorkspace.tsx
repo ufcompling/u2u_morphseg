@@ -81,6 +81,7 @@ interface AnnotationWorkspaceProps {
   totalWords: number;
   currentIteration: number;
   totalIterations: number;
+  onSnapshot: () => void;
 }
 
 export function AnnotationWorkspaceStage({
@@ -91,6 +92,7 @@ export function AnnotationWorkspaceStage({
   totalWords,
   currentIteration,
   totalIterations,
+  onSnapshot,
 }: AnnotationWorkspaceProps) {
   const [focusIndex, setFocusIndex] = useState(0);
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
@@ -471,11 +473,10 @@ export function AnnotationWorkspaceStage({
           )}
         </div>
 
-        {/* TODO: implement snapshot functionality */}
         <button
-          disabled
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/60 cursor-not-allowed select-none"
-          title="Snapshot (coming soon)"
+          onClick={onSnapshot}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
+          title="Download a snapshot of your current work"
         >
           <SnapshotIcon />
           <span>Snapshot</span>

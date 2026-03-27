@@ -134,6 +134,8 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           config={ts.modelConfig}
           onUpdateConfig={ts.setModelConfig}
           onNext={() => ts.goToStage("ingestion")}
+          onSnapshot={ts.handleDownloadSnapshot}
+          onReadSnapshot={ts.handleReadSnapshot}
         />
       );
     case "ingestion":
@@ -147,6 +149,7 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           onStartTraining={ts.handleStartTraining}
           isUploading={ts.isUploading}
           pyodideReady={ts.pyodideReady}
+          onSnapshot={ts.handleDownloadSnapshot}
         />
       );
     case "training":
@@ -157,6 +160,7 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           totalIterations={ts.totalIterations}
           isComplete={ts.isTrainingComplete}
           onContinue={() => ts.goToStage("results")}
+          onSnapshot={ts.handleDownloadSnapshot}
         />
       );
     case "annotation":
@@ -169,6 +173,7 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           totalWords={ts.totalAnnotationWords}
           currentIteration={ts.currentIteration}
           totalIterations={ts.totalIterations}
+          onSnapshot={ts.handleDownloadSnapshot}
         />
       );
     case "results":
@@ -188,6 +193,20 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           inferenceStats={ts.inferenceStats}
           onRunInference={ts.handleRunInference}
           onDownloadPredictions={ts.handleDownloadPredictions}
+        />
+      );
+
+    case "annotation":
+      return (
+        <AnnotationWorkspaceStage
+          words={ts.annotationWords}
+          onUpdateBoundaries={ts.handleUpdateBoundaries}
+          onSubmit={ts.handleSubmitAnnotations}
+          onSkip={ts.handleSkipAnnotation}
+          totalWords={ts.totalAnnotationWords}
+          currentIteration={ts.currentIteration}
+          totalIterations={ts.totalIterations}
+          onSnapshot={ts.handleDownloadSnapshot}
         />
       );
   }

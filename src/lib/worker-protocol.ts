@@ -33,6 +33,8 @@ export type WorkerInMessage =
   | { type: "DELETE_FILE"; filePath: string }
   | { type: "SAVE_FILE"; filePath: string; fileContent: string }
   | { type: "CLEAR_FILES"; directory?: string }
+  | { type: "DOWNLOAD_SNAPSHOT" }
+  | { type: "READ_SNAPSHOT"; snapshotJson: string }
   | { type: "SET_LANGUAGE"; language: string };
 
 
@@ -63,4 +65,6 @@ export type WorkerOutMessage =
   | { type: "FILE_SAVE_ERROR"; error: string }
   | { type: "FILES_CLEARED"; directory?: string }
   | { type: "FILE_CLEAR_ERROR"; error: string }
+  | { type: "SNAPSHOT_READ"; payload: any }
+  | { type: "SNAPSHOT_DOWNLOADED"; payload: string }
   | { type: "PYODIDE_READY" };

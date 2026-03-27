@@ -12,6 +12,7 @@ interface TrainingProgressProps {
   totalIterations: number;
   isComplete: boolean;
   onContinue: () => void;
+  onSnapshot: () => void;
 }
 
 export function TrainingProgressStage({
@@ -20,6 +21,7 @@ export function TrainingProgressStage({
   totalIterations,
   isComplete,
   onContinue,
+  onSnapshot,
 }: TrainingProgressProps) {
   const completedCount = steps.filter((s) => s.status === "complete").length;
   const activeIndex = steps.findIndex((s) => s.status === "active");
@@ -172,11 +174,10 @@ export function TrainingProgressStage({
               Ready to annotate low-confidence words
             </p>
             <div className="flex items-center gap-2">
-              {/* TODO: implement snapshot functionality */}
               <button
-                disabled
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/60 cursor-not-allowed select-none"
-                title="Snapshot (coming soon)"
+                onClick={onSnapshot}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
+                title="Download a snapshot of your current work"
               >
                 <SnapshotIcon />
                 <span>Snapshot</span>
@@ -192,11 +193,10 @@ export function TrainingProgressStage({
           </div>
         ) : (
           <div className="flex items-center justify-between">
-            {/* TODO: implement snapshot functionality */}
             <button
-              disabled
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/60 cursor-not-allowed select-none"
-              title="Snapshot (coming soon)"
+              onClick={onSnapshot}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
+              title="Download a snapshot of your current work"
             >
               <SnapshotIcon />
               <span>Snapshot</span>

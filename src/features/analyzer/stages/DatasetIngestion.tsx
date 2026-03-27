@@ -18,6 +18,7 @@ interface DatasetIngestionProps {
   onBack: () => void;
   isUploading: boolean;
   pyodideReady: boolean;
+  onSnapshot: () => void;
 }
 
 
@@ -30,6 +31,7 @@ export function DatasetIngestion({
   onBack,
   isUploading,
   pyodideReady,
+  onSnapshot,
 }: DatasetIngestionProps) {
   // Hide internal project files from the user-facing file viewer
   const hiddenNames = new Set(["project.json", "cycles.json", "annotations.json"]);
@@ -94,11 +96,10 @@ export function DatasetIngestion({
           >
             Back
           </button>
-          {/* TODO: implement snapshot functionality */}
           <button
-            disabled
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/60 cursor-not-allowed select-none"
-            title="Snapshot (coming soon)"
+            onClick={onSnapshot}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
+            title="Download a snapshot of your current work"
           >
             <SnapshotIcon />
             <span>Snapshot</span>
