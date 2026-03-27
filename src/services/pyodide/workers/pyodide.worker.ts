@@ -28,6 +28,8 @@ import { importFile } from "../../database/importFile";
 import { loadFiles } from "../../database/loadFiles";
 import { readFile } from "../../database/readFile";
 import { saveFile } from "../../database/saveFile";
+import { downloadSnapshot } from "../../database/downloadSnapshot.ts";
+import { readSnapshot } from "../../database/readSnapshot.ts";
 import { syncPyodideFS } from "../pyodideService.ts"
 
 // Worker starting (silent)
@@ -438,7 +440,26 @@ try {
             post({ type: "FILE_CLEAR_ERROR", error: String(err) });
           }
           break;
-  
+        case "DOWNLOAD_SNAPSHOT":
+          try {
+            if (!pyodide) await initPyodide();
+            const snapshotData = await downloadSnapshot();
+            post({ type: "SNAPSHOT_DOWNLOADED", payload: snapshotData });
+          } catch (err) {
+            console.error("[pyodide-worker] DOWNLOAD_SNAPSHOT_ERROR:", err);
+            post({ type: "FILE_SAVE_ERROR", error: String(err) });
+          }
+          break;
+        case "READ_SNAPSHOT":
+          try {
+            if (!pyodide) await initPyodide();
+            await readSnapshot(msg.snapshotJson);
+            post({ type: "SNAPSHOT_READ", payload: null });
+          } catch (err) {
+            console.error("[pyodide-worker] READ_SNAPSHOT_ERROR:", err);
+            post({ type: "FILE_READ_ERROR", error: String(err) });
+          }
+          break;
     }
   };
 } catch (err) {
