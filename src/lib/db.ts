@@ -108,6 +108,8 @@ async function sendMessageToWorker(message: any): Promise<any> {
       SYNC_VFS: 'VFS_SYNCED',
       WIPE_VFS: 'VFS_WIPED',
       INIT: 'INIT_DONE',
+      DOWNLOAD_SNAPSHOT: 'SNAPSHOT_DOWNLOADED',
+      READ_SNAPSHOT: 'SNAPSHOT_READ',
     };
     const expected = expectedMap[message.type];
 
@@ -201,6 +203,15 @@ export const db = new class {
       throw err;
     }
   }
+  async downloadSnapshot() {
+    if (currentLanguage) setLanguage(currentLanguage);
+    return await sendMessageToWorker({ type: "DOWNLOAD_SNAPSHOT" });
+  }
+  async readSnapshot(snapshotJson: string) {
+    if (currentLanguage) setLanguage(currentLanguage);
+    return await sendMessageToWorker({ type: "READ_SNAPSHOT", snapshotJson });
+  }
+
   async clearFiles(directory?: string) {
     if (currentLanguage) setLanguage(currentLanguage);
     return await sendMessageToWorker({ type: "CLEAR_FILES", directory });

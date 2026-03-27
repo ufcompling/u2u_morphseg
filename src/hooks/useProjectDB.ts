@@ -71,6 +71,8 @@ export interface UseProjectDBReturn {
   clearFiles: (directory?: string) => Promise<void>;
   readFile: (filePath: string) => Promise<{fileContent: string; fileType: 'text' | 'pdf' | 'docx'}>;
   loadFiles: () => Promise<fileData[]>;
+  downloadSnapshot: () => Promise<void>;
+  readSnapshot: (snapshotJson: string) => Promise<void>;
 
   // ── Cycles ──
   saveCycle: (cycle: Omit<CycleSnapshot, "iteration"> & {
@@ -347,7 +349,56 @@ export function useProjectDB(): UseProjectDBReturn {
       logger.error("Failed to delete file:", err);
     }
   }, [pyodideReady]);
+  const loadFiles = useCallback(async (): Promise<fileData[]> => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking loadFiles");
+      return [];
+    }
+    try {
+      const loadedFiles = await db.loadFiles();
+      setFiles(loadedFiles);
+      return loadedFiles;
+    } catch (err) {
+      logger.error("Failed to load files:", err);
+      return [];
+    }
+  }, [pyodideReady]);
 
+  // Snapshot download
+  const downloadSnapshot = useCallback(async (): Promise<void> => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking downloadSnapshot");
+      return;
+    }
+    try {
+      const snapshotJson = await db.downloadSnapshot();
+      if (!snapshotJson) throw new Error("Empty snapshot returned");
+      const blob = new Blob([snapshotJson], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `snapshot_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      logger.error("Failed to download snapshot:", err);
+    }
+  }, [pyodideReady]);
+
+  // Read snapshot
+  const readSnapshot = useCallback(async (snapshotJson: string): Promise<void> => {
+    if (!pyodideReady) {
+      logger.warn("[useProjectDB] Pyodide not ready, blocking readSnapshot");
+      return;
+    }
+    try {
+      await db.readSnapshot(snapshotJson);
+      // Reload all files and project state from the restored VFS
+      await loadFiles();
+    } catch (err) {
+      logger.error("Failed to restore snapshot:", err);
+    }
+  }, [pyodideReady, loadFiles]);
 
   // Clear all files (optionally in a directory)
   const clearFiles = useCallback(async (directory?: string): Promise<void> => {
@@ -376,23 +427,6 @@ export function useProjectDB(): UseProjectDBReturn {
     } catch (err) {
       logger.error("Failed to read file:", err);
       return { fileContent: '', fileType: 'text' };
-    }
-  }, [pyodideReady]);
-
-
-  // Load all files
-  const loadFiles = useCallback(async (): Promise<fileData[]> => {
-    if (!pyodideReady) {
-      logger.warn("[useProjectDB] Pyodide not ready, blocking loadFiles");
-      return [];
-    }
-    try {
-      const loadedFiles = await db.loadFiles();
-      setFiles(loadedFiles);
-      return loadedFiles;
-    } catch (err) {
-      logger.error("Failed to load files:", err);
-      return [];
     }
   }, [pyodideReady]);
 
@@ -613,6 +647,8 @@ export function useProjectDB(): UseProjectDBReturn {
     confirmAnnotation,
     loadAnnotations,
     getConfirmedCount,
+    downloadSnapshot,
+    readSnapshot,
     clearAll,
     
   };

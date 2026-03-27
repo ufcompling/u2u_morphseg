@@ -106,6 +106,8 @@ export interface UseTurtleshellReturn {
   handleDownloadEvaluation: () => void;
   handleNewCycle: () => void;
   handleStartOver: () => Promise<void>;
+  handleDownloadSnapshot: () => Promise<void>;
+  handleReadSnapshot: (snapshotJson: string) => Promise<void>;
 
   // Inference
   isRunningInference: boolean;
@@ -524,6 +526,8 @@ export function useTurtleshell(): UseTurtleshellReturn {
     handleDownloadEvaluation,
     handleNewCycle,
     handleStartOver,
+    handleDownloadSnapshot: projectDB.downloadSnapshot,
+    handleReadSnapshot: projectDB.readSnapshot,
 
     // Inference
     isRunningInference: training.isRunningInference,

@@ -100,6 +100,8 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           config={ts.modelConfig}
           onUpdateConfig={ts.setModelConfig}
           onNext={() => ts.goToStage("ingestion")}
+          onSnapshot={ts.handleDownloadSnapshot}
+          onReadSnapshot={ts.handleReadSnapshot}
         />
       );
 
@@ -114,6 +116,7 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           onStartTraining={ts.handleStartTraining}
           isUploading={ts.isUploading}
           pyodideReady={ts.pyodideReady}
+          onSnapshot={ts.handleDownloadSnapshot}
         />
       );
 
@@ -125,6 +128,7 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           totalIterations={ts.totalIterations}
           isComplete={ts.isTrainingComplete}
           onContinue={() => ts.goToStage("results")}
+          onSnapshot={ts.handleDownloadSnapshot}
         />
       );
 
@@ -158,6 +162,7 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           totalWords={ts.totalAnnotationWords}
           currentIteration={ts.currentIteration}
           totalIterations={ts.totalIterations}
+          onSnapshot={ts.handleDownloadSnapshot}
         />
       );
   }

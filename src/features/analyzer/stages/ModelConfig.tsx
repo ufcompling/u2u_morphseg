@@ -5,8 +5,8 @@ declare global {
   }
 }
 import type { ModelConfig, QueryStrategy } from "../../../lib/types";
-import { ArrowIcon, Tooltip, SnapshotIcon } from "../../../components/ui";
-import { useEffect } from "react";
+import { ArrowIcon, Tooltip, SnapshotIcon, UploadSmallIcon } from "../../../components/ui";
+import { useEffect, useRef } from "react";
 
 // ============================================================
 // Model Configuration Stage
@@ -17,6 +17,8 @@ interface ModelConfigProps {
   config: ModelConfig;
   onUpdateConfig: (config: ModelConfig) => void;
   onNext: () => void;
+  onSnapshot: () => void;
+  onReadSnapshot: (snapshotJson: string) => Promise<void>;
 }
 
 
@@ -44,7 +46,22 @@ export function ModelConfigStage({
   config,
   onUpdateConfig,
   onNext,
+  onSnapshot,
+  onReadSnapshot,
 }: ModelConfigProps) {
+  const snapshotInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSnapshotUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const json = reader.result as string;
+      onReadSnapshot(json);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
   // Set global language variable on window whenever targetLanguage changes
   useEffect(() => {
     if (typeof window !== "undefined" && config.targetLanguage) {
@@ -198,15 +215,31 @@ export function ModelConfigStage({
           <span>Upload Files</span>
           <ArrowIcon />
         </button>
-        {/* TODO: implement snapshot functionality */}
-        <button
-          disabled
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/60 cursor-not-allowed select-none"
-          title="Snapshot (coming soon)"
-        >
-          <SnapshotIcon />
-          <span>Snapshot</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={snapshotInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleSnapshotUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => snapshotInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
+            title="Restore work from a snapshot file"
+          >
+            <UploadSmallIcon />
+            <span>Restore Snapshot</span>
+          </button>
+          <button
+            onClick={onSnapshot}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
+            title="Download a snapshot of your current work"
+          >
+            <SnapshotIcon />
+            <span>Snapshot</span>
+          </button>
+        </div>
       </footer>
     </div>
   );
