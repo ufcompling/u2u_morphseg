@@ -143,15 +143,9 @@ export function useProjectDB(): UseProjectDBReturn {
         if (!cancelled) setFiles(loadedFiles);
 
         // Project metadata
-        // Always create project.json if missing before reading
-        let projectResult = null;
-        let projectFileExists = true;
-        try {
-          await db.readFile(`/data/${language}/project.json`);
-        } catch (err: any) {
-          projectFileExists = false;
-        }
-        if (!projectFileExists) {
+        let projectResult = await db.readFile(`/data/${language}/project.json`);
+        if (!projectResult.fileContent) {
+          // File doesn't exist yet — initialise defaults
           const now = Date.now();
           const meta = {
             currentStage: "config" as WorkflowStage,
@@ -161,75 +155,41 @@ export function useProjectDB(): UseProjectDBReturn {
             createdAt: now,
             updatedAt: now,
           };
-          logger.info(JSON.stringify(meta), typeof JSON.stringify(meta));
           await db.saveFile(`/data/${language}/project.json`, JSON.stringify(meta));
-          // Ensure cycles and annotations files exist for a fresh project
-          try {
-            await db.saveFile(`/data/${language}/cycles.json`, JSON.stringify([]));
-          } catch (err) {
-            logger.warn('[useProjectDB] Failed to create cycles.json during initProject', err);
-          }
-          try {
-            await db.saveFile(`/data/${language}/annotations.json`, JSON.stringify([]));
-          } catch (err) {
-            logger.warn('[useProjectDB] Failed to create annotations.json during initProject', err);
-          }
+          projectResult = { fileContent: JSON.stringify(meta), fileType: 'text' };
         }
-        logger.info("[useProjectDB] Calling db.readFile for project.json...", { ts: Date.now() });
-        try {
-          projectResult = await db.readFile(`/data/${language}/project.json`);
-          logger.info("[useProjectDB] db.readFile result for project.json:", {
-            ts: Date.now(),
-            typeofResult: typeof projectResult,
-            hasContent: !!projectResult?.fileContent,
-            contentLength: projectResult?.fileContent?.length,
-          });
-        } catch (err: any) {
-          console.error("[useProjectDB] db.readFile threw for project.json:", { err: err?.message || err, stack: err?.stack });
-          throw err;
-        }
-        if (projectResult && projectResult.fileContent && !cancelled) {
-          const meta = JSON.parse(projectResult.fileContent);
-          setProject({
-            currentStage: meta.currentStage as WorkflowStage,
-            modelConfig: meta.modelConfig,
-            currentIteration: meta.currentIteration,
-            cumulativeSelectSize: meta.cumulativeSelectSize,
-          });
+        if (projectResult.fileContent && !cancelled) {
+          try {
+            const meta = JSON.parse(sanitizeContent(projectResult.fileContent));
+            setProject({
+              currentStage: meta.currentStage as WorkflowStage,
+              modelConfig: meta.modelConfig,
+              currentIteration: meta.currentIteration,
+              cumulativeSelectSize: meta.cumulativeSelectSize,
+            });
+          } catch {
+            logger.warn('[useProjectDB] project.json corrupt on load, resetting');
+          }
         }
 
         // Cycles
-        // Always create cycles.json if missing before reading
-        let cyclesFileExists = true;
-        try {
-          await db.readFile(`/data/${language}/cycles.json`);
-        } catch (err: any) {
-          if (err && err.message && err.message.startsWith('File not found:')) {
-            cyclesFileExists = false;
-          } else {
-            throw err;
-          }
-        }
-        if (!cyclesFileExists) {
+        const cyclesResult = await db.readFile(`/data/${language}/cycles.json`);
+        if (!cyclesResult.fileContent) {
           await db.saveFile(`/data/${language}/cycles.json`, JSON.stringify([]));
-        }
-        let cyclesResult = await db.readFile(`/data/${language}/cycles.json`);
-        if (cyclesResult && cyclesResult.fileContent && !cancelled) {
-          const cyclesArr = JSON.parse(cyclesResult.fileContent);
-          setCycleHistory(Array.isArray(cyclesArr) ? cyclesArr.map(cycleRowToSnapshot) : []);
+          if (!cancelled) setCycleHistory([]);
+        } else if (!cancelled) {
+          try {
+            const cyclesArr = JSON.parse(sanitizeContent(cyclesResult.fileContent));
+            setCycleHistory(Array.isArray(cyclesArr) ? cyclesArr.map(cycleRowToSnapshot) : []);
+          } catch {
+            logger.warn('[useProjectDB] cycles.json corrupt on load, resetting');
+            await db.saveFile(`/data/${language}/cycles.json`, JSON.stringify([]));
+            setCycleHistory([]);
+          }
         }
         // Annotations: ensure annotations.json exists before any annotation ops
-        let annotationsFileExists = true;
-        try {
-          await db.readFile(`/data/${language}/annotations.json`);
-        } catch (err: any) {
-          if (err && err.message && err.message.startsWith('File not found:')) {
-            annotationsFileExists = false;
-          } else {
-            throw err;
-          }
-        }
-        if (!annotationsFileExists) {
+        const annotationsResult = await db.readFile(`/data/${language}/annotations.json`);
+        if (!annotationsResult.fileContent) {
           await db.saveFile(`/data/${language}/annotations.json`, JSON.stringify([]));
         }
         ready.current = true;
