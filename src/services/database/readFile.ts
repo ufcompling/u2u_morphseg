@@ -27,9 +27,20 @@ export async function readFile(filePath: string): Promise<{ fileContent: string;
     console.error('[readFile] unsupported file type header', { header });
     throw new Error(`Unsupported file type for file ${filePath}`);
   } catch (err: any) {
+    const isNotFound = err?.message && (
+      err.message.includes('FileNotFoundError') ||
+      err.message.includes('not found in /data') ||
+      err.message.includes('No such file or directory') ||
+      err.message.includes('does not exist') ||
+      err.message.includes('File not found')
+    );
+    // For well-known init files that simply may not exist yet, return empty content silently
+    const knownInitFiles = ['project.json', 'cycles.json', 'annotations.json'];
+    if (isNotFound && knownInitFiles.some(f => filePath.endsWith('/' + f))) {
+      return { fileContent: '', fileType: 'text' };
+    }
     console.error('[readFile] ERROR', err);
-    // If the error is due to file not existing, return a specific error
-    if (err && err.message && (err.message.includes('No such file or directory') || err.message.includes('does not exist') || err.message.includes('File not found'))) {
+    if (isNotFound) {
       throw new Error(`File not found: ${filePath}`);
     }
     throw err;

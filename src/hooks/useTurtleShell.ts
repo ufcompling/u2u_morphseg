@@ -501,7 +501,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
     // Training
     trainingSteps: training.trainingSteps,
     currentIteration,
-    totalIterations: modelConfig.iterations,
+    totalIterations: modelConfig?.iterations ?? DEFAULT_MODEL_CONFIG.iterations,
     isTrainingComplete: training.isTrainingComplete,
     handleStartTraining,
 
