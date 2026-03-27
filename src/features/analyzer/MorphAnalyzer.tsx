@@ -195,6 +195,20 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           onDownloadPredictions={ts.handleDownloadPredictions}
         />
       );
+
+    case "annotation":
+      return (
+        <AnnotationWorkspaceStage
+          words={ts.annotationWords}
+          onUpdateBoundaries={ts.handleUpdateBoundaries}
+          onSubmit={ts.handleSubmitAnnotations}
+          onSkip={ts.handleSkipAnnotation}
+          totalWords={ts.totalAnnotationWords}
+          currentIteration={ts.currentIteration}
+          totalIterations={ts.totalIterations}
+          onSnapshot={ts.handleDownloadSnapshot}
+        />
+      );
   }
 }
 
