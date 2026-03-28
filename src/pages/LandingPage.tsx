@@ -1,4 +1,4 @@
-import { DemoWidget } from "../components/landing/demowidget";
+import { DemoWidget } from "../features/landing/demowidget";
 import { CheckIcon } from "../components/ui/icons";
 
 interface Props {
