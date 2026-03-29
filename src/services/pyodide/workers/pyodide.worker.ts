@@ -187,6 +187,7 @@ async function runCycle(config: TrainingCycleConfig): Promise<void> {
   step("train");
   const resultJson: string = await pyodide.runPythonAsync(`run_training_cycle(_config_json)`);
   // Debug: post raw JSON result back to main thread for inspection
+  cleanVfs(effectiveConfig.workDir);
   try {
     // Keep raw training result emission (useful for debugging training)
     post({ type: 'CYCLE_RAW', payload: String(resultJson) });
