@@ -50,6 +50,8 @@ def get_snapshot(dir: str) -> str:
     snapshot = {}
     if os.path.exists(dir):
         for file_name in os.listdir(dir):
+            if file_name == "crf.model":
+                continue  # Skip the model file
             file_path = os.path.join(dir, file_name)
             if os.path.isfile(file_path):
                 with open(file_path, 'rb') as f:
