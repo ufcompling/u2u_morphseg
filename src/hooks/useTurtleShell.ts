@@ -180,6 +180,14 @@ export function useTurtleshell(): UseTurtleshellReturn {
 
   const [isUploading, setIsUploading] = useState(false);
 
+
+  // Sync currentStage with projectDB.project?.currentStage (e.g. after snapshot restore)
+  useEffect(() => {
+    if (!projectDB.project) return;
+    setCurrentStage(projectDB.project.currentStage);
+    setCompletedStages(deriveCompletedStages(projectDB.project.currentStage));
+  }, [projectDB.project?.currentStage]);
+
   const handleUpload = useCallback(
     async (fileList: FileList | null) => {
       if (!fileList) return;
