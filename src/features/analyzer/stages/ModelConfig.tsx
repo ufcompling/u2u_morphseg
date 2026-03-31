@@ -21,11 +21,13 @@ interface ModelConfigProps {
   onReadSnapshot: (snapshotJson: string) => Promise<void>;
 }
 
-const SEED_MAX = 4_294_967_295; // 2^32 - 1
+const SEED_MAX = 4_294_967_295;
 
 function rollSeed(): number {
   return Math.floor(Math.random() * (SEED_MAX + 1));
 }
+
+const DELIMITER_PRESETS = ["!", "|", "+", "-", "_"] as const;
 
 const STRATEGY_INFO: Record<QueryStrategy, { label: string; description: string }> = {
   uncertainty: {
@@ -79,6 +81,7 @@ export function ModelConfigStage({
   const activeStrategy = STRATEGY_INFO[config.queryStrategy];
   const canStart = config.targetLanguage.trim().length > 0;
   const isRandom = config.randomSeed === null;
+  const delim = config.delimiter || "!";
 
   return (
     <div className="flex flex-col gap-0">
@@ -113,8 +116,71 @@ export function ModelConfigStage({
 
       {/* Config form */}
       <div className="px-6 py-6 flex flex-col gap-7 border-b border-border/20">
-        <div className="grid grid-cols-2 gap-5">
 
+        {/* 1. Delimiter — full width, first */}
+        <div className="flex flex-col gap-2.5">
+          <div className="flex items-center gap-2">
+            <label className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
+              Annotated File Delimiter
+            </label>
+            <Tooltip text="The character used to separate morphemes in your annotated training file. Must match exactly what your file uses." />
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Preset buttons */}
+            <div className="flex items-center gap-1 p-1 bg-background border border-border/15 rounded-lg">
+              {DELIMITER_PRESETS.map((d) => (
+                <button
+                  key={d}
+                  onClick={() => updateField("delimiter", d)}
+                  className={`w-9 h-9 rounded-md font-mono text-sm font-semibold transition-all ${
+                    delim === d
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground/70 hover:text-foreground hover:bg-secondary/10"
+                  }`}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom input */}
+            <input
+              type="text"
+              value={delim}
+              maxLength={3}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val.length <= 3) updateField("delimiter", val);
+              }}
+              className="w-20 bg-card border border-border/20 rounded-lg px-3 py-2 font-mono text-sm text-center text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
+              placeholder="custom"
+            />
+
+            {/* Live example preview */}
+            <div className="flex-1 px-3 py-2 bg-secondary/5 border border-border/10 rounded-lg">
+              <span className="font-mono text-[11px] text-muted-foreground/50">example: </span>
+              <span className="font-mono text-[11px] text-foreground/70">
+                walk{delim}ed
+              </span>
+              <span className="font-mono text-[11px] text-muted-foreground/30 mx-1.5">·</span>
+              <span className="font-mono text-[11px] text-foreground/70">
+                un{delim}happy
+              </span>
+              <span className="font-mono text-[11px] text-muted-foreground/30 mx-1.5">·</span>
+              <span className="font-mono text-[11px] text-foreground/70">
+                mean{delim}ing{delim}less
+              </span>
+            </div>
+          </div>
+
+          <p className="font-mono text-[11px] text-muted-foreground/50">
+            Monomorphemic words without the delimiter are valid
+          </p>
+        </div>
+
+        {/* 2. Increment size + Seed — side by side */}
+        <div className="grid grid-cols-2 gap-5">
           {/* Increment size */}
           <div className="flex flex-col gap-2.5">
             <div className="flex items-center gap-2">
@@ -145,15 +211,13 @@ export function ModelConfigStage({
               </label>
               <Tooltip text="Controls the 80/20 train/test split of your annotated data. Leave empty for a new random split each cycle, or fix a value to reproduce exact results." />
             </div>
-
             <div className="flex items-center gap-1.5">
-              {/* Number input — hidden when random, shown when locked */}
               {isRandom ? (
                 <div className="flex-1 flex items-center gap-2 px-4 py-3 bg-card border border-border/15 rounded-lg">
-                  <span className="font-mono text-[11px] text-muted-foreground/80 uppercase tracking-widest">
+                  <span className="font-mono text-[11px] text-muted-foreground/40 uppercase tracking-widest">
                     Random
                   </span>
-                  <span className="font-mono text-[10px] text-muted-foreground/70">
+                  <span className="font-mono text-[10px] text-muted-foreground/25">
                     · new split each cycle
                   </span>
                 </div>
@@ -178,8 +242,6 @@ export function ModelConfigStage({
                   className="flex-1 bg-card border border-primary/30 rounded-lg px-4 py-3 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
                 />
               )}
-
-              {/* Dice — roll and lock a seed */}
               <button
                 onClick={() => updateField("randomSeed", rollSeed())}
                 className="p-2.5 rounded-lg border border-border/20 bg-card text-muted-foreground/50 hover:text-foreground hover:border-primary/30 hover:bg-primary/5 transition-all"
@@ -187,8 +249,6 @@ export function ModelConfigStage({
               >
                 <DiceIcon className="w-4 h-4" />
               </button>
-
-              {/* Clear — only visible when locked */}
               {!isRandom && (
                 <button
                   onClick={() => updateField("randomSeed", null)}
@@ -199,14 +259,13 @@ export function ModelConfigStage({
                 </button>
               )}
             </div>
-
             <p className="font-mono text-[11px] text-muted-foreground/50">
               {isRandom ? "Click 🎲 to lock a specific seed" : `Locked · 0 – ${SEED_MAX.toLocaleString()}`}
             </p>
           </div>
         </div>
 
-        {/* Query strategy */}
+        {/* 3. Query strategy — full width, last */}
         <div className="flex flex-col gap-2.5">
           <div className="flex items-center gap-2">
             <label className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
@@ -214,7 +273,6 @@ export function ModelConfigStage({
             </label>
             <Tooltip text="The algorithm used to decide which unlabeled samples are most valuable for the human to annotate next." />
           </div>
-
           <div className="flex gap-1 p-1 bg-background border border-border/15 rounded-lg">
             {(Object.keys(STRATEGY_INFO) as QueryStrategy[]).map((strategy) => (
               <button
@@ -230,7 +288,6 @@ export function ModelConfigStage({
               </button>
             ))}
           </div>
-
           <div className="px-3 py-2.5 bg-secondary/5 border border-border/10 rounded-lg">
             <p className="font-mono text-[12px] text-foreground font-medium">
               {activeStrategy.label}

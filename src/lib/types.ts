@@ -54,6 +54,11 @@ export interface ModelConfig {
    */
   randomSeed: number | null;
   queryStrategy: QueryStrategy;
+  /**
+   * Delimiter character used to separate morphemes in annotated files.
+   * Common values: "!" "|" "+" "-"
+   */
+  delimiter: string;
 }
 
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
@@ -61,6 +66,7 @@ export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   randomSeed: null,
   queryStrategy: "uncertainty",
   targetLanguage: "English",
+  delimiter: "!",
 };
 
 // --- CRF Training Constants ---
@@ -148,8 +154,7 @@ export interface TrainingCycleConfig {
   selectSize: number;
   /**
    * Resolved random seed for this cycle's train/test split.
-   * Always a concrete number by the time it hits the worker —
-   * null from ModelConfig is resolved to a random value before building this config.
+   * Always a concrete number by the time it hits the worker.
    */
   randomSeed: number;
   /** VFS working directory — default '/tmp/turtleshell' */

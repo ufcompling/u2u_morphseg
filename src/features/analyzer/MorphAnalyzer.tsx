@@ -387,6 +387,7 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           isUploading={ts.isUploading}
           pyodideReady={ts.pyodideReady}
           onSnapshot={ts.handleDownloadSnapshot}
+          delimiter={ts.modelConfig.delimiter}
         />
       );
     case "training":
