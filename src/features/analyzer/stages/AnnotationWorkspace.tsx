@@ -2,32 +2,6 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import type { AnnotationWord } from "../../../lib/types";
 import { ArrowIcon, UploadSmallIcon, CheckAllIcon, SnapshotIcon } from "../../../components/ui/icons";
 
-// ============================================================
-// Annotation Workspace Stage
-// One-word-at-a-time focused annotation interface.
-// Shows a single word card with boundary editing, plus a
-// progress rail and context about why these words were selected.
-//
-// Dev/testing feature: "Load Gold File" parses a gold-standard
-// .tgt file and auto-fills boundaries for matching words so you
-// can blast through annotation cycles during testing.
-// ============================================================
-
-/**
- * Parse a gold .tgt / annotated file into surface-word → boundary indices.
- *
- * Auto-detects the boundary marker by scanning the first 20 non-empty lines
- * and picking whichever of !  +  |  -  _  appears most often.
- * Falls back to treating the whole line as an unsegmented word if none found.
- *
- * Both space-separated char format ("u n ! h a p p y") and compact format
- * ("un!happy") are handled — internal whitespace is stripped before splitting.
- *
- * :returns: { lookup, separator, sampleLines }
- *   lookup      — Map<normalizedWord, boundaryIndices[]>
- *   separator   — the char that was detected (for debug display)
- *   sampleLines — first 3 raw lines (for debug display)
- */
 function parseGoldFile(content: string): {
   lookup: Map<string, number[]>;
   separator: string;
@@ -80,8 +54,8 @@ interface AnnotationWorkspaceProps {
   onSkip: () => void;
   totalWords: number;
   currentIteration: number;
-  totalIterations: number;
   onSnapshot: () => void;
+  onReadSnapshot: (snapshotJson: string) => Promise<void>;
 }
 
 export function AnnotationWorkspaceStage({
@@ -91,8 +65,8 @@ export function AnnotationWorkspaceStage({
   onSkip,
   totalWords,
   currentIteration,
-  totalIterations,
   onSnapshot,
+  onReadSnapshot,
 }: AnnotationWorkspaceProps) {
   const [focusIndex, setFocusIndex] = useState(0);
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
@@ -100,6 +74,7 @@ export function AnnotationWorkspaceStage({
 
   // Dev/testing: gold file auto-annotation
   const goldInputRef = useRef<HTMLInputElement>(null);
+  const snapshotInputRef = useRef<HTMLInputElement>(null);
   const [goldMatchCount, setGoldMatchCount] = useState<number | null>(null);
   const [goldDebug, setGoldDebug] = useState<{
     separator: string;
@@ -122,9 +97,6 @@ export function AnnotationWorkspaceStage({
   const currentWord = words[focusIndex] ?? null;
   const annotatedCount = annotatedSet.size;
   const allDone = annotatedCount === totalWords && totalWords > 0;
-
-  const isEarlyIteration = currentIteration <= Math.ceil(totalIterations * 0.3);
-  const isLateIteration = currentIteration >= Math.ceil(totalIterations * 0.7);
 
   const handleConfirm = useCallback(() => {
     if (!currentWord) return;
@@ -199,6 +171,20 @@ export function AnnotationWorkspaceStage({
     [onUpdateBoundaries]
   );
 
+  const handleSnapshotUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        onReadSnapshot(reader.result as string);
+      };
+      reader.readAsText(file);
+      e.target.value = "";
+    },
+    [onReadSnapshot]
+  );
+
   /** Confirm all words at once using current boundaries (CRF predictions as-is). */
   const handleConfirmAll = useCallback(() => {
     setAnnotatedSet(new Set(wordsRef.current.map((w) => w.id)));
@@ -223,7 +209,7 @@ export function AnnotationWorkspaceStage({
                 Cycle
               </span>
               <span className="font-mono text-[11px] text-foreground tabular-nums font-medium">
-                {currentIteration}/{totalIterations}
+                {currentIteration}
               </span>
             </div>
           </div>
@@ -237,16 +223,6 @@ export function AnnotationWorkspaceStage({
             <span className="text-primary font-medium">least confident</span>{" "}
             about. Your corrections have the highest impact on accuracy.
           </p>
-          {isEarlyIteration && (
-            <p className="font-mono text-[10px] text-muted-foreground/70 mt-2">
-              Early iteration -- expect more errors as the model learns basic patterns.
-            </p>
-          )}
-          {isLateIteration && (
-            <p className="font-mono text-[10px] text-muted-foreground/70 mt-2">
-              Late iteration -- the model has stabilized. Errors should be fewer and more subtle.
-            </p>
-          )}
         </div>
 
         {/* -- Dev/Testing Tools -- */}
@@ -473,14 +449,34 @@ export function AnnotationWorkspaceStage({
           )}
         </div>
 
-        <button
-          onClick={onSnapshot}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
-          title="Download a snapshot of your current work"
-        >
-          <SnapshotIcon />
-          <span>Snapshot</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Restore snapshot */}
+          <input
+            ref={snapshotInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleSnapshotUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => snapshotInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
+            title="Restore work from a snapshot file"
+          >
+            <UploadSmallIcon />
+            <span>Restore Snapshot</span>
+          </button>
+
+          {/* Save snapshot */}
+          <button
+            onClick={onSnapshot}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
+            title="Download a snapshot of your current work"
+          >
+            <SnapshotIcon />
+            <span>Snapshot</span>
+          </button>
+        </div>
 
         <button
           onClick={onSubmit}
