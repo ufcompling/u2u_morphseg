@@ -20,7 +20,7 @@ export function MorphAnalyzer() {
       <TurtleShellBackground />
 
       <main className="w-full max-w-4xl relative z-10">
-        <div className="bg-card/98 backdrop-blur-3xl border border-border/20 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden ring-1 ring-white/5">
+        <div className="bg-card/98 backdrop-blur-3xl border border-border/20 rounded-2xl shadow-2xl shadow-black/40 overflow-visible ring-1 ring-white/5">
           {/* Header */}
           <header className="px-6 py-4 flex items-center justify-between border-b border-border/20 bg-secondary/5">
             <div className="flex items-center gap-4">

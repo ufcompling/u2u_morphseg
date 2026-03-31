@@ -169,7 +169,7 @@ export function TrainingProgressStage({
       <div className="mx-6 h-px bg-border/10" />
       <footer className="px-6 py-4">
         {isComplete ? (
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <p className="font-mono text-[11px] text-muted-foreground/70">
               Ready to annotate low-confidence words
             </p>

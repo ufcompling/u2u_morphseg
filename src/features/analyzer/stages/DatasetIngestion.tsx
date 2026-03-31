@@ -83,7 +83,7 @@ export function DatasetIngestion({
       {/* Footer */}
       <footer className="px-6 py-4 border-t border-border/20 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <p className="font-mono text-[10px] text-muted-foreground/40 max-w-xs">
+          <p className="font-mono text-[10px] text-muted-foreground/70 max-w-xs">
             {hasRequiredFiles
               ? "Ready to proceed"
               : "Assign at least one annotated and one unannotated file to continue"}
