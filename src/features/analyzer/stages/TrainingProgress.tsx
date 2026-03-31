@@ -2,14 +2,9 @@ import { useEffect } from "react";
 import type { TrainingStep } from "../../../lib/types";
 import { ArrowIcon, CheckIcon, SnapshotIcon } from "../../../components/ui/icons";
 
-// ============================================================
-// Training Progress Stage
-// ============================================================
-
 interface TrainingProgressProps {
   steps: TrainingStep[];
   currentIteration: number;
-  totalIterations: number;
   isComplete: boolean;
   onContinue: () => void;
   onSnapshot: () => void;
@@ -18,7 +13,6 @@ interface TrainingProgressProps {
 export function TrainingProgressStage({
   steps,
   currentIteration,
-  totalIterations,
   isComplete,
   onContinue,
   onSnapshot,
@@ -41,14 +35,13 @@ export function TrainingProgressStage({
       progressUnits,
       pct: Number(pct.toFixed(2)),
       currentIteration,
-      totalIterations,
       isComplete,
     });
-  }, [steps, completedCount, activeIndex, progressUnits, pct, currentIteration, totalIterations, isComplete]);
+  }, [steps, completedCount, activeIndex, progressUnits, pct, currentIteration, isComplete]);
 
   return (
     <div className="flex flex-col">
-      {/* ---- Header group: title + iteration + summary ---- */}
+      {/* ---- Header group: title + cycle + summary ---- */}
       <div className="px-6 pt-6 pb-4">
         <div className="flex items-start justify-between">
           <div>
@@ -62,24 +55,13 @@ export function TrainingProgressStage({
             )}
           </div>
 
-          {/* Iteration context -- segmented indicator */}
-          <div className="flex items-center gap-2">
-            <div className="flex gap-1">
-              {Array.from({ length: totalIterations }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`h-1.5 w-4 rounded-full ${
-                    i < currentIteration
-                      ? "bg-primary/70"
-                      : i === currentIteration - 1
-                        ? "bg-primary"
-                        : "bg-border/20"
-                  }`}
-                />
-              ))}
-            </div>
-            <span className="font-mono text-[10px] text-muted-foreground/70 tabular-nums">
-              {currentIteration}/{totalIterations}
+          {/* Cycle counter */}
+          <div className="px-3 py-1.5 rounded-lg bg-secondary/20 flex items-center gap-2">
+            <span className="font-mono text-[10px] text-muted-foreground/50 uppercase tracking-wider">
+              Cycle
+            </span>
+            <span className="font-mono text-[11px] text-foreground tabular-nums font-medium">
+              {currentIteration}
             </span>
           </div>
         </div>

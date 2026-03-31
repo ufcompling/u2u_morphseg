@@ -26,7 +26,7 @@ export const WORKFLOW_STAGES: {
 
 // --- Files ---
 
-export type FileRole = "annotated" | "unannotated" | "evaluation";
+export type FileRole = "annotated" | "unannotated";
 
 export type ValidationStatus = "pending" | "valid" | "invalid";
 
@@ -48,15 +48,25 @@ export type QueryStrategy = "uncertainty" | "random" | "margin";
 export interface ModelConfig {
   targetLanguage: string;
   incrementSize: number;
-  iterations: number;
+  /**
+   * Random seed for train/test/select splits. Range: [0, 4_294_967_295].
+   * null = generate a fresh random seed each cycle (non-reproducible).
+   */
+  randomSeed: number | null;
   queryStrategy: QueryStrategy;
+  /**
+   * Delimiter character used to separate morphemes in annotated files.
+   * Common values: "!" "|" "+" "-"
+   */
+  delimiter: string;
 }
 
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   incrementSize: 100,
-  iterations: 5,
+  randomSeed: null,
   queryStrategy: "uncertainty",
-  targetLanguage: "English"
+  targetLanguage: "English",
+  delimiter: "!",
 };
 
 // --- CRF Training Constants ---
@@ -126,9 +136,9 @@ export interface CycleSnapshot {
  * File content is passed as raw strings so Python can write them to VFS.
  */
 export interface TrainingCycleConfig {
-  /** Content of the annotated training .tgt file */
+  /** Content of the annotated training .tgt file (80% split) */
   trainTgt: string;
-  /** Content of the evaluation .tgt file */
+  /** Content of the evaluation .tgt file (20% split of annotated) */
   testTgt: string;
   /** Content of the unannotated pool .tgt file (predicted morphemes) */
   selectTgt: string;
@@ -142,6 +152,11 @@ export interface TrainingCycleConfig {
   delta: number;
   /** Cumulative words selected in prior cycles (0 on first run) */
   selectSize: number;
+  /**
+   * Resolved random seed for this cycle's train/test split.
+   * Always a concrete number by the time it hits the worker.
+   */
+  randomSeed: number;
   /** VFS working directory — default '/tmp/turtleshell' */
   workDir?: string;
 }
