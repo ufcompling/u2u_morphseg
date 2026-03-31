@@ -11,63 +11,12 @@ import type {
   InferenceResult,
 } from "../lib/types";
 import { INITIAL_TRAINING_STEPS, CRF_MAX_ITERATIONS, CRF_FEATURE_DELTA } from "../lib/types";
-import { getFileContent, tgtToSrc, getFileByRole } from "../lib/format-utils";
+import { getFileContent, getFileByRole } from "../lib/format-utils";
 import { db } from "../lib/db";
 import { log } from "../lib/logger";
 import type { StepProgressCallback } from "./usePyodideWorker";
 
 const logger = log("training");
-
-// ── Seeded PRNG (mulberry32) ────────────────────────────────────────────────
-// Used so that train/test splits are reproducible given the same seed, and
-// fully random when the user leaves the seed field empty (null → runtime random).
-
-function mulberry32(seed: number) {
-  return () => {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/**
- * Split an annotated .tgt file into train and test partitions.
- *
- * @param content     Raw file content, one word per line
- * @param trainFrac   Fraction to use for training (default 0.8)
- * @param seed        Seed for the shuffle — same seed always produces the same split
- * @returns           { trainSplit, testSplit } as .tgt strings
- *
- * Degenerate case: if there are fewer than 5 lines the whole file is used for
- * both train and test rather than producing a useless 1-line test set.
- */
-function splitAnnotatedFile(
-  content: string,
-  trainFrac: number,
-  seed: number
-): { trainSplit: string; testSplit: string } {
-  const lines = content.split("\n").filter(Boolean);
-  if (lines.length < 5) {
-    logger.warn(`splitAnnotatedFile: only ${lines.length} lines — skipping split, using full file for both train and test`);
-    return { trainSplit: content, testSplit: content };
-  }
-
-  const rand = mulberry32(seed);
-  const shuffled = [...lines];
-  // Fisher-Yates
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-
-  const cutoff = Math.max(1, Math.floor(shuffled.length * trainFrac));
-  return {
-    trainSplit: shuffled.slice(0, cutoff).join("\n"),
-    testSplit: shuffled.slice(cutoff).join("\n"),
-  };
-}
 
 // ── Input dependencies (provided by compositor) ─────────────────────────────
 
@@ -188,9 +137,13 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
       }
     }
 
-    const rawAnnotated = getFileContent(files, "annotated");
+    const annotatedFile = getFileByRole(files, "annotated");
+    const unannotatedFile = getFileByRole(files, "unannotated");
 
-    // Resolve seed: null means generate a fresh random value for this cycle.
+    const annotatedContent = getFileContent(files, "annotated");
+    const unannotatedContent = getFileContent(files, "unannotated");
+
+// Resolve seed: null means generate a fresh random value for this cycle.
     // The resolved seed is logged and passed to the worker so results are
     // traceable even when the user didn't fix a seed.
     const resolvedSeed: number =
@@ -198,42 +151,12 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
         ? modelConfig.randomSeed
         : Math.floor(Math.random() * 4_294_967_296);
 
-    const { trainSplit: trainTgt, testSplit: testTgt } = splitAnnotatedFile(
-      rawAnnotated,
-      0.8,
-      resolvedSeed
-    );
-
-    console.debug("[training] seed", {
-      configured: modelConfig.randomSeed,
-      resolved: resolvedSeed,
-      isRandom: modelConfig.randomSeed === null,
-    });
-
-    let selectTgt = getFileContent(files, "unannotated");
-    // If in-memory unannotated content looks empty or tiny, re-read from DB
-    const unannotatedFile = getFileByRole(files, "unannotated");
-    if ((selectTgt ?? "").split("\n").filter(Boolean).length < 2 && unannotatedFile?.filePath) {
-      try {
-        const res = await db.readFile(unannotatedFile.filePath);
-        selectTgt = res.fileContent;
-        console.debug("[useTrainingOrchestrator] refreshed unannotated file from DB", {
-          filePath: unannotatedFile.filePath,
-          length: selectTgt?.length,
-        });
-      } catch (err) {
-        logger.warn(`Failed to refresh unannotated file ${unannotatedFile.filePath}`, err);
-      }
-    }
-    const selectSrc = tgtToSrc(selectTgt);
-
     // Diagnostics: log counts and abort early if unannotated pool is empty
-    const trainCount = (trainTgt ?? "").split("\n").filter(Boolean).length;
-    const testCount = (testTgt ?? "").split("\n").filter(Boolean).length;
-    const selectCount = (selectTgt ?? "").split("\n").filter(Boolean).length;
-    console.debug("[training] file counts", { trainCount, testCount, selectCount });
-    if (selectCount === 0) {
-      console.warn("[training] Aborting: unannotated pool is empty");
+    const annotatedCount = (annotatedContent ?? "").split("\n").filter(Boolean).length;
+    const unannotatedCount = (unannotatedContent ?? "").split("\n").filter(Boolean).length;
+    console.debug('[training] file counts', { annotatedCount, unannotatedCount });
+    if (unannotatedCount === 0) {
+      console.warn('[training] Aborting: unannotated pool is empty');
       setTrainingSteps((prev) =>
         prev.map((s) =>
           s.id === "select" ? { ...s, status: "error", detail: "Unannotated pool is empty" } : s
@@ -243,10 +166,9 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
     }
 
     const cycleConfig: TrainingCycleConfig = {
-      trainTgt,
-      testTgt,
-      selectTgt,
-      selectSrc,
+      annotatedFile: annotatedFile?.fileName ?? '',
+      unannotatedFile: unannotatedFile?.fileName ?? '',
+      targetLanguage: modelConfig.targetLanguage,
       incrementSize: modelConfig.incrementSize,
       maxIterations: CRF_MAX_ITERATIONS,
       delta: CRF_FEATURE_DELTA,
@@ -266,7 +188,7 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
         residualCount: result.residualCount,
         sentIncrementSize: cycleConfig.incrementSize,
         sentSelectSize: cycleConfig.selectSize,
-        selectPoolCount: selectCount,
+        selectPoolCount: unannotatedCount,
       });
 
       cumulativeSelectSize.current += result.incrementWords.length;
@@ -278,8 +200,8 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
       setEvaluationContent(result.evaluationContent ?? "");
 
       const totalWords =
-        (selectTgt ?? "").split("\n").filter(Boolean).length +
-        (rawAnnotated ?? "").split("\n").filter(Boolean).length;
+        (annotatedContent ?? '').split("\n").filter(Boolean).length +
+        (unannotatedContent ?? '').split("\n").filter(Boolean).length;
 
       setPendingCycleResult({
         precision: result.precision,

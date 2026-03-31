@@ -195,9 +195,8 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
         }
 
         logger.info(' Starting cycle with config:', {
-          trainTgtLines: (config.trainTgt ?? '').split('\n').length,
-          testTgtLines: (config.testTgt ?? '').split('\n').length,
-          selectTgtLines: (config.selectTgt ?? '').split('\n').length,
+          annotatedFile: config.annotatedFile,
+          unannotatedFile: config.unannotatedFile,
         });
 
         pendingCycle.current = { resolve, reject, onStep: onStepProgress };

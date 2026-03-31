@@ -151,6 +151,7 @@ async function loadPythonScripts(): Promise<void> {
     "format.py",
     "model.py",
     "process_data.py",
+    "partition.py",
     "run.py"
   ];
 
