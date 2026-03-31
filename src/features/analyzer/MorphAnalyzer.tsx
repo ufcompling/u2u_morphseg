@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useTurtleshell, type UseTurtleshellReturn } from "../../hooks/useTurtleShell";
-import { TurtleShellBackground, StepIndicator } from "../../components/layout";
+import { TurtleShellBackground, StepIndicator, TurtleLogo } from "../../components/layout";
 import { type WorkflowStage } from "../../lib/types";
 import {
   DatasetIngestion,
