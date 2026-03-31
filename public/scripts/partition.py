@@ -5,14 +5,14 @@ from sklearn.preprocessing import KBinsDiscretizer
 from sklearn.model_selection import train_test_split
 from db_worker import read_file, save_text
 
-def process_file(file_path: str, annotated_file: str, seed: int) -> None:
+def process_file(file_path: str, annotated_file: str, seed: int, delimiter: str = '!') -> None:
 
     file_content: str = json.loads(read_file(os.path.join(file_path, annotated_file)))['content']
     y: list[str] = [line.strip().lower().replace(' ', '') for line in file_content.splitlines() if line.strip()]
-    X : list[str] = [word.replace('!', '') for word in y]
+    X : list[str] = [word.replace(delimiter, '') for word in y]
 
     _, _, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=seed, stratify=_categorize(y)
+        X, y, test_size=0.2, random_state=seed, stratify=_categorize(y, delimiter)
     )
 
     train_path: str = os.path.join(file_path, 'train.txt')
@@ -23,9 +23,9 @@ def process_file(file_path: str, annotated_file: str, seed: int) -> None:
 
     return train_path, test_path
 
-def _categorize(y: list[str]) -> list[str]:
+def _categorize(y: list[str], delimiter: str = '!') -> list[str]:
     # Labels are of the form 'morph_count-avg_morph_len'
-    features: list[tuple[int, float]] = _get_features(y)
+    features: list[tuple[int, float]] = _get_features(y, delimiter)
 
     num_bins: int = math.ceil(math.log2(len(y)) + 1)  # Derived from Sturge's formula
 
@@ -55,9 +55,9 @@ def _categorize(y: list[str]) -> list[str]:
     
     return labels
 
-def _get_features(words: list[str]) -> list[tuple[int, float]]:
+def _get_features(words: list[str], delimiter: str = '!') -> list[tuple[int, float]]:
     return[(
-            len(morphs := word.split('!')),  # Morpheme Count
+            len(morphs := word.split(delimiter)),  # Morpheme Count
             sum(len(m) for m in morphs) / len(morphs) # Average Morpheme Length
         ) for word in words
     ]
