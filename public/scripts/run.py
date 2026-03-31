@@ -23,6 +23,7 @@ def run_training_cycle(config_json: str) -> str:
 		- method: str           Not currently implemented, but eventually will specify AL strategy (least confidence, random, etc.)
 		- incrementSize: int
 		- maxIterations: int
+		- delimiter: str
 		- seed: int
 		- delta: int
 
@@ -34,6 +35,7 @@ def run_training_cycle(config_json: str) -> str:
 
 		annotated_file: str = config['annotatedFile']
 		unannotated_file: str = config['unannotatedFile']
+		delimiter: str = config.get('delimiter', '!')
 		seed: int = config.get('seed', 42)
 
 		target_language: str = config.get('targetLanguage', 'unknown')
@@ -41,14 +43,14 @@ def run_training_cycle(config_json: str) -> str:
 
 		train_file_path: str
 		test_file_path: str
-		train_file_path, test_file_path = process_file(work_dir, annotated_file, seed=seed)
+		train_file_path, test_file_path = process_file(work_dir, annotated_file, seed, delimiter)
 		select_file_path: str = os.path.join(work_dir, unannotated_file)
 
 		train_tgt: str = json.loads(read_file(train_file_path))['content']
 		test_tgt: str = json.loads(read_file(test_file_path))['content']
 		select_src: str = json.loads(read_file(select_file_path))['content']
 
-		data: DataDict = process_data(train_tgt, test_tgt, select_src)
+		data: DataDict = process_data(train_tgt, test_tgt, select_src, delimiter)
 
 		X_train: DatasetFeatures
 		y_train: DatasetLabels
@@ -68,7 +70,7 @@ def run_training_cycle(config_json: str) -> str:
 		f1: float
 		precision, recall, f1 = evaluate_predictions(data['test']['morphs'], test_predictions)
 		evaluation_content: str = format_evaluation(
-			data['test']['words'], data['test']['morphs'], test_predictions, precision, recall, f1
+			data['test']['words'], data['test']['morphs'], test_predictions, precision, recall, f1, delimiter
 		)
 
 		X_select = get_unlabeled_features(data['select']['words'], config['delta'])

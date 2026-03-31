@@ -2,7 +2,7 @@ import os
 
 from aliases import DataDict, Word, MorphList, BMESDict
 
-def process_data(train_tgt, test_tgt, select_src) -> DataDict:
+def process_data(train_tgt, test_tgt, select_src, delimiter: str = '!') -> DataDict:
 	"""
 	Processes training, testing, and selection data from files.
 	
@@ -12,12 +12,14 @@ def process_data(train_tgt, test_tgt, select_src) -> DataDict:
 	:type test_tgt: str
 	:param select_src: Unlabelled data
 	:type select_src: str
+	:param delimiter: Delimiter for splitting morphemes
+	:type delimiter: str
 	:return: Dictionary containing train, test, and select data
 	:rtype: DataDict
 	"""
-	train_words, train_morphs, train_bmes = _parse_labeled_data(train_tgt)
-	test_words, test_morphs, test_bmes = _parse_labeled_data(test_tgt)
-	select_words = _parse_unlabeled_data(select_src)
+	train_words, train_morphs, train_bmes = _parse_labeled_data(train_tgt, delimiter)
+	test_words, test_morphs, test_bmes = _parse_labeled_data(test_tgt, delimiter)
+	select_words = _parse_unlabeled_data(select_src, delimiter)
 
 	return {
 		'train': {
@@ -35,7 +37,7 @@ def process_data(train_tgt, test_tgt, select_src) -> DataDict:
 		}
 	}
 
-def _parse_labeled_data(data: str) -> tuple[list[Word], list[MorphList], BMESDict]:
+def _parse_labeled_data(data: str, delimiter: str = '!') -> tuple[list[Word], list[MorphList], BMESDict]:
     words: list[Word] = []
     morphs_list: list[MorphList] = []
     bmes: BMESDict = {}
@@ -45,7 +47,7 @@ def _parse_labeled_data(data: str) -> tuple[list[Word], list[MorphList], BMESDic
 
         toks: list[str] = line.split()
 
-        morphs: MorphList = ''.join(toks).split('!')
+        morphs: MorphList = ''.join(toks).split(delimiter)
         word: Word = ''.join(m for m in morphs)
         bmes_labels: str = _get_bmes_labels(morphs)
 
@@ -55,13 +57,13 @@ def _parse_labeled_data(data: str) -> tuple[list[Word], list[MorphList], BMESDic
 
     return words, morphs_list, bmes
 
-def _parse_unlabeled_data(data: str) -> list[Word]:
+def _parse_unlabeled_data(data: str, delimiter: str = '!') -> list[Word]:
     words: list[Word] = []
 
     for line in data.splitlines():
         if not (line := line.strip()): continue
 
-        words.append(line.replace('!', ''))
+        words.append(line.replace(delimiter, ''))
     
     return words
 
