@@ -6,7 +6,6 @@ declare global {
 }
 import type { ModelConfig, QueryStrategy } from "../../../lib/types";
 import { ArrowIcon, Tooltip, SnapshotIcon, UploadSmallIcon } from "../../../components/ui";
-import { TurtleLogo } from "../../../components/layout/turtle-logo";
 import { useEffect, useRef } from "react";
 
 // ============================================================
@@ -20,8 +19,6 @@ interface ModelConfigProps {
   onNext: () => void;
   onSnapshot: () => void;
   onReadSnapshot: (snapshotJson: string) => Promise<void>;
-  pyodideReady: boolean;
-  indexedDBReady: boolean;
 }
 
 
@@ -51,8 +48,6 @@ export function ModelConfigStage({
   onNext,
   onSnapshot,
   onReadSnapshot,
-  pyodideReady,
-  indexedDBReady,
 }: ModelConfigProps) {
   const snapshotInputRef = useRef<HTMLInputElement>(null);
 
@@ -84,184 +79,168 @@ export function ModelConfigStage({
   };
 
   const activeStrategy = STRATEGY_INFO[config.queryStrategy];
-  const isSystemReady = pyodideReady && indexedDBReady;
-  const canStart = config.targetLanguage.trim().length > 0 && isSystemReady;
+  const canStart = config.targetLanguage.trim().length > 0;
 
 
   return (
-    <div className="flex flex-col gap-0 relative">
-      <div className={isSystemReady ? "" : "blur-sm pointer-events-none"}>
-        {/* Header */}
-        <div className="px-6 py-5 border-b border-border/20">
-          <h2 className="font-mono text-sm font-semibold text-foreground">
-            Configure Active Learning
-          </h2>
-          <p className="font-mono text-[11px] text-muted-foreground/70 mt-1">
-            These parameters control how the model selects data for annotation
-          </p>
-        </div>
+    <div className="flex flex-col gap-0">
+      {/* Header */}
+      <div className="px-6 py-5 border-b border-border/20">
+        <h2 className="font-mono text-sm font-semibold text-foreground">
+          Configure Active Learning
+        </h2>
+        <p className="font-mono text-[11px] text-muted-foreground/70 mt-1">
+          These parameters control how the model selects data for annotation
+        </p>
+      </div>
 
-        {/* Target Language */}
-        <div className="px-6 pt-6 pb-5 border-b border-border/20">
-          <fieldset className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <legend className="font-mono text-[11px] text-muted-foreground uppercase tracking-widest font-semibold">
-                Target Language
-              </legend>
-              <Tooltip text="The language of your morphological data. This helps the model select appropriate features for segmentation." />
-            </div>
-            <input
-              type="text"
-              value={config.targetLanguage}
-              onChange={(e) => updateField("targetLanguage", e.target.value)}
-              placeholder="e.g. Swahili, Turkish, Zulu..."
-              className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground placeholder:text-foreground/70 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
-            />
-          </fieldset>
-        </div>
-
-        {/* Config form */}
-        <div className="px-6 py-6 flex flex-col gap-7 border-b border-border/20">
-          {/* Two-column row for increment + iterations */}
-          <div className="grid grid-cols-2 gap-5">
-            {/* Increment size */}
-            <div className="flex flex-col gap-2.5">
-              <div className="flex items-center gap-2">
-                <label className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
-                  Increment Size
-                </label>
-                <Tooltip text="How many new samples the model requests for human annotation each cycle. Smaller values mean more frequent but lighter annotation rounds." />
-              </div>
-              <input
-                type="number"
-                value={config.incrementSize}
-                onChange={(e) =>
-                  updateField(
-                    "incrementSize",
-                    Math.max(1, Number(e.target.value))
-                  )
-                }
-                min={1}
-                className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
-              />
-              <p className="font-mono text-[11px] text-muted-foreground/70">
-                Words queried each round
-              </p>
-            </div>
-
-            {/* Iterations */}
-            <div className="flex flex-col gap-2.5">
-              <div className="flex items-center gap-2">
-                <label className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
-                  Iterations
-                </label>
-                <Tooltip text="Total number of annotation cycles. After each cycle the model retrains and selects new uncertain samples." />
-              </div>
-              <input
-                type="number"
-                value={config.iterations}
-                onChange={(e) =>
-                  updateField("iterations", Math.max(1, Number(e.target.value)))
-                }
-                min={1}
-                className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
-              />
-              <p className="font-mono text-[11px] text-muted-foreground/70">
-                Train-annotate-retrain rounds
-              </p>
-            </div>
+      {/* Target Language */}
+      <div className="px-6 pt-6 pb-5 border-b border-border/20">
+        <fieldset className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <legend className="font-mono text-[11px] text-muted-foreground uppercase tracking-widest font-semibold">
+              Target Language
+            </legend>
+            <Tooltip text="The language of your morphological data. This helps the model select appropriate features for segmentation." />
           </div>
+          <input
+            type="text"
+            value={config.targetLanguage}
+            onChange={(e) => updateField("targetLanguage", e.target.value)}
+            placeholder="e.g. Swahili, Turkish, Zulu..."
+            className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground placeholder:text-foreground/70 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
+          />
+        </fieldset>
+      </div>
 
-          {/* Query strategy - full width with description */}
+      {/* Config form */}
+      <div className="px-6 py-6 flex flex-col gap-7 border-b border-border/20">
+        {/* Two-column row for increment + iterations */}
+        <div className="grid grid-cols-2 gap-5">
+          {/* Increment size */}
           <div className="flex flex-col gap-2.5">
             <div className="flex items-center gap-2">
               <label className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
-                Query Strategy
+                Increment Size
               </label>
-              <Tooltip text="The algorithm used to decide which unlabeled samples are most valuable for the human to annotate next." />
+              <Tooltip text="How many new samples the model requests for human annotation each cycle. Smaller values mean more frequent but lighter annotation rounds." />
             </div>
-
-            {/* Strategy selector as segmented control */}
-            <div className="flex gap-1 p-1 bg-background border border-border/15 rounded-lg">
-              {(Object.keys(STRATEGY_INFO) as QueryStrategy[]).map(
-                (strategy) => (
-                  <button
-                    key={strategy}
-                    onClick={() => updateField("queryStrategy", strategy)}
-                    className={`flex-1 px-3 py-2.5 rounded-md font-mono text-[12px] transition-all ${
-                      config.queryStrategy === strategy
-                        ? "bg-primary text-primary-foreground font-semibold shadow-sm"
-                        : "text-muted-foreground/70 hover:text-foreground hover:bg-secondary/10"
-                    }`}
-                  >
-                    {STRATEGY_INFO[strategy].label.split(" ")[0]}
-                  </button>
+            <input
+              type="number"
+              value={config.incrementSize}
+              onChange={(e) =>
+                updateField(
+                  "incrementSize",
+                  Math.max(1, Number(e.target.value))
                 )
-              )}
-            </div>
+              }
+              min={1}
+              className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
+            />
+            <p className="font-mono text-[11px] text-muted-foreground/70">
+              Words queried each round
+            </p>
+          </div>
 
-            {/* Active strategy description */}
-            <div className="px-3 py-2.5 bg-secondary/5 border border-border/10 rounded-lg">
-              <p className="font-mono text-[12px] text-foreground font-medium">
-                {activeStrategy.label}
-              </p>
-              <p className="font-mono text-[11px] text-muted-foreground/70 mt-1 leading-relaxed">
-                {activeStrategy.description}
-              </p>
+          {/* Iterations */}
+          <div className="flex flex-col gap-2.5">
+            <div className="flex items-center gap-2">
+              <label className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
+                Iterations
+              </label>
+              <Tooltip text="Total number of annotation cycles. After each cycle the model retrains and selects new uncertain samples." />
             </div>
+            <input
+              type="number"
+              value={config.iterations}
+              onChange={(e) =>
+                updateField("iterations", Math.max(1, Number(e.target.value)))
+              }
+              min={1}
+              className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
+            />
+            <p className="font-mono text-[11px] text-muted-foreground/70">
+              Train-annotate-retrain rounds
+            </p>
           </div>
         </div>
 
-        {/* Footer */}
-        <footer className="px-6 py-4 flex items-center justify-between">
-          <button
-            onClick={onNext}
-            disabled={!canStart}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-mono text-xs font-semibold tracking-wide transition-all hover:bg-primary/90 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none"
-          >
-            <span>Upload Files</span>
-            <ArrowIcon />
-          </button>
+        {/* Query strategy - full width with description */}
+        <div className="flex flex-col gap-2.5">
           <div className="flex items-center gap-2">
-            <input
-              ref={snapshotInputRef}
-              type="file"
-              accept=".json"
-              onChange={handleSnapshotUpload}
-              className="hidden"
-            />
-            <button
-              onClick={() => snapshotInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
-              title="Restore work from a snapshot file"
-            >
-              <UploadSmallIcon />
-              <span>Restore Snapshot</span>
-            </button>
-            <button
-              onClick={onSnapshot}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
-              title="Download a snapshot of your current work"
-            >
-              <SnapshotIcon />
-              <span>Snapshot</span>
-            </button>
+            <label className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
+              Query Strategy
+            </label>
+            <Tooltip text="The algorithm used to decide which unlabeled samples are most valuable for the human to annotate next." />
           </div>
-        </footer>
+
+          {/* Strategy selector as segmented control */}
+          <div className="flex gap-1 p-1 bg-background border border-border/15 rounded-lg">
+            {(Object.keys(STRATEGY_INFO) as QueryStrategy[]).map(
+              (strategy) => (
+                <button
+                  key={strategy}
+                  onClick={() => updateField("queryStrategy", strategy)}
+                  className={`flex-1 px-3 py-2.5 rounded-md font-mono text-[12px] transition-all ${
+                    config.queryStrategy === strategy
+                      ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                      : "text-muted-foreground/70 hover:text-foreground hover:bg-secondary/10"
+                  }`}
+                >
+                  {STRATEGY_INFO[strategy].label.split(" ")[0]}
+                </button>
+              )
+            )}
+          </div>
+
+          {/* Active strategy description */}
+          <div className="px-3 py-2.5 bg-secondary/5 border border-border/10 rounded-lg">
+            <p className="font-mono text-[12px] text-foreground font-medium">
+              {activeStrategy.label}
+            </p>
+            <p className="font-mono text-[11px] text-muted-foreground/70 mt-1 leading-relaxed">
+              {activeStrategy.description}
+            </p>
+          </div>
+        </div>
       </div>
 
-      {!isSystemReady && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm overflow-hidden">
-          <div className="relative w-full max-w-md">
-            <div className="animate-walk">
-              <TurtleLogo className="w-12 h-12 text-primary" />
-            </div>
-            <div className="mt-4 text-center">
-              <span className="font-mono text-lg text-foreground">Preparing...</span>
-            </div>
-          </div>
+      {/* Footer */}
+      <footer className="px-6 py-4 flex items-center justify-between">
+        <button
+          onClick={onNext}
+          disabled={!canStart}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-mono text-xs font-semibold tracking-wide transition-all hover:bg-primary/90 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none"
+        >
+          <span>Upload Files</span>
+          <ArrowIcon />
+        </button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={snapshotInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleSnapshotUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => snapshotInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
+            title="Restore work from a snapshot file"
+          >
+            <UploadSmallIcon />
+            <span>Restore Snapshot</span>
+          </button>
+          <button
+            onClick={onSnapshot}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
+            title="Download a snapshot of your current work"
+          >
+            <SnapshotIcon />
+            <span>Snapshot</span>
+          </button>
         </div>
-      )}
+      </footer>
     </div>
   );
 }
