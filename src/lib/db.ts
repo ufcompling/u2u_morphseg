@@ -58,9 +58,11 @@ export interface AnnotationRow {
 
 
 
+
 let pyodide: Worker | undefined;
 let currentLanguage: string | undefined = undefined;
 let lastSentLanguage: string | undefined = undefined;
+let messageIdCounter = 1;
 
 // Pyodide readiness state and listeners
 let pyodideReady = false;
@@ -113,9 +115,14 @@ async function sendMessageToWorker(message: any): Promise<any> {
     };
     const expected = expectedMap[message.type];
 
+    const id = messageIdCounter++;
+    message.id = id;
+
     let timeout: ReturnType<typeof setTimeout> | null = null;
     const handleMessage = (event: MessageEvent) => {
       const t = event.data?.type as string | undefined;
+      const msgId = event.data?.id;
+      if (msgId !== id) return; // Only handle messages with matching id
 
       // Generic error responses (FILE_*_ERROR, *_ERROR)
       if (t && t.endsWith('_ERROR')) {
@@ -147,7 +154,7 @@ async function sendMessageToWorker(message: any): Promise<any> {
     // If this message needs a language context, ensure worker has it first
     const needsLanguage = ['IMPORT_FILES','LOAD_FILES','READ_FILE','SAVE_FILE','DELETE_FILE','CLEAR_FILES'] as const;
     if (currentLanguage && lastSentLanguage !== currentLanguage && needsLanguage.includes(message.type)) {
-      w.postMessage({ type: 'SET_LANGUAGE', language: currentLanguage });
+      w.postMessage({ type: 'SET_LANGUAGE', language: currentLanguage, id });
       lastSentLanguage = currentLanguage;
     }
     w.postMessage(message);

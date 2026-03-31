@@ -60,12 +60,12 @@ function modelExists(): boolean {
 
 // ── Init ────────────────────────────────────────────────────────────────────
 
-async function initPyodide(): Promise<void> {
+async function initPyodide(id: number): Promise<void> {
   if (pyodide) return;
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
-    post({ type: "INIT_PROGRESS", step: "Loading Pyodide runtime…" });
+    post({id, type: "INIT_PROGRESS", step: "Loading Pyodide runtime…" });
 
     try {
       const pyodideModule = await import(/* @vite-ignore */ `${PYODIDE_CDN}pyodide.mjs`);
@@ -81,7 +81,7 @@ async function initPyodide(): Promise<void> {
     }
 
     // ── Create /scripts and /data, mount IDBFS before writing files ──
-    post({ type: "INIT_PROGRESS", step: "Mounting persistent filesystem…" });
+    post({id, type: "INIT_PROGRESS", step: "Mounting persistent filesystem…" });
     if (!pyodide) {
       throw new Error("Pyodide not initialized before FS operations");
     }
@@ -104,7 +104,7 @@ async function initPyodide(): Promise<void> {
     await pyodide.runPythonAsync("import sys; sys.path.append('/scripts')");
 
     // ── Install Python packages ──
-    post({ type: "INIT_PROGRESS", step: "Installing micropip and Python packages…" });
+    post({id, type: "INIT_PROGRESS", step: "Installing micropip and Python packages…" });
     await pyodide.loadPackage('micropip');
     await pyodide.runPythonAsync(`
 import micropip
@@ -125,17 +125,17 @@ await micropip.install('sklearn-crfsuite')
     }
 
     // ── Load CRF pipeline scripts as before ──
-    post({ type: "INIT_PROGRESS", step: "Loading CRF pipeline scripts…" });
+    post({id, type: "INIT_PROGRESS", step: "Loading CRF pipeline scripts…" });
     await loadPythonScripts();
 
     const hasModel = modelExists();
-    post({ type: "INIT_DONE", modelExists: hasModel });
+    post({id, type: "INIT_DONE", modelExists: hasModel });
     // Also send PYODIDE_READY for compatibility with main thread listeners
-    post({ type: "PYODIDE_READY" });
+    post({id, type: "PYODIDE_READY" });
   })().catch((err) => {
     initPromise = null;
     pyodide = null;
-    post({ type: "INIT_ERROR", error: String(err) });
+    post({id, type: "INIT_ERROR", error: String(err) });
     throw err;
   });
 
@@ -175,26 +175,23 @@ exec(open('/tmp/run.py').read())
 
 // ── Training cycle ──────────────────────────────────────────────────────────
 
-async function runCycle(config: TrainingCycleConfig): Promise<void> {
-  // Ensure pyodide is initialized before use
-  if (!pyodide) await initPyodide();
+async function runCycle(config: TrainingCycleConfig, id: number): Promise<void> {
+  if (!pyodide) await initPyodide(id);
   const effectiveConfig = { ...config, workDir: DEFAULT_WORK_DIR };
 
-  step("init");
+  step("init", id);
   pyodide.globals.set("_config_json", JSON.stringify(effectiveConfig));
-  stepDone("init", "VFS ready");
+  stepDone("init", "VFS ready", id);
 
-  step("train");
+  step("train", id);
   const resultJson: string = await pyodide.runPythonAsync(`run_training_cycle(_config_json)`);
-  // Debug: post raw JSON result back to main thread for inspection
   cleanVfs(effectiveConfig.workDir);
   try {
-    // Keep raw training result emission (useful for debugging training)
-    post({ type: 'CYCLE_RAW', payload: String(resultJson) });
+    post({ id, type: 'CYCLE_RAW', payload: String(resultJson) });
   } catch (e) {
     console.error('[pyodide-worker] Failed to post CYCLE_RAW:', e);
   }
-  stepDone("train", "Model trained");
+  stepDone("train", "Model trained", id);
 
   const raw = JSON.parse(resultJson) as {
     precision: number;
@@ -214,7 +211,7 @@ async function runCycle(config: TrainingCycleConfig): Promise<void> {
   };
 
   if (raw.error) {
-    post({ type: "CYCLE_ERROR", error: raw.error });
+    post({ id, type: "CYCLE_ERROR", error: raw.error });
     return;
   }
 
@@ -231,8 +228,8 @@ async function runCycle(config: TrainingCycleConfig): Promise<void> {
     console.warn('[pyodide-worker] Failed to log uncertain words', e);
   }
 
-  stepDone("predict", `${raw.incrementWords.length} words selected`);
-  stepDone("select", `${raw.residualCount} words remain in pool`);
+  stepDone("predict", `${raw.incrementWords.length} words selected`, id);
+  stepDone("select", `${raw.residualCount} words remain in pool`, id);
 
   cleanVfs(effectiveConfig.workDir);
 
@@ -243,6 +240,7 @@ async function runCycle(config: TrainingCycleConfig): Promise<void> {
   }
 
   post({
+    id,
     type: "CYCLE_DONE",
     result: {
       precision: raw.precision,
@@ -257,9 +255,8 @@ async function runCycle(config: TrainingCycleConfig): Promise<void> {
   });
 }
 
-async function runInference(config: { residualTgt: string; delta?: number; workDir?: string }): Promise<void> {
-  // Ensure pyodide is initialized before use
-  if (!pyodide) await initPyodide();
+async function runInference(config: { residualTgt: string; delta?: number; workDir?: string }, id: number): Promise<void> {
+  if (!pyodide) await initPyodide(id);
   const effectiveConfig = { ...config, workDir: DEFAULT_WORK_DIR };
 
   pyodide.globals.set("_inference_config_json", JSON.stringify(effectiveConfig));
@@ -271,11 +268,12 @@ async function runInference(config: { residualTgt: string; delta?: number; workD
   };
 
   if (raw.error) {
-    post({ type: "INFERENCE_ERROR", error: raw.error });
+    post({id, type: "INFERENCE_ERROR", error: raw.error });
     return;
   }
 
   post({
+    id,
     type: "INFERENCE_DONE",
     result: { predictionsContent: raw.predictionsContent, totalWords: raw.totalWords },
   });
@@ -302,7 +300,7 @@ for d in ['/tmp/__pycache__']:
   }
 }
 
-async function wipeVfs(): Promise<void> {
+async function wipeVfs(id: number): Promise<void> {
   try {
     if (!pyodide) return;
     pyodide.runPython(`
@@ -316,7 +314,7 @@ if os.path.exists(work_dir):
   } catch (err) {
     console.warn("[pyodide-worker] VFS wipe failed (non-fatal):", err);
   }
-  post({ type: "VFS_WIPED" });
+  post({id, type: "VFS_WIPED" });
 }
 
 // ── Message handler ─────────────────────────────────────────────────────────
@@ -343,27 +341,32 @@ try {
     }
 
     const msg = raw as WorkerInMessage;
+    const id = msg.id;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function postWithId(message: any) {
+      post({ ...message, id } as WorkerOutMessage);
+    }
     switch (msg.type) {
       case "INIT":
-        try { await initPyodide(); }
-        catch (err) { console.error("[pyodide-worker] Init failed:", err); }
+        try { await initPyodide(id); postWithId({ type: "INIT_DONE", modelExists: modelExists() }); }
+        catch (err) { postWithId({ type: "INIT_ERROR", error: String(err) }); }
         break;
 
       case "RUN_CYCLE":
         try {
-          if (!pyodide) await initPyodide();
-          await runCycle(msg.payload);
+          if (!pyodide) await initPyodide(id);
+          await runCycle(msg.payload, id);
         } catch (err) {
-          post({ type: "CYCLE_ERROR", error: String(err) });
+          postWithId({ type: "CYCLE_ERROR", error: String(err) });
         }
         break;
 
       case "RUN_INFERENCE":
         try {
-          if (!pyodide) await initPyodide();
-          await runInference(msg.payload);
+          if (!pyodide) await initPyodide(id);
+          await runInference(msg.payload, id);
         } catch (err) {
-          post({ type: "INFERENCE_ERROR", error: String(err) });
+          postWithId({ type: "INFERENCE_ERROR", error: String(err) });
         }
         break;
 
@@ -371,96 +374,96 @@ try {
         try {
           if (pyodide) await syncPyodideFS();
         } catch { /* non-fatal */ }
-        post({ type: "VFS_SYNCED" });
+        postWithId({ type: "VFS_SYNCED" });
         break;
 
       case "WIPE_VFS":
         try {
-          if (pyodide) await wipeVfs();
-          else post({ type: "VFS_WIPED" });
+          if (pyodide) await wipeVfs(id);
+          else postWithId({ type: "VFS_WIPED" });
         } catch (err) {
           console.warn('[pyodide-worker] WIPE_VFS handler failed (non-fatal):', err);
-          post({ type: "VFS_WIPED" });
+          postWithId({ type: "VFS_WIPED" });
         }
         break;
-        case "IMPORT_FILES":
-          try {
-            if (!pyodide) await initPyodide();
-            await importFile(msg.fileName, msg.fileContent);
-            post({ type: "FILES_IMPORTED" });
-          } catch (err) {
-            post({ type: "FILE_IMPORT_ERROR", error: String(err) });
-          }
-          break;
-        case "LOAD_FILES":
-          try {
-            if (!pyodide) await initPyodide();
-            if (!workerLanguage) throw new Error("Language not set in worker. Please send SET_LANGUAGE first.");
-            const files = await loadFiles();
-            post({ type: "FILES_LOADED", payload: files });
-          } catch (err) {
-            post({ type: "FILE_LOAD_ERROR", error: String(err) });
-          }
-          break;
-        case "READ_FILE":
-          try {
-            if (!pyodide) await initPyodide();
-            const { fileType, fileContent } = await readFile(msg.filePath);
-            post({ type: "FILE_READ", payload: { filePath: msg.filePath, fileType, fileContent } });
-          } catch (err) {
-            console.error("[pyodide-worker] FILE_READ_ERROR:", err);
-            post({ type: "FILE_READ_ERROR", error: String(err) });
-          }
-          break;
-        case "DELETE_FILE":
-          try {
-            if (!pyodide) await initPyodide();
-              await deleteFile(msg.filePath);
-              post({ type: "FILE_DELETED", filePath: msg.filePath });
-          } catch (err) {
-            console.error("[pyodide-worker] FILE_DELETE_ERROR:", err);
-            post({ type: "FILE_DELETE_ERROR", error: String(err) });
-          }
-          break;
-        case "SAVE_FILE":
-          try {
-            if (!pyodide) await initPyodide();
-              await saveFile(msg.filePath, msg.fileContent);
-              post({ type: "FILE_SAVED", filePath: msg.filePath });
-          } catch (err) {
-            console.error("[pyodide-worker] FILE_SAVE_ERROR:", err);
-            post({ type: "FILE_SAVE_ERROR", error: String(err) });
-          }
-          break;
-        case "CLEAR_FILES":
-          try {
-            if (!pyodide) await initPyodide();
-              await clearFiles(msg.directory);
-              post({ type: "FILES_CLEARED", directory: msg.directory });
-          } catch (err) {
-            post({ type: "FILE_CLEAR_ERROR", error: String(err) });
-          }
-          break;
-        case "DOWNLOAD_SNAPSHOT":
-          try {
-            if (!pyodide) await initPyodide();
-            const snapshotData = await downloadSnapshot();
-            post({ type: "SNAPSHOT_DOWNLOADED", payload: snapshotData });
-          } catch (err) {
-            console.error("[pyodide-worker] DOWNLOAD_SNAPSHOT_ERROR:", err);
-            post({ type: "FILE_SAVE_ERROR", error: String(err) });
-          }
-          break;
-        case "READ_SNAPSHOT":
-          try {
-            if (!pyodide) await initPyodide();
-            await readSnapshot(msg.snapshotJson);
-            post({ type: "SNAPSHOT_READ", payload: null });
-          } catch (err) {
-            console.error("[pyodide-worker] READ_SNAPSHOT_ERROR:", err);
-            post({ type: "FILE_READ_ERROR", error: String(err) });
-          }
-          break;
+      case "IMPORT_FILES":
+        try {
+          if (!pyodide) await initPyodide(id);
+          await importFile(msg.fileName, msg.fileContent);
+          postWithId({ type: "FILES_IMPORTED" });
+        } catch (err) {
+          postWithId({ type: "FILE_IMPORT_ERROR", error: String(err) });
+        }
+        break;
+      case "LOAD_FILES":
+        try {
+          if (!pyodide) await initPyodide(id);
+          if (!workerLanguage) throw new Error("Language not set in worker. Please send SET_LANGUAGE first.");
+          const files = await loadFiles();
+          postWithId({ type: "FILES_LOADED", payload: files });
+        } catch (err) {
+          postWithId({ type: "FILE_LOAD_ERROR", error: String(err) });
+        }
+        break;
+      case "READ_FILE":
+        try {
+          if (!pyodide) await initPyodide(id);
+          const { fileType, fileContent } = await readFile(msg.filePath);
+          postWithId({ type: "FILE_READ", payload: { filePath: msg.filePath, fileType, fileContent } });
+        } catch (err) {
+          console.error("[pyodide-worker] FILE_READ_ERROR:", err);
+          postWithId({ type: "FILE_READ_ERROR", error: String(err) });
+        }
+        break;
+      case "DELETE_FILE":
+        try {
+          if (!pyodide) await initPyodide(id);
+          await deleteFile(msg.filePath);
+          postWithId({ type: "FILE_DELETED", filePath: msg.filePath });
+        } catch (err) {
+          console.error("[pyodide-worker] FILE_DELETE_ERROR:", err);
+          postWithId({ type: "FILE_DELETE_ERROR", error: String(err) });
+        }
+        break;
+      case "SAVE_FILE":
+        try {
+          if (!pyodide) await initPyodide(id);
+          await saveFile(msg.filePath, msg.fileContent);
+          postWithId({ type: "FILE_SAVED", filePath: msg.filePath });
+        } catch (err) {
+          console.error("[pyodide-worker] FILE_SAVE_ERROR:", err);
+          postWithId({ type: "FILE_SAVE_ERROR", error: String(err) });
+        }
+        break;
+      case "CLEAR_FILES":
+        try {
+          if (!pyodide) await initPyodide(id);
+          await clearFiles(msg.directory);
+          postWithId({ type: "FILES_CLEARED", directory: msg.directory });
+        } catch (err) {
+          postWithId({ type: "FILE_CLEAR_ERROR", error: String(err) });
+        }
+        break;
+      case "DOWNLOAD_SNAPSHOT":
+        try {
+          if (!pyodide) await initPyodide(id);
+          const snapshotData = await downloadSnapshot();
+          postWithId({ type: "SNAPSHOT_DOWNLOADED", payload: snapshotData });
+        } catch (err) {
+          console.error("[pyodide-worker] DOWNLOAD_SNAPSHOT_ERROR:", err);
+          postWithId({ type: "FILE_SAVE_ERROR", error: String(err) });
+        }
+        break;
+      case "READ_SNAPSHOT":
+        try {
+          if (!pyodide) await initPyodide(id);
+          await readSnapshot(msg.snapshotJson);
+          postWithId({ type: "SNAPSHOT_READ", payload: null });
+        } catch (err) {
+          console.error("[pyodide-worker] READ_SNAPSHOT_ERROR:", err);
+          postWithId({ type: "FILE_READ_ERROR", error: String(err) });
+        }
+        break;
     }
   };
 } catch (err) {
@@ -479,10 +482,10 @@ function post(msg: WorkerOutMessage): void {
   (self as unknown as DedicatedWorkerGlobalScope).postMessage(msg as unknown);
 }
 
-function step(stepId: string): void {
-  post({ type: "STEP_START", stepId });
+function step(stepId: string, id: number): void {
+  post({id, type: "STEP_START", stepId });
 }
 
-function stepDone(stepId: string, detail?: string): void {
-  post({ type: "STEP_DONE", stepId, detail });
+function stepDone(stepId: string, detail: string | undefined, id: number): void {
+  post({id, type: "STEP_DONE", stepId, detail });
 }
