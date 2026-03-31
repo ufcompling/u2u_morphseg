@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useTurtleshell, type UseTurtleshellReturn } from "../../hooks/useTurtleShell";
-import { TurtleShellBackground, StepIndicator, TurtleLogo } from "../../components/layout";
+import { TurtleShellBackground, StepIndicator } from "../../components/layout";
 import { type WorkflowStage } from "../../lib/types";
 import {
   DatasetIngestion,
@@ -36,24 +36,16 @@ export function MorphAnalyzer() {
 
       <main className="w-full max-w-4xl relative z-10">
         <div className="bg-card/98 backdrop-blur-3xl border border-border/20 rounded-2xl shadow-2xl shadow-black/40 overflow-visible ring-1 ring-white/5">
-          {/* Header */}
-          <header className="px-6 py-4 flex items-center justify-between border-b border-border/20 bg-secondary/5">
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/10 flex items-center justify-center">
-                <TurtleLogo className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <h1 className="font-mono text-base font-semibold tracking-tight text-foreground">
-                    turtleshell
-                  </h1>
-                  <span className="px-1.5 py-0.5 rounded bg-secondary/30 font-mono text-[9px] text-muted-foreground/50 uppercase tracking-wider">
-                    v1.0
-                  </span>
-                </div>
-                <p className="font-mono text-[10px] text-muted-foreground/50 mt-0.5">
-                  morphological segmentation
-                </p>
+
+          <header className="px-6 py-4 flex items-center border-b border-border/20 bg-secondary/5">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h1 className="font-mono text-base font-semibold tracking-tight text-foreground">
+                  turtleshell
+                </h1>
+                <span className="px-1.5 py-0.5 rounded bg-secondary/30 font-mono text-[9px] text-muted-foreground/50 uppercase tracking-wider">
+                  v1.0
+                </span>
               </div>
               <p className="font-mono text-[10px] text-muted-foreground/50 mt-0.5">
                 morphological segmentation
