@@ -355,6 +355,41 @@ export function useProjectDB(): UseProjectDBReturn {
       await db.readSnapshot(snapshotJson);
       // Reload all files and project state from the restored VFS
       await loadFiles();
+      const projectResult = await db.readFile(`/data/${language}/project.json`);
+      if (projectResult.fileContent) {
+        try {
+          const meta = JSON.parse(sanitizeContent(projectResult.fileContent));
+          setProject({
+            currentStage: meta.currentStage as WorkflowStage,
+            modelConfig: meta.modelConfig,
+            currentIteration: meta.currentIteration,
+            cumulativeSelectSize: meta.cumulativeSelectSize,
+          });
+        } catch {
+          logger.warn('[useProjectDB] project.json corrupt after snapshot restore, resetting');
+          setProject(null);
+        }
+        try {
+          const cyclesResult = await db.readFile(`/data/${language}/cycles.json`);
+          if (cyclesResult.fileContent) {
+            const cyclesArr = JSON.parse(sanitizeContent(cyclesResult.fileContent));
+            setCycleHistory(Array.isArray(cyclesArr) ? cyclesArr.map(cycleRowToSnapshot) : []);
+          } else {
+            setCycleHistory([]);
+          }
+        } catch {
+          logger.warn('[useProjectDB] cycles.json corrupt after snapshot restore, resetting');
+          setCycleHistory([]);
+        }
+        try {
+          const annotationsResult = await db.readFile(`/data/${language}/annotations.json`);
+          if (!annotationsResult.fileContent) {
+            await db.saveFile(`/data/${language}/annotations.json`, JSON.stringify([]));
+          }
+        } catch {
+          logger.warn('[useProjectDB] Failed to load annotations.json after snapshot restore, resetting');
+        }
+      }
     } catch (err) {
       logger.error("Failed to restore snapshot:", err);
     }
