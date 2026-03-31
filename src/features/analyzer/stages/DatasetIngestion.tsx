@@ -3,12 +3,6 @@ import type { fileData, FileRole } from "../../../lib/types";
 import { formatSize } from "../../../lib/format-utils";
 import { UploadIcon, FileIcon, TrashIcon, ArrowIcon, SnapshotIcon } from "../../../components/ui/icons";
 
-// ============================================================
-// Dataset Ingestion Stage
-// Upload files, assign roles, view validation status
-// ============================================================
-
-
 interface DatasetIngestionProps {
   files: fileData[];
   onUpload: (fileList: FileList | null) => void;
@@ -38,12 +32,10 @@ export function DatasetIngestion({
   const visibleFiles = files.filter((f) => !hiddenNames.has(f.fileName));
   const annotatedCount = visibleFiles.filter((f) => f.fileRole === "annotated").length;
   const unannotatedCount = visibleFiles.filter((f) => f.fileRole === "unannotated").length;
-  const evaluationCount = visibleFiles.filter((f) => f.fileRole === "evaluation").length;
   const hasRequiredFiles = annotatedCount > 0 && unannotatedCount > 0;
 
   return (
     <div className="flex flex-col gap-0">
-
 
       {/* Upload zone */}
       <UploadZone onUpload={onUpload} isUploading={isUploading} pyodideReady={pyodideReady} />
@@ -54,7 +46,6 @@ export function DatasetIngestion({
           <div className="flex items-center gap-4">
             <RoleCount label="Annotated" count={annotatedCount} color="text-primary" />
             <RoleCount label="Unannotated" count={unannotatedCount} color="text-foreground" />
-            <RoleCount label="Evaluation" count={evaluationCount} color="text-muted-foreground" />
           </div>
           <span className="font-mono text-[10px] text-muted-foreground/70">
             {files.length} total
@@ -72,8 +63,8 @@ export function DatasetIngestion({
               <FileRow
                 key={file.filePath}
                 file={file}
-                  onAssignRole={onAssignRole}
-                  onRemove={onRemoveFile}
+                onAssignRole={onAssignRole}
+                onRemove={onRemoveFile}
               />
             ))}
           </div>
@@ -124,7 +115,7 @@ function UploadZone({
   onUpload,
   isUploading,
   pyodideReady,
-  }: {
+}: {
   onUpload: (files: FileList | null) => void;
   isUploading: boolean;
   pyodideReady: boolean;
@@ -213,7 +204,7 @@ function FileRow({
   onAssignRole: (filePath: string, role: FileRole) => void;
   onRemove: (filePath: string) => void;
 }) {
-  const extension = (file.fileName ?? '').split(".").pop()?.toLowerCase() || "";
+  const extension = (file.fileName ?? "").split(".").pop()?.toLowerCase() || "";
 
   return (
     <div className="group flex items-center gap-4 px-6 py-3.5 hover:bg-secondary/5 transition-colors">
@@ -246,7 +237,6 @@ function FileRow({
         </option>
         <option value="annotated" className="bg-card text-foreground">Annotated</option>
         <option value="unannotated" className="bg-card text-foreground">Unannotated</option>
-        <option value="evaluation" className="bg-card text-foreground">Evaluation</option>
       </select>
 
       {/* Remove button */}

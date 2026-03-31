@@ -5,13 +5,8 @@ declare global {
   }
 }
 import type { ModelConfig, QueryStrategy } from "../../../lib/types";
-import { ArrowIcon, Tooltip, SnapshotIcon, UploadSmallIcon } from "../../../components/ui";
+import { ArrowIcon, Tooltip, SnapshotIcon, UploadSmallIcon, DiceIcon} from "../../../components/ui";
 import { useEffect, useRef } from "react";
-
-// ============================================================
-// Model Configuration Stage
-// Set active learning parameters before training
-// ============================================================
 
 interface ModelConfigProps {
   config: ModelConfig;
@@ -21,7 +16,11 @@ interface ModelConfigProps {
   onReadSnapshot: (snapshotJson: string) => Promise<void>;
 }
 
+const SEED_MAX = 4_294_967_295; // 2^32 - 1
 
+function randomSeed(): number {
+  return Math.floor(Math.random() * (SEED_MAX + 1));
+}
 
 // Strategy descriptions for tooltips
 const STRATEGY_INFO: Record<QueryStrategy, { label: string; description: string }> = {
@@ -62,12 +61,14 @@ export function ModelConfigStage({
     reader.readAsText(file);
     e.target.value = "";
   };
+
   // Set global language variable on window whenever targetLanguage changes
   useEffect(() => {
     if (typeof window !== "undefined" && config.targetLanguage) {
       window.language = config.targetLanguage;
     }
   }, [config.targetLanguage]);
+
   const updateField = <K extends keyof ModelConfig>(
     key: K,
     value: ModelConfig[K]
@@ -80,7 +81,7 @@ export function ModelConfigStage({
 
   const activeStrategy = STRATEGY_INFO[config.queryStrategy];
   const canStart = config.targetLanguage.trim().length > 0;
-
+  const isRandomSeed = config.randomSeed === null;
 
   return (
     <div className="flex flex-col gap-0">
@@ -115,7 +116,7 @@ export function ModelConfigStage({
 
       {/* Config form */}
       <div className="px-6 py-6 flex flex-col gap-7 border-b border-border/20">
-        {/* Two-column row for increment + iterations */}
+        {/* Two-column row: increment size + seed */}
         <div className="grid grid-cols-2 gap-5">
           {/* Increment size */}
           <div className="flex flex-col gap-2.5">
@@ -129,10 +130,7 @@ export function ModelConfigStage({
               type="number"
               value={config.incrementSize}
               onChange={(e) =>
-                updateField(
-                  "incrementSize",
-                  Math.max(1, Number(e.target.value))
-                )
+                updateField("incrementSize", Math.max(1, Number(e.target.value)))
               }
               min={1}
               className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
@@ -142,25 +140,73 @@ export function ModelConfigStage({
             </p>
           </div>
 
-          {/* Iterations */}
+          {/* Seed */}
           <div className="flex flex-col gap-2.5">
             <div className="flex items-center gap-2">
               <label className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
-                Iterations
+                Seed
               </label>
-              <Tooltip text="Total number of annotation cycles. After each cycle the model retrains and selects new uncertain samples." />
+              <Tooltip text="Controls the train/test split of your annotated data. Leave as random for most use cases. Fix a value to reproduce the exact same split across runs." />
             </div>
-            <input
-              type="number"
-              value={config.iterations}
-              onChange={(e) =>
-                updateField("iterations", Math.max(1, Number(e.target.value)))
-              }
-              min={1}
-              className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
-            />
+
+            {/* Input row with action buttons */}
+            <div className="flex items-center gap-1.5">
+              <div className="relative flex-1">
+                <input
+                  type={isRandomSeed ? "text" : "number"}
+                  value={isRandomSeed ? "" : config.randomSeed!}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === "") {
+                      updateField("randomSeed", null);
+                    } else {
+                      const n = Math.min(SEED_MAX, Math.max(0, Math.trunc(Number(raw))));
+                      updateField("randomSeed", n);
+                    }
+                  }}
+                  placeholder="random"
+                  min={0}
+                  max={SEED_MAX}
+                  step={1}
+                  className={`w-full bg-card border rounded-lg px-4 py-3 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors ${
+                    isRandomSeed
+                      ? "border-border/15 text-muted-foreground/40 placeholder:text-muted-foreground/40 italic"
+                      : "border-border/20 text-foreground"
+                  }`}
+                />
+                {/* "random" badge overlay when no seed is set */}
+                {isRandomSeed && (
+                  <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                    <span className="font-mono text-[10px] text-muted-foreground/40 uppercase tracking-widest italic">
+                      random
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Roll a random seed and lock it */}
+              <button
+                onClick={() => updateField("randomSeed", randomSeed())}
+                className="p-2.5 rounded-lg border border-border/20 bg-card text-muted-foreground/50 hover:text-foreground hover:border-primary/30 hover:bg-primary/5 transition-all"
+                title="Roll a random seed"
+              >
+                <DiceIcon className="w-4 h-4" />
+              </button>
+
+              {/* Clear back to random — only visible when a seed is locked */}
+              {!isRandomSeed && (
+                <button
+                  onClick={() => updateField("randomSeed", null)}
+                  className="p-2.5 rounded-lg border border-border/20 bg-card text-muted-foreground/40 hover:text-red-400 hover:border-red-400/30 hover:bg-red-400/5 transition-all"
+                  title="Clear seed (use random each cycle)"
+                >
+                  <span className="font-mono text-xs leading-none">✕</span>
+                </button>
+              )}
+            </div>
+
             <p className="font-mono text-[11px] text-muted-foreground/70">
-              Train-annotate-retrain rounds
+              {isRandomSeed ? "New random split each cycle" : "Range: 0 – 4,294,967,295"}
             </p>
           </div>
         </div>
@@ -176,21 +222,19 @@ export function ModelConfigStage({
 
           {/* Strategy selector as segmented control */}
           <div className="flex gap-1 p-1 bg-background border border-border/15 rounded-lg">
-            {(Object.keys(STRATEGY_INFO) as QueryStrategy[]).map(
-              (strategy) => (
-                <button
-                  key={strategy}
-                  onClick={() => updateField("queryStrategy", strategy)}
-                  className={`flex-1 px-3 py-2.5 rounded-md font-mono text-[12px] transition-all ${
-                    config.queryStrategy === strategy
-                      ? "bg-primary text-primary-foreground font-semibold shadow-sm"
-                      : "text-muted-foreground/70 hover:text-foreground hover:bg-secondary/10"
-                  }`}
-                >
-                  {STRATEGY_INFO[strategy].label.split(" ")[0]}
-                </button>
-              )
-            )}
+            {(Object.keys(STRATEGY_INFO) as QueryStrategy[]).map((strategy) => (
+              <button
+                key={strategy}
+                onClick={() => updateField("queryStrategy", strategy)}
+                className={`flex-1 px-3 py-2.5 rounded-md font-mono text-[12px] transition-all ${
+                  config.queryStrategy === strategy
+                    ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                    : "text-muted-foreground/70 hover:text-foreground hover:bg-secondary/10"
+                }`}
+              >
+                {STRATEGY_INFO[strategy].label.split(" ")[0]}
+              </button>
+            ))}
           </div>
 
           {/* Active strategy description */}

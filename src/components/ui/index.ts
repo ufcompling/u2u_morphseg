@@ -15,4 +15,5 @@ export {
   SpinnerIcon,
   LoopIcon,
   SnapshotIcon,
+  DiceIcon,
 } from "./icons";

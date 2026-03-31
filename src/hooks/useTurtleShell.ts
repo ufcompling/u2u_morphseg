@@ -1,30 +1,3 @@
-/**
- * useTurtleShell.ts
- * Location: src/hooks/useTurtleShell.ts
- *
- * Purpose:
- *   Compositor hook for the TurtleShell active learning workflow.
- *   Wires together focused subsystem hooks and owns the cross-cutting
- *   lifecycle logic (cycle transitions, data flow, state restore).
- *
- *   Subsystem hooks:
- *     useProjectDB()            → IndexedDB persistence
- *     usePyodideWorker()        → CRF training/inference via Web Worker
- *     useTrainingOrchestrator() → Training cycle + inference execution
- *     useAnnotationState()      → Word list + boundary editing
- *
- *   Cycle data flow (new order: training → results → annotation):
- *     After training completes, trainingResult is set immediately so the
- *     results page has metrics to display before the user annotates.
- *     After the user submits annotations:
- *       1. Boundary decisions are converted to .tgt lines
- *       2. Those lines are appended to the "annotated" file in IndexedDB
- *       3. The "unannotated" file is replaced with the residual
- *       4. The next cycle auto-starts (training stage)
- *     So cycle N+1 naturally reads a larger training set and smaller pool.
- *
- */
-
 import { useState, useCallback, useRef, useEffect } from "react";
 import {
   type WorkflowStage,
@@ -83,7 +56,6 @@ export interface UseTurtleshellReturn {
   // Training
   trainingSteps: TrainingStep[];
   currentIteration: number;
-  totalIterations: number;
   isTrainingComplete: boolean;
   handleStartTraining: () => Promise<void>;
 
@@ -501,7 +473,6 @@ export function useTurtleshell(): UseTurtleshellReturn {
     // Training
     trainingSteps: training.trainingSteps,
     currentIteration,
-    totalIterations: modelConfig?.iterations ?? DEFAULT_MODEL_CONFIG.iterations,
     isTrainingComplete: training.isTrainingComplete,
     handleStartTraining,
 

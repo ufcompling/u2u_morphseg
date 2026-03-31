@@ -157,7 +157,6 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
         <TrainingProgressStage
           steps={ts.trainingSteps}
           currentIteration={ts.currentIteration}
-          totalIterations={ts.totalIterations}
           isComplete={ts.isTrainingComplete}
           onContinue={() => ts.goToStage("results")}
           onSnapshot={ts.handleDownloadSnapshot}
@@ -172,8 +171,8 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           onSkip={ts.handleSkipAnnotation}
           totalWords={ts.totalAnnotationWords}
           currentIteration={ts.currentIteration}
-          totalIterations={ts.totalIterations}
           onSnapshot={ts.handleDownloadSnapshot}
+          onReadSnapshot={ts.handleReadSnapshot}
         />
       );
     case "results":
