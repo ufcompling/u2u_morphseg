@@ -209,7 +209,7 @@ function ValidationPanel({
   annotatedFiles,
   unannotatedFiles,
   validationMap,
-  delimiter,
+  // delimiter, TOOD: use delimiter in the future.
 }: {
   annotatedFiles: fileData[];
   unannotatedFiles: fileData[];
