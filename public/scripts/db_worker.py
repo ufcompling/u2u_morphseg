@@ -124,6 +124,11 @@ def read_file(file_path: str, detect_text: bool = True, encoding: str = 'utf-8')
 
     # Debug: print contents of /data and /data/English
     if not os.path.exists(file_path):
+        # project.json/cycles.json/annotations.json are initialized lazily;
+        lazy_files = ['/project.json', '/cycles.json', '/annotations.json']        
+        if any(file_path.endswith(lazy) for lazy in lazy_files):
+            return json.dumps({'type': 'text', 'content': ''})
+
         print(f"[db_worker] File not found: {file_path}")
         raise FileNotFoundError(f"File '{file_path}' not found in /data directory")
 
