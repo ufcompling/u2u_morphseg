@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { TrainingResult, CycleSnapshot } from "../../../lib/types";
+import type { TrainingResult, CycleSnapshot, QueryStrategy } from "../../../lib/types";
 import { DownloadIcon, InferenceIcon, PlayIcon, SpinnerIcon, LoopIcon } from "../../../components/ui/icons";
 import { Tooltip } from "../../../components/ui/tooltip";
 
@@ -7,10 +7,18 @@ import { Tooltip } from "../../../components/ui/tooltip";
 // Results & Export Stage
 // ============================================================
 
+// Strategy info for tooltips
+const STRATEGY_INFO: Record<QueryStrategy, { label: string }> = {
+  uncertainty: { label: "Uncertainty Sampling" },
+  margin: { label: "Margin Sampling" },
+  random: { label: "Random Sampling" },
+};
+
 interface ResultsExportProps {
   result: TrainingResult | null;
   previousResult: TrainingResult | null;
   cycleHistory: CycleSnapshot[];
+  queryStrategy: QueryStrategy;
   isRunningInference: boolean;
   inferenceComplete: boolean;
   inferenceStats: { totalWords: number; processedWords: number } | null;
@@ -28,6 +36,7 @@ export function ResultsExportStage({
   result,
   // previousResult, //TODO:: DATABASE
   cycleHistory,
+  queryStrategy,
   isRunningInference,
   inferenceComplete,
   inferenceStats,
@@ -42,6 +51,19 @@ export function ResultsExportStage({
 }: ResultsExportProps) {
   // Selected cycle index for timeline navigation
   const [selectedCycleIndex, setSelectedCycleIndex] = useState<number | null>(null);
+
+  const getTooltip = (label: string) => {
+    switch (label) {
+      case "Increment":
+        return `Samples selected via ${STRATEGY_INFO[queryStrategy].label} for the next annotation cycle.`;
+      case "Residual":
+        return "Remaining unannotated data the model has not yet been asked to label.";
+      case "Evaluation":
+        return "Per-word predictions with confidence scores from the evaluation set.";
+      default:
+        return "";
+    }
+  };
 
   if (!result) {
     return (
@@ -284,9 +306,9 @@ export function ResultsExportStage({
             Export
           </span>
           <div className="flex gap-2">
-            <ExportChip label="Increment" onClick={onDownloadIncrement} />
-            <ExportChip label="Residual" onClick={onDownloadResidual} />
-            <ExportChip label="Evaluation" onClick={onDownloadEvaluation} />
+            <ExportChip label="Increment" tip={getTooltip("Increment")} onClick={onDownloadIncrement} />
+            <ExportChip label="Residual" tip={getTooltip("Residual")} onClick={onDownloadResidual} />
+            <ExportChip label="Evaluation" tip={getTooltip("Evaluation")} onClick={onDownloadEvaluation} />
           </div>
         </div>
       </div>
@@ -395,17 +417,7 @@ function SubMetric({ label, value, delta }: { label: string; value: number; delt
   );
 }
 
-const EXPORT_TOOLTIPS: Record<string, string> = {
-  Increment:
-    "Newly annotated data from this cycle, ready to merge into your training set.",
-  Residual:
-    "Remaining unannotated data the model has not yet been asked to label.",
-  Evaluation:
-    "Per-word predictions with confidence scores from the evaluation set.",
-};
-
-function ExportChip({ label, onClick }: { label: string; onClick: () => void }) {
-  const tip = EXPORT_TOOLTIPS[label];
+function ExportChip({ label, tip, onClick }: { label: string; tip: string; onClick: () => void }) {
   return (
     <div className="flex items-center gap-1.5">
       <button
@@ -417,7 +429,7 @@ function ExportChip({ label, onClick }: { label: string; onClick: () => void }) 
           {label}
         </span>
       </button>
-      {tip && <Tooltip text={tip} />}
+      <Tooltip text={tip} />
     </div>
   );
 }

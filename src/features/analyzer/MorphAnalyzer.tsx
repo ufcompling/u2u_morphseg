@@ -182,6 +182,7 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           result={ts.trainingResult}
           previousResult={ts.previousResult}
           cycleHistory={ts.cycleHistory}
+          queryStrategy={ts.modelConfig.queryStrategy}
           onDownloadIncrement={ts.handleDownloadIncrement}
           onDownloadResidual={ts.handleDownloadResidual}
           onDownloadEvaluation={ts.handleDownloadEvaluation}
