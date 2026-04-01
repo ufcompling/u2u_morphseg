@@ -7,7 +7,7 @@ interface Props {
 
 export function MorphAnalyzerPage({ onBack: _onBack }: Props) {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 md:p-8 relative">
+    <div className="relative">
       <TurtleShellBackground />
       <MorphAnalyzer />
     </div>

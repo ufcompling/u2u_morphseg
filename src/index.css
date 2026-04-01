@@ -58,8 +58,12 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    scrollbar-gutter: stable; /* reserves scrollbar space so layout never shifts when it appears */
+  }
   body {
     @apply bg-background text-foreground;
+    overflow-y: scroll; /* fallback for browsers without scrollbar-gutter support */
   }
   input[type="number"]::-webkit-inner-spin-button,
   input[type="number"]::-webkit-outer-spin-button {
