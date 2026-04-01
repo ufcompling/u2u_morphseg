@@ -174,6 +174,7 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
       delta: CRF_FEATURE_DELTA,
       selectSize: cumulativeSelectSize.current,
       randomSeed: resolvedSeed,
+      delimiter: modelConfig.delimiter,
     };
 
     try {

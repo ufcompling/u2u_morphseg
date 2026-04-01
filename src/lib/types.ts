@@ -155,6 +155,11 @@ export interface TrainingCycleConfig {
    * Always a concrete number by the time it hits the worker.
    */
   randomSeed: number;
+  /**
+   * Character used to separate morphemes in annotated files, e.g. "!" in "un!happy".
+   * Passed through to Python so the CRF pipeline parses boundaries correctly.
+   */
+  delimiter: string;
 }
 
 /** Result returned from the worker after a successful cycle. */
