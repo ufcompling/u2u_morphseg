@@ -592,6 +592,7 @@ export function useProjectDB(): UseProjectDBReturn {
       word: r.word,
       confidence: r.confidence,
       boundaries: r.boundaries,
+      confirmed: r.confirmed,
     }));
   }, [pyodideReady]);
 

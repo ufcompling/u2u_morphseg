@@ -87,11 +87,16 @@ export function AnnotationWorkspaceStage({
   // Keep a ref so the async FileReader.onload always sees the latest words
   // without needing words/annotatedSet in useCallback deps.
   const wordsRef = useRef(words);
+  const prevWordIdsRef = useRef<string>('');
   useEffect(() => {
     wordsRef.current = words;
-    // Clear stale debug/match info when the word batch changes (new cycle)
-    setGoldMatchCount(null);
-    setGoldDebug(null);
+    const wordIdsKey = words.map(w => w.id).join('|');
+    if (wordIdsKey !== prevWordIdsRef.current) {
+      prevWordIdsRef.current = wordIdsKey;
+      setAnnotatedSet(new Set(words.filter(w => w.confirmed).map(w => w.id)));
+      setGoldMatchCount(null);
+      setGoldDebug(null);
+    }
   }, [words]);
 
   const currentWord = words[focusIndex] ?? null;
@@ -510,16 +515,18 @@ function WordEditor({
     onUpdateBoundaries(word.id, newBoundaries);
   };
 
-  // Build morpheme preview
-  const morphemes: string[] = [];
+  // Build morpheme preview, filtering out empty/whitespace morphemes
+  let morphemes: string[] = [];
   let start = 0;
   const sorted: number[] = [...boundarySet].sort((a, b) => a - b);
   for (const b of sorted) {
-    morphemes.push(word.word.slice(start, b + 1));
+    const m = word.word.slice(start, b + 1);
+    if (m.trim().length > 0) morphemes.push(m);
     start = b + 1;
   }
   if (start < word.word.length) {
-    morphemes.push(word.word.slice(start));
+    const m = word.word.slice(start);
+    if (m.trim().length > 0) morphemes.push(m);
   }
 
   return (
