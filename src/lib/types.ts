@@ -43,7 +43,7 @@ export interface fileData {
 
 // --- Model Configuration ---
 
-export type QueryStrategy = "uncertainty" | "random" | "margin";
+export type QueryStrategy = "uncertainty" | "random" ;
 
 export interface ModelConfig {
   targetLanguage: string;
