@@ -10,7 +10,6 @@ import { Tooltip } from "../../../components/ui/tooltip";
 // Strategy info for tooltips
 const STRATEGY_INFO: Record<QueryStrategy, { label: string }> = {
   uncertainty: { label: "Uncertainty Sampling" },
-  margin: { label: "Margin Sampling" },
   random: { label: "Random Sampling" },
 };
 

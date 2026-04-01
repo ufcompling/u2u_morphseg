@@ -5,7 +5,7 @@ declare global {
   }
 }
 import type { ModelConfig, QueryStrategy } from "../../../lib/types";
-import { ArrowIcon, Tooltip, SnapshotIcon, UploadSmallIcon, DiceIcon } from "../../../components/ui";
+import { ArrowIcon, Tooltip, UploadSmallIcon, DiceIcon } from "../../../components/ui";
 import { useEffect, useRef, useState } from "react";
 
 // ============================================================
@@ -17,7 +17,6 @@ interface ModelConfigProps {
   config: ModelConfig;
   onUpdateConfig: (config: ModelConfig) => void;
   onNext: () => void;
-  onSnapshot: () => void;
   onReadSnapshot: (snapshotJson: string) => Promise<void>;
 }
 
@@ -35,11 +34,6 @@ const STRATEGY_INFO: Record<QueryStrategy, { label: string; description: string 
     description:
       "Selects samples where the model is least confident about its prediction. Best for rapidly improving weak areas.",
   },
-  margin: {
-    label: "Margin Sampling",
-    description:
-      "Selects samples where the gap between the top two predictions is smallest. Good for resolving ambiguous cases.",
-  },
   random: {
     label: "Random Sampling",
     description:
@@ -51,7 +45,6 @@ export function ModelConfigStage({
   config,
   onUpdateConfig,
   onNext,
-  onSnapshot,
   onReadSnapshot,
 }: ModelConfigProps) {
   const snapshotInputRef = useRef<HTMLInputElement>(null);
@@ -375,14 +368,6 @@ export function ModelConfigStage({
           >
             <UploadSmallIcon />
             <span>Restore Snapshot</span>
-          </button>
-          <button
-            onClick={onSnapshot}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
-            title="Download a snapshot of your current work"
-          >
-            <SnapshotIcon />
-            <span>Snapshot</span>
           </button>
         </div>
       </footer>

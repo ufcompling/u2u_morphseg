@@ -371,7 +371,6 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           config={ts.modelConfig}
           onUpdateConfig={ts.setModelConfig}
           onNext={() => ts.goToStage("ingestion")}
-          onSnapshot={ts.handleDownloadSnapshot}
           onReadSnapshot={ts.handleReadSnapshot}
         />
       );
@@ -386,7 +385,6 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           onStartTraining={ts.handleStartTraining}
           isUploading={ts.isUploading}
           pyodideReady={ts.pyodideReady}
-          onSnapshot={ts.handleDownloadSnapshot}
           delimiter={ts.modelConfig.delimiter}
         />
       );
@@ -397,7 +395,6 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           currentIteration={ts.currentIteration}
           isComplete={ts.isTrainingComplete}
           onContinue={() => ts.goToStage("results")}
-          onSnapshot={ts.handleDownloadSnapshot}
         />
       );
     case "annotation":
