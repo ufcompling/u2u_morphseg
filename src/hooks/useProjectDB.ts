@@ -352,6 +352,23 @@ export function useProjectDB(): UseProjectDBReturn {
       return;
     }
     try {
+      // Extract language from snapshot's project.json bytes BEFORE any path-dependent ops.
+      // window.language may not be set yet (user hasn't gone through ModelConfig), which
+      // causes all paths to resolve to /data//... — this sets it first.
+      try {
+        const snap = JSON.parse(snapshotJson) as Record<string, number[]>;
+        if (snap['project.json']) {
+          const text = new TextDecoder().decode(new Uint8Array(snap['project.json']));
+          const meta = JSON.parse(text);
+          const targetLanguage: string = meta?.modelConfig?.targetLanguage;
+          if (targetLanguage) {
+            (window as any).language = targetLanguage;
+            setLanguage(targetLanguage);
+          }
+        }
+      } catch (langErr) {
+        logger.warn('[useProjectDB] Could not extract language from snapshot:', langErr);
+      }
       await db.readSnapshot(snapshotJson);
       // Reload all files and project state from the restored VFS
       await loadFiles();
@@ -645,7 +662,6 @@ export function useProjectDB(): UseProjectDBReturn {
     downloadSnapshot,
     readSnapshot,
     clearAll,
-    
   };
 }
 

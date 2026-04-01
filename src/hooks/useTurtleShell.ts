@@ -504,7 +504,29 @@ export function useTurtleshell(): UseTurtleshellReturn {
     handleNewCycle,
     handleStartOver,
     handleDownloadSnapshot: projectDB.downloadSnapshot,
-    handleReadSnapshot: projectDB.readSnapshot,
+    handleReadSnapshot: async (snapshotJson: string) => {
+      await projectDB.readSnapshot(snapshotJson);
+      // Sync React language state from window.language set inside readSnapshot
+      const restoredLang = (window as any).language as string | undefined;
+      if (restoredLang && restoredLang !== language) {
+        handleLanguageChange(restoredLang);
+      }
+      // Parse project meta directly from snapshot bytes to avoid stale React state.
+      // (projectDB.project reflects the old state until the next React re-render)
+      try {
+        const snap = JSON.parse(snapshotJson) as Record<string, number[]>;
+        if (snap['project.json']) {
+          const text = new TextDecoder().decode(new Uint8Array(snap['project.json']));
+          const meta = JSON.parse(text);
+          if (meta?.currentStage === 'annotation') {
+            const words = await projectDB.loadAnnotations(meta.currentIteration);
+            if (words.length > 0) {
+              annotations.setAnnotationWords(words);
+            }
+          }
+        }
+      } catch {}
+    },
 
     // Inference
     isRunningInference: training.isRunningInference,
