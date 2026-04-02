@@ -38,7 +38,11 @@ export function useAnnotationState(): UseAnnotationStateReturn {
     (wordId: string, boundaryIndices: number[]) => {
       const boundaries: MorphemeBoundary[] = boundaryIndices.map((index) => ({ index }));
       setAnnotationWordsInternal((prev) =>
-        prev.map((w) => (w.id === wordId ? { ...w, boundaries } : w))
+        prev.map((w) =>
+          w.id === wordId
+            ? { ...w, boundaries, confirmed: true }
+            : w
+        )
       );
     },
     []

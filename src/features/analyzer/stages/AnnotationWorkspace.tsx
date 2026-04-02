@@ -105,12 +105,14 @@ export function AnnotationWorkspaceStage({
 
   const handleConfirm = useCallback(() => {
     if (!currentWord) return;
+    const boundaryIndices = currentWord.boundaries.map((b) => b.index);
+    onUpdateBoundaries(currentWord.id, boundaryIndices);
     setAnnotatedSet((prev) => new Set(prev).add(currentWord.id));
     // Advance to next unannotated word, or stay if all done
     if (focusIndex < words.length - 1) {
       setFocusIndex((prev) => prev + 1);
     }
-  }, [currentWord, focusIndex, words.length]);
+  }, [currentWord, focusIndex, words.length, onUpdateBoundaries]);
 
   const handlePrev = useCallback(() => {
     if (focusIndex > 0) setFocusIndex((prev) => prev - 1);
@@ -151,10 +153,12 @@ export function AnnotationWorkspaceStage({
         for (const w of currentWords) {
           const key = w.word.replace(/\s+/g, "").toLowerCase();
           const goldBoundaries = goldLookup.get(key);
-          if (goldBoundaries !== undefined) {
-            onUpdateBoundaries(w.id, goldBoundaries);
-            matched++;
-          }
+          const boundaryIndices =
+            goldBoundaries !== undefined
+              ? goldBoundaries
+              : w.boundaries.map((b) => b.index);
+          onUpdateBoundaries(w.id, boundaryIndices);
+          if (goldBoundaries !== undefined) matched++;
         }
 
         // Confirm ALL words regardless of match — matched get gold boundaries,
@@ -192,8 +196,13 @@ export function AnnotationWorkspaceStage({
 
   /** Confirm all words at once using current boundaries (CRF predictions as-is). */
   const handleConfirmAll = useCallback(() => {
-    setAnnotatedSet(new Set(wordsRef.current.map((w) => w.id)));
-  }, []);
+    const currentWords = wordsRef.current;
+    currentWords.forEach((w) => {
+      const boundaryIndices = w.boundaries.map((b) => b.index);
+      onUpdateBoundaries(w.id, boundaryIndices);
+    });
+    setAnnotatedSet(new Set(currentWords.map((w) => w.id)));
+  }, [onUpdateBoundaries]);
 
   return (
     <div className="flex flex-col gap-0">
