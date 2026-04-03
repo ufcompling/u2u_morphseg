@@ -165,8 +165,8 @@ export function DatasetIngestion({
             statusMessage.isError
               ? "text-red-400/70"
               : canStartTraining
-                ? "text-primary/60"
-                : "text-muted-foreground/40"
+                ? "text-primary/70"
+                : "text-muted-foreground/70"
           }`}
         >
           {statusMessage.text}

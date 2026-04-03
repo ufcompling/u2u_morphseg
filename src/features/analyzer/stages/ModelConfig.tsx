@@ -228,7 +228,7 @@ export function ModelConfigStage({
             </div>
           </div>
 
-          <p className="font-mono text-[11px] text-muted-foreground/50">
+          <p className="font-mono text-[11px] text-muted-foreground/70">
             Monomorphemic words without the delimiter are valid
           </p>
         </div>
@@ -271,7 +271,7 @@ export function ModelConfigStage({
                   <span className="font-mono text-[11px] text-muted-foreground/40 uppercase tracking-widest">
                     Random
                   </span>
-                  <span className="font-mono text-[10px] text-muted-foreground/25">
+                  <span className="font-mono text-[10px] text-muted-foreground/50">
                     · new split each cycle
                   </span>
                 </div>
@@ -298,7 +298,7 @@ export function ModelConfigStage({
               )}
               <button
                 onClick={() => updateField("randomSeed", rollSeed())}
-                className="p-2.5 rounded-lg border border-border/20 bg-card text-muted-foreground/50 hover:text-foreground hover:border-primary/30 hover:bg-primary/5 transition-all"
+                className="p-2.5 rounded-lg border border-border/20 bg-card text-muted-foreground/70 hover:text-foreground hover:border-primary/30 hover:bg-primary/5 transition-all"
                 title="Roll a random seed and lock it"
               >
                 <DiceIcon className="w-4 h-4" />
@@ -306,14 +306,14 @@ export function ModelConfigStage({
               {!isRandom && (
                 <button
                   onClick={() => updateField("randomSeed", null)}
-                  className="p-2.5 rounded-lg border border-border/20 bg-card text-muted-foreground/40 hover:text-red-400 hover:border-red-400/30 hover:bg-red-400/5 transition-all"
+                  className="p-2.5 rounded-lg border border-border/20 bg-card text-muted-foreground/70 hover:text-red-400 hover:border-red-400/30 hover:bg-red-400/5 transition-all"
                   title="Clear seed — use random each cycle"
                 >
                   <span className="font-mono text-xs leading-none">✕</span>
                 </button>
               )}
             </div>
-            <p className="font-mono text-[11px] text-muted-foreground/50">
+            <p className="font-mono text-[11px] text-muted-foreground/70">
               {isRandom ? "Click 🎲 to lock a specific seed" : `Locked · 0 – ${SEED_MAX.toLocaleString()}`}
             </p>
           </div>
