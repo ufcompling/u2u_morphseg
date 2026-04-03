@@ -53,6 +53,8 @@ export function ModelConfigStage({
   // bug that happens when config state forces non-empty on every keystroke.
   const [delimInput, setDelimInput] = useState(config.delimiter ?? "!");
   const [delimWarning, setDelimWarning] = useState(false);
+  const [langInput, setLangInput] = useState(config.targetLanguage ?? "");
+  useEffect(() => { setLangInput(config.targetLanguage ?? ""); }, [config.targetLanguage]);
 
   useEffect(() => {
     if (typeof window !== "undefined" && config.targetLanguage) {
@@ -93,11 +95,16 @@ export function ModelConfigStage({
   const handleNext = () => {
     if (!delimInput.trim()) { setDelimWarning(true); return; }
     setDelimWarning(false);
+    // Flush language if the user never blurred the field
+    const lang = langInput.trim();
+    if (lang && lang !== config.targetLanguage) {
+      updateField("targetLanguage", lang);
+    }
     onNext();
   };
 
   const activeStrategy = STRATEGY_INFO[config.queryStrategy];
-  const canStart = config.targetLanguage.trim().length > 0;
+  const canStart = langInput.trim().length > 0;
   const isRandom = config.randomSeed === null;
   const isCustomDelim = !DELIMITER_PRESETS.some((d) => d === delimInput);
 
@@ -122,10 +129,14 @@ export function ModelConfigStage({
             </legend>
             <Tooltip text="The language of your morphological data. This helps the model select appropriate features for segmentation." />
           </div>
-          <input
+        <input
             type="text"
-            value={config.targetLanguage}
-            onChange={(e) => updateField("targetLanguage", e.target.value)}
+            value={langInput}
+            onChange={(e) => setLangInput(e.target.value)}
+            onBlur={(e) => {
+              const val = e.target.value.trim();
+              if (val) updateField("targetLanguage", val);
+            }}
             placeholder="e.g. Swahili, Turkish, Zulu..."
             className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
           />

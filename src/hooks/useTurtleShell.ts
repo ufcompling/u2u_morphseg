@@ -94,17 +94,29 @@ export interface UseTurtleshellReturn {
 
 export function useTurtleshell(): UseTurtleshellReturn {
   const [language, setLanguageState] = useState<string>("");
+  // Track the stage here so handleLanguageChange / setModelConfig can read it
+  // without a stale closure. This ref is kept in sync with currentStage below.
+  const currentStageRef = useRef<WorkflowStage>("config");
 
   const handleLanguageChange = useCallback((lang: string) => {
     setLanguageState(lang);
-    setLanguage(lang);
+    // Only push to the worker (which sets window.language and the VFS path
+    // prefix) once the user has left the config stage. While they are still
+    // typing the language name we must not create /data/<partial>/ dirs.
+    if (currentStageRef.current !== "config") {
+      setLanguage(lang);
+    }
   }, []);
 
   const projectDB = useProjectDB();
-  const [rolesMap, setRolesMap] = useState<Record<string, FileRole | null>>({});
+  const [rolesMap, setRolesMap] = useState<Record<string, FileRole | null>>({});  
 
-  // Sync language to worker on mount and whenever it changes
-  useEffect(() => { setLanguage(language); }, [language]);
+  // Sync language to worker ONLY when past the config stage.
+  useEffect(() => {
+    if (currentStageRef.current !== "config") {
+      setLanguage(language);
+    }
+  }, [language]);
 
   const { pyodideReady, pyodideLoading, pyodideError, modelRestored, runCycle, runInference, wipeVfs } =
     usePyodideWorker();
@@ -128,9 +140,18 @@ export function useTurtleshell(): UseTurtleshellReturn {
 
   const goToStage = useCallback(
   (stage: WorkflowStage) => {
+    const leavingConfig = currentStageRef.current === "config" && stage !== "config";
+    currentStageRef.current = stage;
     setCompletedStages(deriveCompletedStages(stage));
     setCurrentStage(stage);
-    projectDB.saveProjectMeta({ currentStage: stage });
+    if (leavingConfig) {
+      // First time leaving config: flush the language to the worker and persist
+      // the full model config + stage in one shot. Nothing was written before.
+      setLanguage((window as any).language ?? "");
+      projectDB.saveProjectMeta({ currentStage: stage, modelConfig: modelConfigRef.current });
+    } else {
+      projectDB.saveProjectMeta({ currentStage: stage });
+    }
   },
   [projectDB]
 );
@@ -138,13 +159,19 @@ export function useTurtleshell(): UseTurtleshellReturn {
   // ── Core state ──────────────────────────────────────────────────────────
 
   const [modelConfig, setModelConfigLocal] = useState<ModelConfig>(DEFAULT_MODEL_CONFIG);
+  const modelConfigRef = useRef<ModelConfig>(DEFAULT_MODEL_CONFIG);
   const [currentIteration, setCurrentIteration] = useState(1);
   const cumulativeSelectSize = useRef(0);
 
   const setModelConfig = useCallback(
     (config: ModelConfig) => {
       setModelConfigLocal(config);
-      projectDB.saveProjectMeta({ modelConfig: config });
+      modelConfigRef.current = config;
+      // Skip DB write while on the config stage — goToStage will do one bulk
+      // flush when the user clicks "Upload Files".
+      if (currentStageRef.current !== "config") {
+        projectDB.saveProjectMeta({ modelConfig: config });
+      }
     },
     [projectDB]
   );
@@ -157,6 +184,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
   // Sync currentStage with projectDB.project?.currentStage (e.g. after snapshot restore)
   useEffect(() => {
     if (!projectDB.project) return;
+    currentStageRef.current = projectDB.project.currentStage;
     setCurrentStage(projectDB.project.currentStage);
     setCompletedStages(deriveCompletedStages(projectDB.project.currentStage));
   }, [projectDB.project?.currentStage]);
@@ -256,8 +284,10 @@ export function useTurtleshell(): UseTurtleshellReturn {
     }
 
     setCurrentStage(p.currentStage);
+    currentStageRef.current = p.currentStage;
     setCompletedStages(deriveCompletedStages(p.currentStage));
     setModelConfigLocal(p.modelConfig);
+    modelConfigRef.current = p.modelConfig;
     setCurrentIteration(p.currentIteration);
     cumulativeSelectSize.current = p.cumulativeSelectSize;
     if (p.rolesMap) setRolesMap(p.rolesMap);
@@ -456,8 +486,10 @@ export function useTurtleshell(): UseTurtleshellReturn {
 
   const handleStartOver = useCallback(async () => {
     setCurrentStage("config");
+    currentStageRef.current = "config";
     setCompletedStages([]);
     setModelConfigLocal(DEFAULT_MODEL_CONFIG);
+    modelConfigRef.current = DEFAULT_MODEL_CONFIG;
     setCurrentIteration(1);
     cumulativeSelectSize.current = 0;
     setTrainingResult(null);
