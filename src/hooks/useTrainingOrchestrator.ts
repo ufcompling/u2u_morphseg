@@ -1,18 +1,6 @@
-/**
- * useTrainingOrchestrator.ts
- * Location: src/hooks/useTrainingOrchestrator.ts
- *
- * Purpose:
- *   Manages the CRF training cycle lifecycle: starting a cycle, tracking
- *   step progress, collecting results, and running full-corpus inference.
- *   Isolated from the rest of the workflow so new model types or query
- *   strategies can be added without touching annotation or navigation logic.
- *
- */
-
 import { useState, useCallback } from "react";
 import type {
-  StoredFile,
+  fileData,
   ModelConfig,
   TrainingStep,
   TrainingResult,
@@ -23,17 +11,18 @@ import type {
   InferenceResult,
 } from "../lib/types";
 import { INITIAL_TRAINING_STEPS, CRF_MAX_ITERATIONS, CRF_FEATURE_DELTA } from "../lib/types";
-import { getFileContent, tgtToSrc } from "../lib/format-utils";
+import { getFileContent, getFileByRole } from "../lib/format-utils";
+import { db } from "../lib/db";
 import { log } from "../lib/logger";
 import type { StepProgressCallback } from "./usePyodideWorker";
 
-const logger = log('training');
+const logger = log("training");
 
 // ── Input dependencies (provided by compositor) ─────────────────────────────
 
 export interface TrainingOrchestratorDeps {
   /** Current uploaded files with role assignments */
-  files: StoredFile[];
+  files: fileData[];
   modelConfig: ModelConfig;
   currentIteration: number;
   /** Running total of words selected across all cycles */
@@ -120,25 +109,87 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
     setTrainingSteps(INITIAL_TRAINING_STEPS);
     setIsTrainingComplete(false);
 
-    const trainTgt = getFileContent(files, "annotated");
-    const testTgt = getFileContent(files, "evaluation");
-    const selectTgt = getFileContent(files, "unannotated");
-    const selectSrc = tgtToSrc(selectTgt);
+    // remove when model accesses file data directly
+    for (const f of files) {
+      // Skip known binary artifacts that the UI shouldn't try to decode as text
+      if (
+        f.filePath &&
+        (f.filePath.endsWith(".model") ||
+          f.fileName?.toLowerCase().endsWith(".whl") ||
+          f.fileName?.toLowerCase().endsWith(".wasm"))
+      ) {
+        console.debug("[useTrainingOrchestrator] skipping binary artifact during pre-populate", f.filePath);
+        continue;
+      }
+      if ((!f.fileContent || f.fileContent.length === 0) && f.filePath) {
+        try {
+          const res = await db.readFile(f.filePath);
+          f.fileContent = res.fileContent;
+          f.fileType = res.fileType;
+          console.log("[useTrainingOrchestrator] populated file", {
+            filePath: f.filePath,
+            length: f.fileContent?.length,
+            fileType: f.fileType,
+          });
+        } catch (err) {
+          logger.warn(`readFile failed for ${f.filePath}`, err);
+        }
+      }
+    }
+
+    const annotatedFile = getFileByRole(files, "annotated");
+    const unannotatedFile = getFileByRole(files, "unannotated");
+
+    const annotatedContent = getFileContent(files, "annotated");
+    const unannotatedContent = getFileContent(files, "unannotated");
+
+// Resolve seed: null means generate a fresh random value for this cycle.
+    // The resolved seed is logged and passed to the worker so results are
+    // traceable even when the user didn't fix a seed.
+    const resolvedSeed: number =
+      modelConfig.randomSeed !== null
+        ? modelConfig.randomSeed
+        : Math.floor(Math.random() * 4_294_967_296);
+
+    // Diagnostics: log counts and abort early if unannotated pool is empty
+    const annotatedCount = (annotatedContent ?? "").split("\n").filter(Boolean).length;
+    const unannotatedCount = (unannotatedContent ?? "").split("\n").filter(Boolean).length;
+    console.debug('[training] file counts', { annotatedCount, unannotatedCount });
+    if (unannotatedCount === 0) {
+      console.warn('[training] Aborting: unannotated pool is empty');
+      setTrainingSteps((prev) =>
+        prev.map((s) =>
+          s.id === "select" ? { ...s, status: "error", detail: "Unannotated pool is empty" } : s
+        )
+      );
+      return;
+    }
 
     const cycleConfig: TrainingCycleConfig = {
-      trainTgt,
-      testTgt,
-      selectTgt,
-      selectSrc,
+      annotatedFile: annotatedFile?.fileName ?? '',
+      unannotatedFile: unannotatedFile?.fileName ?? '',
+      targetLanguage: modelConfig.targetLanguage,
       incrementSize: modelConfig.incrementSize,
       maxIterations: CRF_MAX_ITERATIONS,
       delta: CRF_FEATURE_DELTA,
       selectSize: cumulativeSelectSize.current,
+      randomSeed: resolvedSeed,
+      delimiter: modelConfig.delimiter,
     };
 
     try {
       const result = await runCycle(cycleConfig, (stepId, done, detail) => {
         updateStep(stepId, done, detail);
+      });
+
+      // Debug: surface key parts of the cycle result to help diagnose empty increments
+      console.debug("[useTrainingOrchestrator] cycle result summary", {
+        incrementWordsLen: result.incrementWords?.length ?? 0,
+        incrementContentLen: (result.incrementContent ?? "").length,
+        residualCount: result.residualCount,
+        sentIncrementSize: cycleConfig.incrementSize,
+        sentSelectSize: cycleConfig.selectSize,
+        selectPoolCount: unannotatedCount,
       });
 
       cumulativeSelectSize.current += result.incrementWords.length;
@@ -150,8 +201,8 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
       setEvaluationContent(result.evaluationContent ?? "");
 
       const totalWords =
-        selectTgt.split("\n").filter(Boolean).length +
-        trainTgt.split("\n").filter(Boolean).length;
+        (annotatedContent ?? '').split("\n").filter(Boolean).length +
+        (unannotatedContent ?? '').split("\n").filter(Boolean).length;
 
       setPendingCycleResult({
         precision: result.precision,

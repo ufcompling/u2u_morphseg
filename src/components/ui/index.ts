@@ -14,4 +14,6 @@ export {
   PlayIcon,
   SpinnerIcon,
   LoopIcon,
+  SnapshotIcon,
+  DiceIcon,
 } from "./icons";

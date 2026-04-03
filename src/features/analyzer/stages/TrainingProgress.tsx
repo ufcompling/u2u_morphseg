@@ -1,14 +1,10 @@
+import { useEffect } from "react";
 import type { TrainingStep } from "../../../lib/types";
 import { ArrowIcon, CheckIcon } from "../../../components/ui/icons";
-
-// ============================================================
-// Training Progress Stage
-// ============================================================
 
 interface TrainingProgressProps {
   steps: TrainingStep[];
   currentIteration: number;
-  totalIterations: number;
   isComplete: boolean;
   onContinue: () => void;
 }
@@ -16,7 +12,6 @@ interface TrainingProgressProps {
 export function TrainingProgressStage({
   steps,
   currentIteration,
-  totalIterations,
   isComplete,
   onContinue,
 }: TrainingProgressProps) {
@@ -30,9 +25,21 @@ export function TrainingProgressStage({
       : completedCount;
   const pct = steps.length > 0 ? (progressUnits / steps.length) * 100 : 0;
 
+  useEffect(() => {
+    console.debug("TrainingProgress props:", {
+      stepsCount: steps.length,
+      completedCount,
+      activeIndex,
+      progressUnits,
+      pct: Number(pct.toFixed(2)),
+      currentIteration,
+      isComplete,
+    });
+  }, [steps, completedCount, activeIndex, progressUnits, pct, currentIteration, isComplete]);
+
   return (
     <div className="flex flex-col">
-      {/* ---- Header group: title + iteration + summary ---- */}
+      {/* ---- Header group: title + cycle + summary ---- */}
       <div className="px-6 pt-6 pb-4">
         <div className="flex items-start justify-between">
           <div>
@@ -46,24 +53,13 @@ export function TrainingProgressStage({
             )}
           </div>
 
-          {/* Iteration context -- segmented indicator */}
-          <div className="flex items-center gap-2">
-            <div className="flex gap-1">
-              {Array.from({ length: totalIterations }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`h-1.5 w-4 rounded-full ${
-                    i < currentIteration
-                      ? "bg-primary/70"
-                      : i === currentIteration - 1
-                        ? "bg-primary"
-                        : "bg-border/20"
-                  }`}
-                />
-              ))}
-            </div>
-            <span className="font-mono text-[10px] text-muted-foreground/70 tabular-nums">
-              {currentIteration}/{totalIterations}
+          {/* Cycle counter */}
+          <div className="px-3 py-1.5 rounded-lg bg-secondary/20 flex items-center gap-2">
+            <span className="font-mono text-[10px] text-muted-foreground/50 uppercase tracking-wider">
+              Cycle
+            </span>
+            <span className="font-mono text-[11px] text-foreground tabular-nums font-medium">
+              {currentIteration}
             </span>
           </div>
         </div>
@@ -153,21 +149,23 @@ export function TrainingProgressStage({
       <div className="mx-6 h-px bg-border/10" />
       <footer className="px-6 py-4">
         {isComplete ? (
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <p className="font-mono text-[11px] text-muted-foreground/70">
               Ready to annotate low-confidence words
             </p>
-            <button
-              onClick={onContinue}
-              className="flex items-center gap-2 pl-4 pr-5 py-2.5 rounded-xl bg-primary/10 border border-primary/30 text-primary font-mono text-[11px] font-semibold tracking-wide transition-all hover:bg-primary hover:text-primary-foreground hover:border-primary active:scale-[0.97]"
-            >
-              <span>Continue to Annotation</span>
-              <ArrowIcon />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onContinue}
+                className="flex items-center gap-2 pl-4 pr-5 py-2.5 rounded-xl bg-primary/10 border border-primary/30 text-primary font-mono text-[11px] font-semibold tracking-wide transition-all hover:bg-primary hover:text-primary-foreground hover:border-primary active:scale-[0.97]"
+              >
+                <span>Continue to Results</span>
+                <ArrowIcon />
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="flex items-center justify-end">
-            <span className="font-mono text-[10px] text-muted-foreground/70">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[10px] text-muted-foreground/20">
               Waiting for training to finish
             </span>
           </div>

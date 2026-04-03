@@ -1,24 +1,4 @@
-/**
- * format-utils.ts
- * Location: src/lib/format-utils.ts
- *
- * Purpose:
- *   Pure utility functions for data format conversion, file operations,
- *   and workflow state derivation. Stateless and independently testable.
- *
- * Key functions:
- *   tgtToSrc          - Strip boundary markers from .tgt to produce .src format
- *   annotationToTgtLine - Convert annotated word back to .tgt format
- *   triggerDownload    - Initiate a browser file download from a string
- *   getFileContent     - Look up a file's content by its role
- *   getFileByRole      - Look up a full StoredFile by its role
- *   deriveCompletedStages - Compute which workflow stages are complete
- *   validateTgtFormat  - Check whether a string is valid .tgt content
- *
- * Dependencies: types.ts
- */
-
-import type { StoredFile, FileRole, WorkflowStage, AnnotationWord } from "./types";
+import type { fileData, FileRole, WorkflowStage, AnnotationWord } from "./types";
 
 /**
  * Derive .src from .tgt — strips boundary markers so each line is just
@@ -66,18 +46,24 @@ export function triggerDownload(content: string, filename: string): void {
 }
 
 /** Look up a file's raw content by its assigned role. Returns "" if not found. */
-export function getFileContent(files: StoredFile[], role: FileRole): string {
-  return files.find((f) => f.role === role)?.content ?? "";
+export function getFileContent(files: fileData[], role: FileRole): string {
+  return files.find((f) => f.fileRole === role)?.fileContent ?? "";
 }
 
-/** Look up the full StoredFile object by its assigned role. */
-export function getFileByRole(files: StoredFile[], role: FileRole): StoredFile | undefined {
-  return files.find((f) => f.role === role);
+/** Look up the full fileData object by its assigned role. */
+export function getFileByRole(files: fileData[], role: FileRole): fileData | undefined {
+  return files.find((f) => f.fileRole === role);
 }
 
-/** Derive which stages the user has completed based on the current stage position. */
+/**
+ * Derive which stages the user has completed based on the current stage position.
+ *
+ * Stage order must match the actual workflow: config → ingestion → training → results → annotation.
+ * The old order had "ingestion" before "config", which caused the upload step to be
+ * marked complete on page load when restoring currentStage: "config" from IndexedDB.
+ */
 export function deriveCompletedStages(current: WorkflowStage): WorkflowStage[] {
-  const order: WorkflowStage[] = ["ingestion", "config", "training", "annotation", "results"];
+  const order: WorkflowStage[] = ["config", "ingestion", "training", "results", "annotation"];
   const idx = order.indexOf(current);
   return idx > 0 ? order.slice(0, idx) : [];
 }

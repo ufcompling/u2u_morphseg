@@ -1,80 +1,72 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { AnnotationWord } from "../../../lib/types";
-import { ArrowIcon, UploadSmallIcon, CheckAllIcon } from "../../../components/ui/icons";
+import { ArrowIcon, UploadSmallIcon, CheckAllIcon, SnapshotIcon } from "../../../components/ui/icons";
 
-// ============================================================
-// Annotation Workspace Stage
-// One-word-at-a-time focused annotation interface.
-// Shows a single word card with boundary editing, plus a
-// progress rail and context about why these words were selected.
-//
-// Dev/testing feature: "Load Gold File" parses a gold-standard
-// .tgt file and auto-fills boundaries for matching words so you
-// can blast through annotation cycles during testing.
-// ============================================================
+function parseGoldFile(content: string): {
+  lookup: Map<string, number[]>;
+  separator: string;
+  sampleLines: string[];
+} {
+  const lines = (content ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"));
 
-/**
- * Parse a gold .tgt file into a lookup map of word → boundary indices.
- * Handles both formats:
- *   - "un!happy"           (raw annotated)
- *   - "u n ! h a p p y"   (space-separated .tgt)
- *
- * :param content: Raw text content of the gold file
- * :returns: Map where key = surface word, value = boundary index array
- */
-function parseGoldFile(content: string): Map<string, number[]> {
-  const lookup = new Map<string, number[]>();
+  const sampleLines = lines.slice(0, 3);
 
-  for (const rawLine of content.split("\n")) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-
-    // Detect format: space-separated chars vs compact morphemes
-    let morphemes: string[];
-    if (line.includes(" ")) {
-      // Space-separated .tgt: "u n ! h a p p y" → join → "un!happy" → split by !
-      const joined = line.replace(/\s+/g, "");
-      morphemes = joined.split("!");
-    } else {
-      // Compact: "un!happy"
-      morphemes = line.split("!");
+  // Auto-detect separator from first 20 lines
+  const CANDIDATES = ["!", "+", "|", "-", "_"];
+  const counts: Record<string, number> = {};
+  for (const c of CANDIDATES) counts[c] = 0;
+  for (const l of lines.slice(0, 20)) {
+    const collapsed = l.replace(/\s+/g, "");
+    for (const c of CANDIDATES) {
+      if (collapsed.includes(c)) counts[c]++;
     }
+  }
+  const separator = CANDIDATES.reduce((best, c) => (counts[c] > counts[best] ? c : best), "!");
 
+  const lookup = new Map<string, number[]>();
+  for (const line of lines) {
+    const collapsed = line.replace(/\s+/g, "");
+    if (!collapsed) continue;
+
+    const morphemes = collapsed.split(separator);
     const word = morphemes.join("");
     if (!word) continue;
 
-    // Convert morpheme list to boundary indices (index of char AFTER which split occurs)
     const boundaries: number[] = [];
     let offset = 0;
     for (let i = 0; i < morphemes.length - 1; i++) {
       offset += morphemes[i].length;
       boundaries.push(offset - 1);
     }
-
     lookup.set(word.toLowerCase(), boundaries);
   }
 
-  return lookup;
+  return { lookup, separator, sampleLines };
 }
 
 interface AnnotationWorkspaceProps {
   words: AnnotationWord[];
   onUpdateBoundaries: (wordId: string, boundaryIndices: number[]) => void;
+  onBulkUpdateBoundaries: (updates: Array<{ wordId: string; boundaryIndices: number[] }>) => void;
   onSubmit: () => void;
   onSkip: () => void;
   totalWords: number;
   currentIteration: number;
-  totalIterations: number;
+  onSnapshot: () => void;
 }
 
 export function AnnotationWorkspaceStage({
   words,
   onUpdateBoundaries,
+  onBulkUpdateBoundaries,
   onSubmit,
   onSkip,
   totalWords,
   currentIteration,
-  totalIterations,
+  onSnapshot,
 }: AnnotationWorkspaceProps) {
   const [focusIndex, setFocusIndex] = useState(0);
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
@@ -83,23 +75,43 @@ export function AnnotationWorkspaceStage({
   // Dev/testing: gold file auto-annotation
   const goldInputRef = useRef<HTMLInputElement>(null);
   const [goldMatchCount, setGoldMatchCount] = useState<number | null>(null);
+  const [goldDebug, setGoldDebug] = useState<{
+    separator: string;
+    lookupSize: number;
+    sampleLines: string[];
+    sampleWordKey: string;
+  } | null>(null);
   const [showDevTools, setShowDevTools] = useState(false);
+
+  // Keep a ref so the async FileReader.onload always sees the latest words
+  // without needing words/annotatedSet in useCallback deps.
+  const wordsRef = useRef(words);
+  const prevWordIdsRef = useRef<string>('');
+  useEffect(() => {
+    wordsRef.current = words;
+    const wordIdsKey = words.map(w => w.id).join('|');
+    if (wordIdsKey !== prevWordIdsRef.current) {
+      prevWordIdsRef.current = wordIdsKey;
+      setAnnotatedSet(new Set(words.filter(w => w.confirmed).map(w => w.id)));
+      setGoldMatchCount(null);
+      setGoldDebug(null);
+    }
+  }, [words]);
 
   const currentWord = words[focusIndex] ?? null;
   const annotatedCount = annotatedSet.size;
   const allDone = annotatedCount === totalWords && totalWords > 0;
 
-  const isEarlyIteration = currentIteration <= Math.ceil(totalIterations * 0.3);
-  const isLateIteration = currentIteration >= Math.ceil(totalIterations * 0.7);
-
   const handleConfirm = useCallback(() => {
     if (!currentWord) return;
+    const boundaryIndices = currentWord.boundaries.map((b) => b.index);
+    onUpdateBoundaries(currentWord.id, boundaryIndices);
     setAnnotatedSet((prev) => new Set(prev).add(currentWord.id));
     // Advance to next unannotated word, or stay if all done
     if (focusIndex < words.length - 1) {
       setFocusIndex((prev) => prev + 1);
     }
-  }, [currentWord, focusIndex, words.length]);
+  }, [currentWord, focusIndex, words.length, onUpdateBoundaries]);
 
   const handlePrev = useCallback(() => {
     if (focusIndex > 0) setFocusIndex((prev) => prev - 1);
@@ -110,8 +122,9 @@ export function AnnotationWorkspaceStage({
   }, [focusIndex, words.length]);
 
   /**
-   * Load a gold-standard file and auto-fill boundaries for all matching words.
-   * Accepts .tgt or plain annotated format (e.g. "un!happy" or "u n ! h a p p y").
+   * Load a gold-standard file and auto-fill boundaries for all matching words,
+   * then confirm ALL words in the batch so the submit button enables immediately.
+   * Matched words get gold boundaries; unmatched keep the CRF-predicted boundaries.
    */
   const handleGoldFile = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,37 +134,61 @@ export function AnnotationWorkspaceStage({
       const reader = new FileReader();
       reader.onload = () => {
         const content = reader.result as string;
-        const goldLookup = parseGoldFile(content);
+        const { lookup: goldLookup, separator, sampleLines } = parseGoldFile(content);
+        const currentWords = wordsRef.current;
+
+        const sampleWordKey = currentWords.length > 0
+          ? currentWords[0].word.replace(/\s+/g, "").toLowerCase()
+          : "";
+
+        setGoldDebug({
+          separator,
+          lookupSize: goldLookup.size,
+          sampleLines,
+          sampleWordKey,
+        });
 
         let matched = 0;
-        const newAnnotated = new Set(annotatedSet);
-
-        for (const w of words) {
-          const key = w.word.toLowerCase();
+        const allUpdates = currentWords.map((w) => {
+          const key = w.word.replace(/\s+/g, "").toLowerCase();
           const goldBoundaries = goldLookup.get(key);
-          if (goldBoundaries !== undefined) {
-            onUpdateBoundaries(w.id, goldBoundaries);
-            newAnnotated.add(w.id);
-            matched++;
-          }
-        }
+          const boundaryIndices =
+            goldBoundaries !== undefined
+              ? goldBoundaries
+              : w.boundaries.map((b) => b.index);
+          if (goldBoundaries !== undefined) matched++;
+          return { wordId: w.id, boundaryIndices };
+        });
 
-        setAnnotatedSet(newAnnotated);
+        // Single bulk call — updates React state and persists in one DB write
+        onBulkUpdateBoundaries(allUpdates);
+
+        setAnnotatedSet(new Set(currentWords.map((w) => w.id)));
         setGoldMatchCount(matched);
+
+        console.debug(`[gold] sep="${separator}" lookup=${goldLookup.size} matched=${matched}/${currentWords.length}`,
+          "\n  sample word key:", JSON.stringify(sampleWordKey),
+          "\n  sample gold lines:", sampleLines,
+          "\n  first gold key:", [...goldLookup.keys()][0]);
+      };
+      reader.onerror = () => {
+        console.error("[AnnotationWorkspace] Failed to read gold file:", reader.error);
       };
       reader.readAsText(file);
-
-      // Reset so the same file can be re-selected if needed
       e.target.value = "";
     },
-    [words, annotatedSet, onUpdateBoundaries]
+    [onBulkUpdateBoundaries]
   );
 
-  /** Confirm all words at once — useful when model predictions are already correct. */
+  /** Confirm all words at once using current boundaries (CRF predictions as-is). */
   const handleConfirmAll = useCallback(() => {
-    const all = new Set(words.map((w) => w.id));
-    setAnnotatedSet(all);
-  }, [words]);
+    const currentWords = wordsRef.current;
+    currentWords.forEach((w) => {
+      const boundaryIndices = w.boundaries.map((b) => b.index);
+      onUpdateBoundaries(w.id, boundaryIndices);
+    });
+    setAnnotatedSet(new Set(currentWords.map((w) => w.id)));
+  }, [onUpdateBoundaries]);
 
   return (
     <div className="flex flex-col gap-0">
@@ -172,7 +209,7 @@ export function AnnotationWorkspaceStage({
                 Cycle
               </span>
               <span className="font-mono text-[11px] text-foreground tabular-nums font-medium">
-                {currentIteration}/{totalIterations}
+                {currentIteration}
               </span>
             </div>
           </div>
@@ -186,16 +223,6 @@ export function AnnotationWorkspaceStage({
             <span className="text-primary font-medium">least confident</span>{" "}
             about. Your corrections have the highest impact on accuracy.
           </p>
-          {isEarlyIteration && (
-            <p className="font-mono text-[10px] text-muted-foreground/70 mt-2">
-              Early iteration -- expect more errors as the model learns basic patterns.
-            </p>
-          )}
-          {isLateIteration && (
-            <p className="font-mono text-[10px] text-muted-foreground/70 mt-2">
-              Late iteration -- the model has stabilized. Errors should be fewer and more subtle.
-            </p>
-          )}
         </div>
 
         {/* -- Dev/Testing Tools -- */}
@@ -237,13 +264,30 @@ export function AnnotationWorkspaceStage({
 
                 {/* Status message */}
                 {goldMatchCount !== null && (
-                  <span className="font-mono text-[10px] text-primary/70">
-                    ✓ {goldMatchCount}/{totalWords} words matched from gold file
+                  <span className={`font-mono text-[10px] ${goldMatchCount > 0 ? "text-primary/70" : "text-red-400/70"}`}>
+                    {goldMatchCount > 0 ? "✓" : "✗"} {goldMatchCount}/{totalWords} words matched from gold file
                   </span>
                 )}
               </div>
+
+              {/* Debug dump — shown when 0 matches to explain coverage gap */}
+              {goldDebug && goldMatchCount === 0 && (
+                <div className="mt-2 p-2 rounded bg-secondary/10 border border-border/20 space-y-1">
+                  <p className="font-mono text-[9px] text-muted-foreground/70 font-semibold">Coverage gap — gold file loaded correctly but no overlap with this batch:</p>
+                  <p className="font-mono text-[9px] text-muted-foreground/50">
+                    Gold entries: <span className="text-foreground/70">{goldDebug.lookupSize}</span>
+                    {" · "}Separator: <span className="text-foreground/70">&quot;{goldDebug.separator}&quot;</span>
+                    {" · "}Sample batch word: <span className="text-foreground/70">&quot;{goldDebug.sampleWordKey}&quot;</span>
+                  </p>
+                  <p className="font-mono text-[9px] text-muted-foreground/40">
+                    The CRF selected words from your unannotated pool that aren&apos;t in this gold file.
+                    Use <span className="text-foreground/60">Confirm All As-Is</span> to accept CRF predictions, or load a gold file that covers your unannotated pool.
+                  </p>
+                  <p className="font-mono text-[9px] text-muted-foreground/30">Gold file sample: {goldDebug.sampleLines.join(" · ")}</p>
+                </div>
+              )}
               <p className="font-mono text-[9px] text-muted-foreground/30 mt-2">
-                Gold file sets correct boundaries and auto-confirms matched words.
+                Gold file applies correct boundaries to matched words and confirms the entire batch.
                 Confirm All marks every word as done without changing boundaries.
               </p>
             </div>
@@ -405,6 +449,19 @@ export function AnnotationWorkspaceStage({
           )}
         </div>
 
+        <div className="flex items-center gap-2">
+
+          {/* Save snapshot */}
+          <button
+            onClick={onSnapshot}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
+            title="Download a snapshot of your current work"
+          >
+            <SnapshotIcon />
+            <span>Snapshot</span>
+          </button>
+        </div>
+
         <button
           onClick={onSubmit}
           disabled={!allDone}
@@ -428,25 +485,27 @@ function WordEditor({
   onUpdateBoundaries: (wordId: string, boundaryIndices: number[]) => void;
 }) {
   const characters = word.word.split("");
-  const boundarySet = new Set(word.boundaries.map((b) => b.index));
+  const boundarySet = new Set<number>(word.boundaries.map((b) => b.index));
 
   const toggleBoundary = (charIndex: number) => {
-    const newBoundaries = boundarySet.has(charIndex)
+    const newBoundaries: number[] = boundarySet.has(charIndex)
       ? [...boundarySet].filter((i) => i !== charIndex)
       : [...boundarySet, charIndex].sort((a, b) => a - b);
     onUpdateBoundaries(word.id, newBoundaries);
   };
 
-  // Build morpheme preview
-  const morphemes: string[] = [];
+  // Build morpheme preview, filtering out empty/whitespace morphemes
+  let morphemes: string[] = [];
   let start = 0;
-  const sorted = [...boundarySet].sort((a, b) => a - b);
+  const sorted: number[] = [...boundarySet].sort((a, b) => a - b);
   for (const b of sorted) {
-    morphemes.push(word.word.slice(start, b + 1));
+    const m = word.word.slice(start, b + 1);
+    if (m.trim().length > 0) morphemes.push(m);
     start = b + 1;
   }
   if (start < word.word.length) {
-    morphemes.push(word.word.slice(start));
+    const m = word.word.slice(start);
+    if (m.trim().length > 0) morphemes.push(m);
   }
 
   return (

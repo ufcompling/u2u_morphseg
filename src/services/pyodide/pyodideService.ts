@@ -1,69 +1,60 @@
-let pyodideInstance: any = null;
-let initPromise: Promise<any> | null = null;
+declare const pyodide: any;
 
-export const initPyodide = async () => {
-  if (pyodideInstance) return pyodideInstance;
-  if (initPromise) return initPromise;
+// ── syncfs queue ─────────────────────────────────────────────────────────────
+// Emscripten throws a warning (and produces incorrect behaviour) when two
+// syncfs calls are in flight simultaneously.  We serialize them: if a sync is
+// already running, all new callers wait for that one to finish before starting
+// their own.  "populate" syncs (load from IDB) are always run immediately;
+// "persist" syncs (save to IDB) are coalesced — if one is already pending, the
+// extra callers simply share its result.
 
-  // Prevent race conditions by caching the initPromise to prevent concurrent calls from creating multiple different Pyodide instances
-  initPromise = (async () => {
-    pyodideInstance = await (window as any).loadPyodide({
-      indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.4/full/"
-    });
+let syncInFlight: Promise<void> | null = null;
 
-    // Load micropip and install packages
-    await pyodideInstance.loadPackage('micropip');
-    
-    // Install python-crfsuite from whl and sklearn-crfsuite from PyPI
-    await pyodideInstance.runPythonAsync(`
-      import micropip
-      await micropip.install('${window.location.origin}/u2u_morphseg/wheels/python_crfsuite-0.9.12-cp312-cp312-pyodide_2024_0_wasm32.whl')
-      await micropip.install('sklearn-crfsuite')
-    `);
-    
-    const response = await fetch('/u2u_morphseg/scripts/db_worker.py');
-    const code = await response.text();
-    pyodideInstance.FS.mkdir('/scripts');
-    try {
-      pyodideInstance.FS.mkdir('/data');
-    } catch (e) {
-      // Ignore if already exists
-    }  
-    pyodideInstance.FS.mount(pyodideInstance.FS.filesystems.IDBFS, {}, '/data');
-    pyodideInstance.FS.writeFile('/scripts/db_worker.py', code);
-
-    await pyodideInstance.runPythonAsync("import sys; sys.path.append('/scripts')");
-    await pyodideInstance.runPythonAsync("import db_worker");
-    await syncPyodideFS(pyodideInstance);
-    initPromise = null;
-    return pyodideInstance;
-  })();
-
-  return initPromise;
-  
-};
-export async function syncPyodideFS(pyodide: any): Promise<void> {
+function runSyncfs(populate: boolean): Promise<void> {
   return new Promise((resolve, reject) => {
-    pyodide.FS.syncfs(false, (err: any) => {
-      if (err) {
-        reject(err);
-        console.error('Error syncing FS to IndexedDB:', err);
-      } else {
-        resolve();
-        console.log('FS synced to IndexedDB');
-      }
-    });
+    try {
+      pyodide.FS.syncfs(populate, (err: any) => {
+        if (err) {
+          console.error('[worker] Error syncing FS to IndexedDB:', err);
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    } catch (err) {
+      console.error('[worker] FS.syncfs threw:', err);
+      reject(err);
+    }
   });
 }
-export const getPyodide = () => {
-  if (!pyodideInstance) {
-    throw new Error("Pyodide has not been initialized yet.");
+
+/**
+ * Sync the Emscripten FS with IndexedDB.
+ * :param populate: when true, populate the in-memory FS from IndexedDB (load); when false, persist memory to IndexedDB (save).
+ */
+export function syncPyodideFS(populate: boolean = false): Promise<void> {
+  if (!pyodide) throw new Error("Pyodide not initialized for FS sync");
+
+  // Populate syncs (initial load) always run independently — they must
+  // complete before any other FS operations happen.
+  if (populate) {
+    if (syncInFlight) {
+      // Chain after whatever is currently running so the FS is stable first.
+      return syncInFlight.then(() => runSyncfs(true)).finally(() => { syncInFlight = null; });
+    }
+    syncInFlight = runSyncfs(true).finally(() => { syncInFlight = null; });
+    return syncInFlight;
   }
-  return pyodideInstance;
-};
 
+  // Persist syncs: coalesce — reuse the in-flight promise if one exists.
+  if (syncInFlight) {
+    return syncInFlight;
+  }
+  syncInFlight = runSyncfs(false).finally(() => { syncInFlight = null; });
+  return syncInFlight;
+}
 
-export const runPythonCode = async (pyodide: any, fileContent: string, pycodeLoc: string, funcName: string): Promise<string> => {
+export const runPythonCode = async (fileContent: string, pycodeLoc: string, funcName: string): Promise<string> => {
   const response = await fetch(pycodeLoc);
   const scriptText = await response.text();
 

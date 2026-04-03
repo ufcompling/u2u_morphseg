@@ -17,45 +17,56 @@ export const WORKFLOW_STAGES: {
   label: string;
   shortLabel: string;
 }[] = [
-  { id: "ingestion", label: "Dataset Ingestion", shortLabel: "Upload" },
   { id: "config", label: "Model Configuration", shortLabel: "Config" },
+  { id: "ingestion", label: "Dataset Ingestion", shortLabel: "Upload" },
   { id: "training", label: "Training Progress", shortLabel: "Training" },
-  { id: "annotation", label: "Annotation Workspace", shortLabel: "Annotate" },
   { id: "results", label: "Results & Export", shortLabel: "Results" },
+  { id: "annotation", label: "Annotation Workspace", shortLabel: "Annotate" },
 ];
 
 // --- Files ---
 
-export type FileRole = "annotated" | "unannotated" | "evaluation";
+export type FileRole = "annotated" | "unannotated";
 
 export type ValidationStatus = "pending" | "valid" | "invalid";
 
-export interface StoredFile {
-  id: string;
-  name: string;
-  size: number;
-  content: string;
-  role: FileRole | null;
+export interface fileData {
+  fileName: string;
+  fileSize: number;
+  fileContent: string;
+  fileRole: FileRole | null;
   validationStatus: ValidationStatus;
-  uploadedAt: Date;
+  createdAt: Date;
+  filePath: string;
+  fileType: string;
 }
 
 // --- Model Configuration ---
 
-export type QueryStrategy = "uncertainty" | "random" | "margin";
+export type QueryStrategy = "uncertainty" | "random" ;
 
 export interface ModelConfig {
   targetLanguage: string;
   incrementSize: number;
-  iterations: number;
+  /**
+   * Random seed for train/test/select splits. Range: [0, 4_294_967_295].
+   * null = generate a fresh random seed each cycle (non-reproducible).
+   */
+  randomSeed: number | null;
   queryStrategy: QueryStrategy;
+  /**
+   * Delimiter character used to separate morphemes in annotated files.
+   * Common values: "!" "|" "+" "-"
+   */
+  delimiter: string;
 }
 
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   incrementSize: 100,
-  iterations: 5,
+  randomSeed: null,
   queryStrategy: "uncertainty",
-  targetLanguage: "English"
+  targetLanguage: "English",
+  delimiter: "!",
 };
 
 // --- CRF Training Constants ---
@@ -96,6 +107,7 @@ export interface AnnotationWord {
   word: string;
   boundaries: MorphemeBoundary[];
   confidence: number;
+  confirmed?: boolean;
 }
 
 // --- Results ---
@@ -125,14 +137,12 @@ export interface CycleSnapshot {
  * File content is passed as raw strings so Python can write them to VFS.
  */
 export interface TrainingCycleConfig {
-  /** Content of the annotated training .tgt file */
-  trainTgt: string;
-  /** Content of the evaluation .tgt file */
-  testTgt: string;
-  /** Content of the unannotated pool .tgt file (predicted morphemes) */
-  selectTgt: string;
-  /** Content of the unannotated pool .src file (character-space words) */
-  selectSrc: string;
+  /** File path of the annotated training file */
+  annotatedFile: string;
+  /** File path of the unannotated evaluation file */
+  unannotatedFile: string;
+  /** Target language for the model */
+  targetLanguage: string;
   /** How many low-confidence words to pull into the increment */
   incrementSize: number;
   /** Max CRF training iterations */
@@ -141,8 +151,16 @@ export interface TrainingCycleConfig {
   delta: number;
   /** Cumulative words selected in prior cycles (0 on first run) */
   selectSize: number;
-  /** VFS working directory â€” default '/tmp/turtleshell' */
-  workDir?: string;
+  /**
+   * Resolved random seed for this cycle's train/test split.
+   * Always a concrete number by the time it hits the worker.
+   */
+  randomSeed: number;
+  /**
+   * Character used to separate morphemes in annotated files, e.g. "!" in "un!happy".
+   * Passed through to Python so the CRF pipeline parses boundaries correctly.
+   */
+  delimiter: string;
 }
 
 /** Result returned from the worker after a successful cycle. */
@@ -154,17 +172,17 @@ export interface TrainingCycleResult {
   incrementWords: AnnotationWord[];
   /** Number of words remaining in the unlabeled pool */
   residualCount: number;
-  /** increment.tgt file content â€” words selected for annotation this cycle */
+  /** increment.tgt file content — words selected for annotation this cycle */
   incrementContent: string;
-  /** residual.tgt file content â€” remaining unlabeled pool after this cycle */
+  /** residual.tgt file content — remaining unlabeled pool after this cycle */
   residualContent: string;
-  /** Evaluation report â€” per-word predictions with P/R/F1 summary header */
+  /** Evaluation report — per-word predictions with P/R/F1 summary header */
   evaluationContent: string;
 }
 
 /** Config for running the trained model over all residual words (no retraining). */
 export interface InferenceConfig {
-  /** residual.tgt content â€” the remaining unannotated pool */
+  /** residual.tgt content — the remaining unannotated pool */
   residualTgt: string;
   /** Context window size for character features (default 4) */
   delta?: number;

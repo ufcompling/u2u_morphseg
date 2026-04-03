@@ -20,6 +20,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import type { TrainingCycleConfig, TrainingCycleResult, InferenceConfig, InferenceResult } from '../lib/types';
 import type { WorkerOutMessage } from '../lib/worker-protocol';
 import { log } from '../lib/logger';
+import { setPyodideWorker } from '../lib/db';
 
 const logger = log('pyodide-worker');
 
@@ -75,9 +76,10 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
     let worker: Worker;
     try {
       worker = new Worker(
-        new URL('../workers/pyodide.worker.ts', import.meta.url),
+        new URL('../services/pyodide/workers/pyodide.worker.ts', import.meta.url),
         { type: 'module' }
       );
+      setPyodideWorker(worker);
       logger.info(' Worker spawned successfully');
     } catch (err) {
       logger.error(' Failed to spawn worker:', err);
@@ -119,6 +121,9 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
           setModelRestored(true); // Model now definitely exists
           pendingCycle.current?.resolve(msg.result);
           pendingCycle.current = null;
+          break;
+        case 'CYCLE_RAW':
+          logger.info(' Raw cycle JSON from worker:', msg.payload?.slice?.(0, 2000) ?? '[too large]');
           break;
 
         case 'CYCLE_ERROR':
@@ -190,9 +195,8 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
         }
 
         logger.info(' Starting cycle with config:', {
-          trainTgtLines: config.trainTgt.split('\n').length,
-          testTgtLines: config.testTgt.split('\n').length,
-          selectTgtLines: config.selectTgt.split('\n').length,
+          annotatedFile: config.annotatedFile,
+          unannotatedFile: config.unannotatedFile,
         });
 
         pendingCycle.current = { resolve, reject, onStep: onStepProgress };
@@ -222,6 +226,7 @@ export function usePyodideWorker(): UsePyodideWorkerReturn {
         resolve(); // Nothing to wipe
         return;
       }
+      logger.info(' wipeVfs() invoked — sending WIPE_VFS to worker');
       pendingWipe.current = { resolve, reject };
       getWorker().postMessage({ type: 'WIPE_VFS' });
     });
