@@ -30,43 +30,46 @@ function mockPython(filename: string, content: string | Uint8Array) {
 describe('saveFile', () => {
   beforeEach(() => {
     globalThis.pyodide.runPythonAsync = vi.fn();
-    globalThis.pyodide.FS = { syncfs: vi.fn((flush: boolean) => Promise.resolve()) };
+    globalThis.pyodide.FS = {
+      syncfs: vi.fn((flush: boolean) => Promise.resolve()),
+      writeFile: vi.fn(),
+      mkdirTree: vi.fn(),
+    };
     vi.clearAllMocks();
   });
 
   it('should save file content correctly', async () => {
     const fileName = 'file.txt';
     const content = 'Hello, world!';
-    globalThis.pyodide.runPythonAsync.mockResolvedValueOnce(undefined);
     await saveFile(fileName, content);
-    expect(globalThis.pyodide.runPythonAsync).toHaveBeenCalledWith(mockPython(fileName, content));
+    const expectedBytes = new TextEncoder().encode(content);
+    expect(globalThis.pyodide.FS.writeFile).toHaveBeenCalledWith(fileName, expectedBytes);
     expect(pyodideService.syncPyodideFS).toHaveBeenCalled();
-   });
+  });
 
   it('should handle binary content correctly', async () => {
     const fileName = 'binary.bin';
     const binaryContent = new Uint8Array([0x00, 0x01, 0x02]);
-    globalThis.pyodide.runPythonAsync.mockResolvedValueOnce(undefined);
     await saveFile(fileName, binaryContent);
-    expect(globalThis.pyodide.runPythonAsync).toHaveBeenCalledWith(mockPython(fileName, binaryContent));
+    expect(globalThis.pyodide.FS.writeFile).toHaveBeenCalledWith(fileName, binaryContent);
     expect(pyodideService.syncPyodideFS).toHaveBeenCalled();
-     });
+  });
 
   it('should handle empty content correctly', async () => {
     const fileName = 'empty.txt';
     const content = '';
-    globalThis.pyodide.runPythonAsync.mockResolvedValueOnce(undefined);
     await saveFile(fileName, content);
-    expect(globalThis.pyodide.runPythonAsync).toHaveBeenCalledWith(mockPython(fileName, content));
+    const expectedBytes = new TextEncoder().encode(content);
+    expect(globalThis.pyodide.FS.writeFile).toHaveBeenCalledWith(fileName, expectedBytes);
     expect(pyodideService.syncPyodideFS).toHaveBeenCalled();
-   });
+  });
 
   it('should handle errors during file saving', async () => {
     const fileName = 'file.txt';
     const content = 'Hello, world!';
-    globalThis.pyodide.runPythonAsync.mockRejectedValueOnce(new Error('Saving error'));
+    globalThis.pyodide.FS.writeFile.mockImplementationOnce(() => { throw new Error('Saving error'); });
     await expect(saveFile(fileName, content)).rejects.toThrow('Saving error');
-    expect(globalThis.pyodide.runPythonAsync).toHaveBeenCalledWith(mockPython(fileName, content));
+    expect(globalThis.pyodide.FS.writeFile).toHaveBeenCalledWith(fileName, new TextEncoder().encode(content));
     expect(pyodideService.syncPyodideFS).not.toHaveBeenCalled();
-   });
+  });
 });
