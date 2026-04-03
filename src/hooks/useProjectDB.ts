@@ -21,6 +21,7 @@ import {
   type CycleSnapshot,
   type AnnotationWord,
   type MorphemeBoundary,
+  type FileRole,
   DEFAULT_MODEL_CONFIG,
 } from "../lib/types";
 import { log } from "../lib/logger";
@@ -46,6 +47,7 @@ export interface ProjectState {
   modelConfig: ModelConfig;
   currentIteration: number;
   cumulativeSelectSize: number;
+  rolesMap: Record<string, FileRole | null>;
 }
 
 export interface UseProjectDBReturn {
@@ -166,6 +168,7 @@ export function useProjectDB(): UseProjectDBReturn {
               modelConfig: meta.modelConfig,
               currentIteration: meta.currentIteration,
               cumulativeSelectSize: meta.cumulativeSelectSize,
+              rolesMap: meta.rolesMap ?? {},
             });
           } catch {
             logger.warn('[useProjectDB] project.json corrupt on load, resetting');
@@ -231,6 +234,7 @@ export function useProjectDB(): UseProjectDBReturn {
       modelConfig: meta.modelConfig,
       currentIteration: meta.currentIteration,
       cumulativeSelectSize: meta.cumulativeSelectSize,
+      rolesMap: {},
     });
   }, [pyodideReady]);
 
@@ -352,6 +356,23 @@ export function useProjectDB(): UseProjectDBReturn {
       return;
     }
     try {
+      // Extract language from snapshot's project.json bytes BEFORE any path-dependent ops.
+      // window.language may not be set yet (user hasn't gone through ModelConfig), which
+      // causes all paths to resolve to /data//... — this sets it first.
+      try {
+        const snap = JSON.parse(snapshotJson) as Record<string, number[]>;
+        if (snap['project.json']) {
+          const text = new TextDecoder().decode(new Uint8Array(snap['project.json']));
+          const meta = JSON.parse(text);
+          const targetLanguage: string = meta?.modelConfig?.targetLanguage;
+          if (targetLanguage) {
+            (window as any).language = targetLanguage;
+            setLanguage(targetLanguage);
+          }
+        }
+      } catch (langErr) {
+        logger.warn('[useProjectDB] Could not extract language from snapshot:', langErr);
+      }
       await db.readSnapshot(snapshotJson);
       // Reload all files and project state from the restored VFS
       await loadFiles();
@@ -364,6 +385,7 @@ export function useProjectDB(): UseProjectDBReturn {
             modelConfig: meta.modelConfig,
             currentIteration: meta.currentIteration,
             cumulativeSelectSize: meta.cumulativeSelectSize,
+            rolesMap: meta.rolesMap ?? {},
           });
         } catch {
           logger.warn('[useProjectDB] project.json corrupt after snapshot restore, resetting');
@@ -529,7 +551,7 @@ export function useProjectDB(): UseProjectDBReturn {
       word: w.word,
       confidence: w.confidence,
       boundaries: w.boundaries,
-      confirmed: false,
+      confirmed: w.confirmed ?? false,
     }));
     annotations.push(...rows);
     await db.saveFile(`/data/${language}/annotations.json`, JSON.stringify(annotations));
@@ -575,6 +597,7 @@ export function useProjectDB(): UseProjectDBReturn {
       word: r.word,
       confidence: r.confidence,
       boundaries: r.boundaries,
+      confirmed: r.confirmed,
     }));
   }, [pyodideReady]);
 
@@ -645,7 +668,6 @@ export function useProjectDB(): UseProjectDBReturn {
     downloadSnapshot,
     readSnapshot,
     clearAll,
-    
   };
 }
 

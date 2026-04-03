@@ -402,6 +402,7 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
         <AnnotationWorkspaceStage
           words={ts.annotationWords}
           onUpdateBoundaries={ts.handleUpdateBoundaries}
+          onBulkUpdateBoundaries={ts.handleBulkUpdateBoundaries}
           onSubmit={ts.handleSubmitAnnotations}
           onSkip={ts.handleSkipAnnotation}
           totalWords={ts.totalAnnotationWords}

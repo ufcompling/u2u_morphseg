@@ -107,6 +107,7 @@ export interface AnnotationWord {
   word: string;
   boundaries: MorphemeBoundary[];
   confidence: number;
+  confirmed?: boolean;
 }
 
 // --- Results ---

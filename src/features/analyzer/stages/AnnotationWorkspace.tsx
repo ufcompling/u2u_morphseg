@@ -50,6 +50,7 @@ function parseGoldFile(content: string): {
 interface AnnotationWorkspaceProps {
   words: AnnotationWord[];
   onUpdateBoundaries: (wordId: string, boundaryIndices: number[]) => void;
+  onBulkUpdateBoundaries: (updates: Array<{ wordId: string; boundaryIndices: number[] }>) => void;
   onSubmit: () => void;
   onSkip: () => void;
   totalWords: number;
@@ -61,6 +62,7 @@ interface AnnotationWorkspaceProps {
 export function AnnotationWorkspaceStage({
   words,
   onUpdateBoundaries,
+  onBulkUpdateBoundaries,
   onSubmit,
   onSkip,
   totalWords,
@@ -87,11 +89,16 @@ export function AnnotationWorkspaceStage({
   // Keep a ref so the async FileReader.onload always sees the latest words
   // without needing words/annotatedSet in useCallback deps.
   const wordsRef = useRef(words);
+  const prevWordIdsRef = useRef<string>('');
   useEffect(() => {
     wordsRef.current = words;
-    // Clear stale debug/match info when the word batch changes (new cycle)
-    setGoldMatchCount(null);
-    setGoldDebug(null);
+    const wordIdsKey = words.map(w => w.id).join('|');
+    if (wordIdsKey !== prevWordIdsRef.current) {
+      prevWordIdsRef.current = wordIdsKey;
+      setAnnotatedSet(new Set(words.filter(w => w.confirmed).map(w => w.id)));
+      setGoldMatchCount(null);
+      setGoldDebug(null);
+    }
   }, [words]);
 
   const currentWord = words[focusIndex] ?? null;
@@ -100,12 +107,14 @@ export function AnnotationWorkspaceStage({
 
   const handleConfirm = useCallback(() => {
     if (!currentWord) return;
+    const boundaryIndices = currentWord.boundaries.map((b) => b.index);
+    onUpdateBoundaries(currentWord.id, boundaryIndices);
     setAnnotatedSet((prev) => new Set(prev).add(currentWord.id));
     // Advance to next unannotated word, or stay if all done
     if (focusIndex < words.length - 1) {
       setFocusIndex((prev) => prev + 1);
     }
-  }, [currentWord, focusIndex, words.length]);
+  }, [currentWord, focusIndex, words.length, onUpdateBoundaries]);
 
   const handlePrev = useCallback(() => {
     if (focusIndex > 0) setFocusIndex((prev) => prev - 1);
@@ -143,17 +152,20 @@ export function AnnotationWorkspaceStage({
         });
 
         let matched = 0;
-        for (const w of currentWords) {
+        const allUpdates = currentWords.map((w) => {
           const key = w.word.replace(/\s+/g, "").toLowerCase();
           const goldBoundaries = goldLookup.get(key);
-          if (goldBoundaries !== undefined) {
-            onUpdateBoundaries(w.id, goldBoundaries);
-            matched++;
-          }
-        }
+          const boundaryIndices =
+            goldBoundaries !== undefined
+              ? goldBoundaries
+              : w.boundaries.map((b) => b.index);
+          if (goldBoundaries !== undefined) matched++;
+          return { wordId: w.id, boundaryIndices };
+        });
 
-        // Confirm ALL words regardless of match — matched get gold boundaries,
-        // unmatched keep CRF predictions. Submit always enables after gold load.
+        // Single bulk call — updates React state and persists in one DB write
+        onBulkUpdateBoundaries(allUpdates);
+
         setAnnotatedSet(new Set(currentWords.map((w) => w.id)));
         setGoldMatchCount(matched);
 
@@ -168,7 +180,7 @@ export function AnnotationWorkspaceStage({
       reader.readAsText(file);
       e.target.value = "";
     },
-    [onUpdateBoundaries]
+    [onBulkUpdateBoundaries]
   );
 
   const handleSnapshotUpload = useCallback(
@@ -187,8 +199,13 @@ export function AnnotationWorkspaceStage({
 
   /** Confirm all words at once using current boundaries (CRF predictions as-is). */
   const handleConfirmAll = useCallback(() => {
-    setAnnotatedSet(new Set(wordsRef.current.map((w) => w.id)));
-  }, []);
+    const currentWords = wordsRef.current;
+    currentWords.forEach((w) => {
+      const boundaryIndices = w.boundaries.map((b) => b.index);
+      onUpdateBoundaries(w.id, boundaryIndices);
+    });
+    setAnnotatedSet(new Set(currentWords.map((w) => w.id)));
+  }, [onUpdateBoundaries]);
 
   return (
     <div className="flex flex-col gap-0">
@@ -510,16 +527,18 @@ function WordEditor({
     onUpdateBoundaries(word.id, newBoundaries);
   };
 
-  // Build morpheme preview
-  const morphemes: string[] = [];
+  // Build morpheme preview, filtering out empty/whitespace morphemes
+  let morphemes: string[] = [];
   let start = 0;
   const sorted: number[] = [...boundarySet].sort((a, b) => a - b);
   for (const b of sorted) {
-    morphemes.push(word.word.slice(start, b + 1));
+    const m = word.word.slice(start, b + 1);
+    if (m.trim().length > 0) morphemes.push(m);
     start = b + 1;
   }
   if (start < word.word.length) {
-    morphemes.push(word.word.slice(start));
+    const m = word.word.slice(start);
+    if (m.trim().length > 0) morphemes.push(m);
   }
 
   return (

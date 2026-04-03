@@ -63,6 +63,7 @@ export interface UseTurtleshellReturn {
   annotationWords: AnnotationWord[];
   totalAnnotationWords: number;
   handleUpdateBoundaries: (wordId: string, boundaryIndices: number[]) => void;
+  handleBulkUpdateBoundaries: (updates: Array<{ wordId: string; boundaryIndices: number[] }>) => void;
   handleSubmitAnnotations: () => Promise<void>;
   handleSkipAnnotation: () => void;
 
@@ -185,9 +186,13 @@ export function useTurtleshell(): UseTurtleshellReturn {
 
   const handleAssignRole = useCallback(
     (filePath: string, role: FileRole) => {
-      setRolesMap((prev) => ({ ...prev, [filePath]: role }));
+      setRolesMap((prev) => {
+        const next = { ...prev, [filePath]: role };
+        projectDB.saveProjectMeta({ rolesMap: next });
+        return next;
+      });
     },
-    []
+    [projectDB]
   );
 
   const handleRemoveFile = useCallback(
@@ -199,6 +204,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
       setRolesMap((prev) => {
         const copy = { ...prev };
         delete copy[filePath];
+        projectDB.saveProjectMeta({ rolesMap: copy });
         return copy;
       });
     },
@@ -254,6 +260,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
     setModelConfigLocal(p.modelConfig);
     setCurrentIteration(p.currentIteration);
     cumulativeSelectSize.current = p.cumulativeSelectSize;
+    if (p.rolesMap) setRolesMap(p.rolesMap);
 
     if (p.currentStage === "annotation") {
       projectDB.loadAnnotations(p.currentIteration).then((words) => {
@@ -382,6 +389,23 @@ export function useTurtleshell(): UseTurtleshellReturn {
     annotations, files, projectDB,
   ]);
 
+  const handleBulkUpdateBoundaries = useCallback(
+    (updates: Array<{ wordId: string; boundaryIndices: number[] }>) => {
+      const updatedWords = annotations.annotationWords.map((w) => {
+        const update = updates.find((u) => u.wordId === w.id);
+        if (!update) return w;
+        return {
+          ...w,
+          boundaries: update.boundaryIndices.map((index) => ({ index })),
+          confirmed: true,
+        };
+      });
+      annotations.setAnnotationWords(updatedWords);
+      projectDB.saveAnnotationWords(currentIteration, updatedWords);
+    },
+    [annotations, currentIteration, projectDB]
+  );
+
   const handleSkipAnnotation = useCallback(() => {
     // Skipping annotation returns to results rather than starting the next cycle —
     // the user didn't label anything so we let them decide from the results page.
@@ -439,6 +463,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
     setTrainingResult(null);
     setPreviousResult(null);
     setAutoStartTraining(false);
+    setRolesMap({});
 
     annotations.resetAnnotations();
     training.resetTrainingState();
@@ -488,6 +513,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
     annotationWords: annotations.annotationWords,
     totalAnnotationWords: annotations.totalAnnotationWords,
     handleUpdateBoundaries,
+    handleBulkUpdateBoundaries,
     handleSubmitAnnotations,
     handleSkipAnnotation,
 
@@ -504,7 +530,30 @@ export function useTurtleshell(): UseTurtleshellReturn {
     handleNewCycle,
     handleStartOver,
     handleDownloadSnapshot: projectDB.downloadSnapshot,
-    handleReadSnapshot: projectDB.readSnapshot,
+    handleReadSnapshot: async (snapshotJson: string) => {
+      await projectDB.readSnapshot(snapshotJson);
+      // Sync React language state from window.language set inside readSnapshot
+      const restoredLang = (window as any).language as string | undefined;
+      if (restoredLang && restoredLang !== language) {
+        handleLanguageChange(restoredLang);
+      }
+      // Parse project meta directly from snapshot bytes to avoid stale React state.
+      // (projectDB.project reflects the old state until the next React re-render)
+      try {
+        const snap = JSON.parse(snapshotJson) as Record<string, number[]>;
+        if (snap['project.json']) {
+          const text = new TextDecoder().decode(new Uint8Array(snap['project.json']));
+          const meta = JSON.parse(text);
+          if (meta?.currentStage === 'annotation') {
+            const words = await projectDB.loadAnnotations(meta.currentIteration);
+            if (words.length > 0) {
+              annotations.setAnnotationWords(words);
+            }
+          }
+          if (meta?.rolesMap) setRolesMap(meta.rolesMap);
+        }
+      } catch {}
+    },
 
     // Inference
     isRunningInference: training.isRunningInference,
