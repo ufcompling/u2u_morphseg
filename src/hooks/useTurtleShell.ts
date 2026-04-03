@@ -186,9 +186,13 @@ export function useTurtleshell(): UseTurtleshellReturn {
 
   const handleAssignRole = useCallback(
     (filePath: string, role: FileRole) => {
-      setRolesMap((prev) => ({ ...prev, [filePath]: role }));
+      setRolesMap((prev) => {
+        const next = { ...prev, [filePath]: role };
+        projectDB.saveProjectMeta({ rolesMap: next });
+        return next;
+      });
     },
-    []
+    [projectDB]
   );
 
   const handleRemoveFile = useCallback(
@@ -200,6 +204,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
       setRolesMap((prev) => {
         const copy = { ...prev };
         delete copy[filePath];
+        projectDB.saveProjectMeta({ rolesMap: copy });
         return copy;
       });
     },
@@ -255,6 +260,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
     setModelConfigLocal(p.modelConfig);
     setCurrentIteration(p.currentIteration);
     cumulativeSelectSize.current = p.cumulativeSelectSize;
+    if (p.rolesMap) setRolesMap(p.rolesMap);
 
     if (p.currentStage === "annotation") {
       projectDB.loadAnnotations(p.currentIteration).then((words) => {
@@ -457,6 +463,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
     setTrainingResult(null);
     setPreviousResult(null);
     setAutoStartTraining(false);
+    setRolesMap({});
 
     annotations.resetAnnotations();
     training.resetTrainingState();
@@ -543,6 +550,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
               annotations.setAnnotationWords(words);
             }
           }
+          if (meta?.rolesMap) setRolesMap(meta.rolesMap);
         }
       } catch {}
     },

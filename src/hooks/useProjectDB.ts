@@ -21,6 +21,7 @@ import {
   type CycleSnapshot,
   type AnnotationWord,
   type MorphemeBoundary,
+  type FileRole,
   DEFAULT_MODEL_CONFIG,
 } from "../lib/types";
 import { log } from "../lib/logger";
@@ -46,6 +47,7 @@ export interface ProjectState {
   modelConfig: ModelConfig;
   currentIteration: number;
   cumulativeSelectSize: number;
+  rolesMap: Record<string, FileRole | null>;
 }
 
 export interface UseProjectDBReturn {
@@ -166,6 +168,7 @@ export function useProjectDB(): UseProjectDBReturn {
               modelConfig: meta.modelConfig,
               currentIteration: meta.currentIteration,
               cumulativeSelectSize: meta.cumulativeSelectSize,
+              rolesMap: meta.rolesMap ?? {},
             });
           } catch {
             logger.warn('[useProjectDB] project.json corrupt on load, resetting');
@@ -231,6 +234,7 @@ export function useProjectDB(): UseProjectDBReturn {
       modelConfig: meta.modelConfig,
       currentIteration: meta.currentIteration,
       cumulativeSelectSize: meta.cumulativeSelectSize,
+      rolesMap: {},
     });
   }, [pyodideReady]);
 
@@ -381,6 +385,7 @@ export function useProjectDB(): UseProjectDBReturn {
             modelConfig: meta.modelConfig,
             currentIteration: meta.currentIteration,
             cumulativeSelectSize: meta.cumulativeSelectSize,
+            rolesMap: meta.rolesMap ?? {},
           });
         } catch {
           logger.warn('[useProjectDB] project.json corrupt after snapshot restore, resetting');
