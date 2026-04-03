@@ -56,7 +56,6 @@ interface AnnotationWorkspaceProps {
   totalWords: number;
   currentIteration: number;
   onSnapshot: () => void;
-  onReadSnapshot: (snapshotJson: string) => Promise<void>;
 }
 
 export function AnnotationWorkspaceStage({
@@ -68,7 +67,6 @@ export function AnnotationWorkspaceStage({
   totalWords,
   currentIteration,
   onSnapshot,
-  onReadSnapshot,
 }: AnnotationWorkspaceProps) {
   const [focusIndex, setFocusIndex] = useState(0);
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
@@ -76,7 +74,6 @@ export function AnnotationWorkspaceStage({
 
   // Dev/testing: gold file auto-annotation
   const goldInputRef = useRef<HTMLInputElement>(null);
-  const snapshotInputRef = useRef<HTMLInputElement>(null);
   const [goldMatchCount, setGoldMatchCount] = useState<number | null>(null);
   const [goldDebug, setGoldDebug] = useState<{
     separator: string;
@@ -181,20 +178,6 @@ export function AnnotationWorkspaceStage({
       e.target.value = "";
     },
     [onBulkUpdateBoundaries]
-  );
-
-  const handleSnapshotUpload = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        onReadSnapshot(reader.result as string);
-      };
-      reader.readAsText(file);
-      e.target.value = "";
-    },
-    [onReadSnapshot]
   );
 
   /** Confirm all words at once using current boundaries (CRF predictions as-is). */
@@ -467,22 +450,6 @@ export function AnnotationWorkspaceStage({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Restore snapshot */}
-          <input
-            ref={snapshotInputRef}
-            type="file"
-            accept=".json"
-            onChange={handleSnapshotUpload}
-            className="hidden"
-          />
-          <button
-            onClick={() => snapshotInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
-            title="Restore work from a snapshot file"
-          >
-            <UploadSmallIcon />
-            <span>Restore Snapshot</span>
-          </button>
 
           {/* Save snapshot */}
           <button

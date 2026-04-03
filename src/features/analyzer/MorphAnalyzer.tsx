@@ -120,7 +120,7 @@ function useLoadingLabel(pyodideReady: boolean, indexedDBReady: boolean, allRead
 
 // ── Init overlay ─────────────────────────────────────────────────────────────
 
-const FAVICON = `${import.meta.env.BASE_URL}favicon.ico`;
+const LOGO = `${import.meta.env.BASE_URL}turtleshell_logo.png`;
 
 const ICON_SIZE = 96;
 const GAP       = 18;
@@ -271,9 +271,9 @@ function InitOverlay({ pyodideReady, indexedDBReady, pyodideError, allReady }: I
           />
         </svg>
 
-        {/* Favicon */}
+        {/* logo */}
         <img
-          src={FAVICON} alt="TurtleShell"
+          src={LOGO} alt="TurtleShell"
           width={ICON_SIZE} height={ICON_SIZE}
           draggable={false}
           style={{
@@ -408,7 +408,6 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           totalWords={ts.totalAnnotationWords}
           currentIteration={ts.currentIteration}
           onSnapshot={ts.handleDownloadSnapshot}
-          onReadSnapshot={ts.handleReadSnapshot}
         />
       );
     case "results":
