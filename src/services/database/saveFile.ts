@@ -7,6 +7,9 @@ export async function saveFile(filePath: string, content: string | Uint8Array): 
     // into a Python string literal. The old `"""${content}"""` approach caused
     // Python to re-interpret escape sequences (e.g. \n, \", \u…) in the
     // content, corrupting JSON files like cycles.json on every subsequent read.
+    if (!pyodide?.FS?.writeFile) {
+      throw new Error("pyodide.FS.writeFile is not available in this environment (are you running in Node.js/bun instead of Pyodide?)");
+    }
     const bytes =
       content instanceof Uint8Array
         ? content
