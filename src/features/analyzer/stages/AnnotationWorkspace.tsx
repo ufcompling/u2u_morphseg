@@ -50,6 +50,7 @@ function parseGoldFile(content: string): {
 interface AnnotationWorkspaceProps {
   words: AnnotationWord[];
   onUpdateBoundaries: (wordId: string, boundaryIndices: number[]) => void;
+  onBulkUpdateBoundaries: (updates: Array<{ wordId: string; boundaryIndices: number[] }>) => void;
   onSubmit: () => void;
   onSkip: () => void;
   totalWords: number;
@@ -61,6 +62,7 @@ interface AnnotationWorkspaceProps {
 export function AnnotationWorkspaceStage({
   words,
   onUpdateBoundaries,
+  onBulkUpdateBoundaries,
   onSubmit,
   onSkip,
   totalWords,
@@ -150,19 +152,20 @@ export function AnnotationWorkspaceStage({
         });
 
         let matched = 0;
-        for (const w of currentWords) {
+        const allUpdates = currentWords.map((w) => {
           const key = w.word.replace(/\s+/g, "").toLowerCase();
           const goldBoundaries = goldLookup.get(key);
           const boundaryIndices =
             goldBoundaries !== undefined
               ? goldBoundaries
               : w.boundaries.map((b) => b.index);
-          onUpdateBoundaries(w.id, boundaryIndices);
           if (goldBoundaries !== undefined) matched++;
-        }
+          return { wordId: w.id, boundaryIndices };
+        });
 
-        // Confirm ALL words regardless of match — matched get gold boundaries,
-        // unmatched keep CRF predictions. Submit always enables after gold load.
+        // Single bulk call — updates React state and persists in one DB write
+        onBulkUpdateBoundaries(allUpdates);
+
         setAnnotatedSet(new Set(currentWords.map((w) => w.id)));
         setGoldMatchCount(matched);
 
@@ -177,7 +180,7 @@ export function AnnotationWorkspaceStage({
       reader.readAsText(file);
       e.target.value = "";
     },
-    [onUpdateBoundaries]
+    [onBulkUpdateBoundaries]
   );
 
   const handleSnapshotUpload = useCallback(

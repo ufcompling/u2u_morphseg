@@ -546,7 +546,7 @@ export function useProjectDB(): UseProjectDBReturn {
       word: w.word,
       confidence: w.confidence,
       boundaries: w.boundaries,
-      confirmed: false,
+      confirmed: w.confirmed ?? false,
     }));
     annotations.push(...rows);
     await db.saveFile(`/data/${language}/annotations.json`, JSON.stringify(annotations));

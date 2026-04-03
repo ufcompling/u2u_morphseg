@@ -63,6 +63,7 @@ export interface UseTurtleshellReturn {
   annotationWords: AnnotationWord[];
   totalAnnotationWords: number;
   handleUpdateBoundaries: (wordId: string, boundaryIndices: number[]) => void;
+  handleBulkUpdateBoundaries: (updates: Array<{ wordId: string; boundaryIndices: number[] }>) => void;
   handleSubmitAnnotations: () => Promise<void>;
   handleSkipAnnotation: () => void;
 
@@ -382,6 +383,23 @@ export function useTurtleshell(): UseTurtleshellReturn {
     annotations, files, projectDB,
   ]);
 
+  const handleBulkUpdateBoundaries = useCallback(
+    (updates: Array<{ wordId: string; boundaryIndices: number[] }>) => {
+      const updatedWords = annotations.annotationWords.map((w) => {
+        const update = updates.find((u) => u.wordId === w.id);
+        if (!update) return w;
+        return {
+          ...w,
+          boundaries: update.boundaryIndices.map((index) => ({ index })),
+          confirmed: true,
+        };
+      });
+      annotations.setAnnotationWords(updatedWords);
+      projectDB.saveAnnotationWords(currentIteration, updatedWords);
+    },
+    [annotations, currentIteration, projectDB]
+  );
+
   const handleSkipAnnotation = useCallback(() => {
     // Skipping annotation returns to results rather than starting the next cycle —
     // the user didn't label anything so we let them decide from the results page.
@@ -488,6 +506,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
     annotationWords: annotations.annotationWords,
     totalAnnotationWords: annotations.totalAnnotationWords,
     handleUpdateBoundaries,
+    handleBulkUpdateBoundaries,
     handleSubmitAnnotations,
     handleSkipAnnotation,
 
