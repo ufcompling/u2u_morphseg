@@ -1,4 +1,4 @@
-from aliases import Word, MorphList, ConfidenceData, DatasetLabels
+from aliases import LabeledData, Word, MorphList, ConfidenceData, DatasetLabels
 
 def format_evaluation(words: list[Word], gold_morphs: list[MorphList], pred_morphs: list[MorphList], 
 					  precision: float, recall: float, f1: float, delimiter: str = '!') -> str:
@@ -14,8 +14,13 @@ def format_evaluation(words: list[Word], gold_morphs: list[MorphList], pred_morp
 		lines.append(f'{word}\t{gold_seg}\t{pred_seg}')
 	return '\n'.join(lines) + '\n'
 	
-def format_increment(confidence_data: list[ConfidenceData]) -> list[dict[str, str | float | list[dict]]]:
+def format_increment(confidence_data: list[ConfidenceData | LabeledData]) -> list[dict[str, str | float | list[dict]]]:
 	increment: list[dict[str, str | float | list[dict]]] = []
+	
+	# Convert LabeledData to ConfidenceData with a default confidence score of 0.0
+	if type(confidence_data[0]) == tuple and len(confidence_data[0]) == 2:
+		confidence_data = [(word, labels, 0.0) for word, labels in confidence_data]
+
 	for i, (word, labels, confscore) in enumerate(confidence_data):
 		increment.append({
 			'id': f'w{i}',
