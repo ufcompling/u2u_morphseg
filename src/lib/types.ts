@@ -157,6 +157,8 @@ export interface TrainingCycleConfig {
    * Always a concrete number by the time it hits the worker.
    */
   randomSeed: number;
+  /** Active learning query strategy forwarded to the Python selection step */
+  queryStrategy: QueryStrategy;
   /** VFS working directory — default '/tmp/turtleshell' */
   workDir?: string;
 }
