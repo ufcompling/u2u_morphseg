@@ -174,9 +174,11 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
       delta: CRF_FEATURE_DELTA,
       selectSize: cumulativeSelectSize.current,
       randomSeed: resolvedSeed,
+      queryStrategy: modelConfig.queryStrategy,
       delimiter: modelConfig.delimiter,
     };
-
+    console.debug("[training] cycleConfig", cycleConfig);
+    
     try {
       const result = await runCycle(cycleConfig, (stepId, done, detail) => {
         updateStep(stepId, done, detail);
