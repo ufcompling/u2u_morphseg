@@ -43,7 +43,7 @@ export interface fileData {
 
 // --- Model Configuration ---
 
-export type QueryStrategy = "uncertainty" | "random" | "margin";
+export type QueryStrategy = "uncertainty" | "random" ;
 
 export interface ModelConfig {
   targetLanguage: string;
@@ -107,6 +107,7 @@ export interface AnnotationWord {
   word: string;
   boundaries: MorphemeBoundary[];
   confidence: number;
+  confirmed?: boolean;
 }
 
 // --- Results ---
@@ -136,14 +137,12 @@ export interface CycleSnapshot {
  * File content is passed as raw strings so Python can write them to VFS.
  */
 export interface TrainingCycleConfig {
-  /** Content of the annotated training .tgt file (80% split) */
-  trainTgt: string;
-  /** Content of the evaluation .tgt file (20% split of annotated) */
-  testTgt: string;
-  /** Content of the unannotated pool .tgt file (predicted morphemes) */
-  selectTgt: string;
-  /** Content of the unannotated pool .src file (character-space words) */
-  selectSrc: string;
+  /** File path of the annotated training file */
+  annotatedFile: string;
+  /** File path of the unannotated evaluation file */
+  unannotatedFile: string;
+  /** Target language for the model */
+  targetLanguage: string;
   /** How many low-confidence words to pull into the increment */
   incrementSize: number;
   /** Max CRF training iterations */
@@ -161,6 +160,11 @@ export interface TrainingCycleConfig {
   queryStrategy: QueryStrategy;
   /** VFS working directory — default '/tmp/turtleshell' */
   workDir?: string;
+  /**
+   * Character used to separate morphemes in annotated files, e.g. "!" in "un!happy".
+   * Passed through to Python so the CRF pipeline parses boundaries correctly.
+   */
+  delimiter: string;
 }
 
 /** Result returned from the worker after a successful cycle. */

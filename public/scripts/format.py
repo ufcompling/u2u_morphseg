@@ -1,7 +1,7 @@
-from aliases import Word, MorphList, ConfidenceData, DatasetLabels
+from aliases import LabeledData, Word, MorphList, ConfidenceData, DatasetLabels
 
 def format_evaluation(words: list[Word], gold_morphs: list[MorphList], pred_morphs: list[MorphList], 
-					  precision: float, recall: float, f1: float) -> str:
+					  precision: float, recall: float, f1: float, delimiter: str = '!') -> str:
 	lines = [
         '# TurtleShell Evaluation Report',
         f'# Precision: {precision:.2f}  Recall: {recall:.2f}  F1: {f1:.2f}',
@@ -9,13 +9,18 @@ def format_evaluation(words: list[Word], gold_morphs: list[MorphList], pred_morp
         '# word\tgold\tpredicted',
     ]
 	for word, gold, pred in zip(words, gold_morphs, pred_morphs):
-		gold_seg = '!'.join(gold)
-		pred_seg = '!'.join(pred)
+		gold_seg = delimiter.join(gold)
+		pred_seg = delimiter.join(pred)
 		lines.append(f'{word}\t{gold_seg}\t{pred_seg}')
 	return '\n'.join(lines) + '\n'
 	
-def format_increment(confidence_data: list[ConfidenceData]) -> list[dict[str, str | float | list[dict]]]:
+def format_increment(confidence_data: list[ConfidenceData | LabeledData]) -> list[dict[str, str | float | list[dict]]]:
 	increment: list[dict[str, str | float | list[dict]]] = []
+	
+	# Convert LabeledData to ConfidenceData with a default confidence score of 0.0
+	if type(confidence_data[0]) == tuple and len(confidence_data[0]) == 2:
+		confidence_data = [(word, labels, 0.0) for word, labels in confidence_data]
+
 	for i, (word, labels, confscore) in enumerate(confidence_data):
 		increment.append({
 			'id': f'w{i}',

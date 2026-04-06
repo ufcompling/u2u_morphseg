@@ -5,8 +5,8 @@ declare global {
   }
 }
 import type { ModelConfig, QueryStrategy } from "../../../lib/types";
-import { ArrowIcon, Tooltip, SnapshotIcon, UploadSmallIcon, DiceIcon } from "../../../components/ui";
-import { useEffect, useRef } from "react";
+import { ArrowIcon, Tooltip, UploadSmallIcon, DiceIcon } from "../../../components/ui";
+import { useEffect, useRef, useState } from "react";
 
 // ============================================================
 // Model Configuration Stage
@@ -17,7 +17,6 @@ interface ModelConfigProps {
   config: ModelConfig;
   onUpdateConfig: (config: ModelConfig) => void;
   onNext: () => void;
-  onSnapshot: () => void;
   onReadSnapshot: (snapshotJson: string) => Promise<void>;
 }
 
@@ -35,11 +34,6 @@ const STRATEGY_INFO: Record<QueryStrategy, { label: string; description: string 
     description:
       "Selects samples where the model is least confident about its prediction. Best for rapidly improving weak areas.",
   },
-  margin: {
-    label: "Margin Sampling",
-    description:
-      "Selects samples where the gap between the top two predictions is smallest. Good for resolving ambiguous cases.",
-  },
   random: {
     label: "Random Sampling",
     description:
@@ -51,19 +45,16 @@ export function ModelConfigStage({
   config,
   onUpdateConfig,
   onNext,
-  onSnapshot,
   onReadSnapshot,
 }: ModelConfigProps) {
   const snapshotInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSnapshotUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => onReadSnapshot(reader.result as string);
-    reader.readAsText(file);
-    e.target.value = "";
-  };
+  // Decoupled local state for delimiter — avoids the "backspace resets to !"
+  // bug that happens when config state forces non-empty on every keystroke.
+  const [delimInput, setDelimInput] = useState(config.delimiter ?? "!");
+  const [delimWarning, setDelimWarning] = useState(false);
+  const [langInput, setLangInput] = useState(config.targetLanguage ?? "");
+  useEffect(() => { setLangInput(config.targetLanguage ?? ""); }, [config.targetLanguage]);
 
   useEffect(() => {
     if (typeof window !== "undefined" && config.targetLanguage) {
@@ -78,10 +69,44 @@ export function ModelConfigStage({
     }
   };
 
+  const handleDelimChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (val.length > 1) return;
+    setDelimInput(val);
+    setDelimWarning(false);
+    if (val.length === 1) updateField("delimiter", val);
+  };
+
+  const handleDelimPreset = (char: string) => {
+    setDelimInput(char);
+    setDelimWarning(false);
+    updateField("delimiter", char);
+  };
+
+  const handleSnapshotUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => onReadSnapshot(reader.result as string);
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const handleNext = () => {
+    if (!delimInput.trim()) { setDelimWarning(true); return; }
+    setDelimWarning(false);
+    // Flush language if the user never blurred the field
+    const lang = langInput.trim();
+    if (lang && lang !== config.targetLanguage) {
+      updateField("targetLanguage", lang);
+    }
+    onNext();
+  };
+
   const activeStrategy = STRATEGY_INFO[config.queryStrategy];
-  const canStart = config.targetLanguage.trim().length > 0;
+  const canStart = langInput.trim().length > 0;
   const isRandom = config.randomSeed === null;
-  const delim = config.delimiter || "!";
+  const isCustomDelim = !DELIMITER_PRESETS.some((d) => d === delimInput);
 
   return (
     <div className="flex flex-col gap-0">
@@ -104,10 +129,14 @@ export function ModelConfigStage({
             </legend>
             <Tooltip text="The language of your morphological data. This helps the model select appropriate features for segmentation." />
           </div>
-          <input
+        <input
             type="text"
-            value={config.targetLanguage}
-            onChange={(e) => updateField("targetLanguage", e.target.value)}
+            value={langInput}
+            onChange={(e) => setLangInput(e.target.value)}
+            onBlur={(e) => {
+              const val = e.target.value.trim();
+              if (val) updateField("targetLanguage", val);
+            }}
             placeholder="e.g. Swahili, Turkish, Zulu..."
             className="w-full bg-card border border-border/20 rounded-lg px-4 py-3 font-mono text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
           />
@@ -117,7 +146,7 @@ export function ModelConfigStage({
       {/* Config form */}
       <div className="px-6 py-6 flex flex-col gap-7 border-b border-border/20">
 
-        {/* 1. Delimiter — full width, first */}
+        {/* 1. Annotated File Delimiter — full width */}
         <div className="flex flex-col gap-2.5">
           <div className="flex items-center gap-2">
             <label className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
@@ -126,60 +155,85 @@ export function ModelConfigStage({
             <Tooltip text="The character used to separate morphemes in your annotated training file. Must match exactly what your file uses." />
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Preset buttons */}
-            <div className="flex items-center gap-1 p-1 bg-background border border-border/15 rounded-lg">
-              {DELIMITER_PRESETS.map((d) => (
-                <button
-                  key={d}
-                  onClick={() => updateField("delimiter", d)}
-                  className={`w-9 h-9 rounded-md font-mono text-sm font-semibold transition-all ${
-                    delim === d
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground/70 hover:text-foreground hover:bg-secondary/10"
-                  }`}
-                >
-                  {d}
-                </button>
-              ))}
+          <div className="grid grid-cols-[1fr_auto] gap-3 items-start">
+            {/* Left: presets + custom input */}
+            <div className="flex flex-col gap-2">
+              {/* Preset chips */}
+              <div className="flex gap-1.5">
+                {DELIMITER_PRESETS.map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => handleDelimPreset(d)}
+                    className={`w-9 h-9 rounded-lg font-mono text-[15px] font-medium transition-all ${
+                      delimInput === d
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "bg-background border border-border/20 text-muted-foreground/60 hover:text-foreground hover:border-primary/30 hover:bg-primary/5"
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom input — controlled directly by delimInput, not config.delimiter */}
+              <div className={`flex items-center gap-2.5 px-3 py-2 bg-card border rounded-lg transition-colors ${
+                delimWarning
+                  ? "border-red-400/50"
+                  : isCustomDelim && delimInput
+                    ? "border-primary/40 ring-1 ring-primary/20"
+                    : "border-border/20"
+              }`}>
+                <span className="font-mono text-[10px] text-muted-foreground/30 uppercase tracking-wider shrink-0">
+                  custom
+                </span>
+                <input
+                  type="text"
+                  value={delimInput}
+                  onChange={handleDelimChange}
+                  maxLength={1}
+                  placeholder="any character"
+                  className="flex-1 bg-transparent font-mono text-sm text-foreground focus:outline-none placeholder:text-muted-foreground/20"
+                />
+                {delimWarning && (
+                  <span className="font-mono text-[10px] text-red-400 shrink-0">required</span>
+                )}
+              </div>
             </div>
 
-            {/* Custom input */}
-            <input
-              type="text"
-              value={delim}
-              maxLength={3}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val.length <= 3) updateField("delimiter", val);
-              }}
-              className="w-20 bg-card border border-border/20 rounded-lg px-3 py-2 font-mono text-sm text-center text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
-              placeholder="custom"
-            />
-
-            {/* Live example preview */}
-            <div className="flex-1 px-3 py-2 bg-secondary/5 border border-border/10 rounded-lg">
-              <span className="font-mono text-[11px] text-muted-foreground/50">example: </span>
-              <span className="font-mono text-[11px] text-foreground/70">
-                walk{delim}ed
-              </span>
-              <span className="font-mono text-[11px] text-muted-foreground/30 mx-1.5">·</span>
-              <span className="font-mono text-[11px] text-foreground/70">
-                un{delim}happy
-              </span>
-              <span className="font-mono text-[11px] text-muted-foreground/30 mx-1.5">·</span>
-              <span className="font-mono text-[11px] text-foreground/70">
-                mean{delim}ing{delim}less
-              </span>
+            {/* Right: chip preview panel */}
+            <div className="flex flex-col px-3.5 py-3 bg-secondary/5 border border-border/10 rounded-lg w-[140px]">
+              <p className="font-mono text-[9px] text-muted-foreground/30 uppercase tracking-widest mb-2.5">
+                preview
+              </p>
+              {delimInput ? (
+                <>
+                  <p className="font-mono text-[12px] text-muted-foreground/50 mb-2.5 tracking-wide">
+                    un<span className="text-primary font-bold">{delimInput}</span>
+                    hap<span className="text-primary font-bold">{delimInput}</span>py
+                  </p>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {["un", "hap", "py"].map((m) => (
+                      <span
+                        key={m}
+                        className="px-1.5 py-0.5 rounded bg-primary/10 border border-primary/15 font-mono text-[10px] text-primary/80"
+                      >
+                        {m}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="font-mono text-[10px] text-muted-foreground/25 italic">no delimiter set</p>
+              )}
             </div>
           </div>
 
-          <p className="font-mono text-[11px] text-muted-foreground/50">
+          <p className="font-mono text-[11px] text-muted-foreground/70">
             Monomorphemic words without the delimiter are valid
           </p>
         </div>
 
-        {/* 2. Increment size + Seed — side by side */}
+        {/* 2. Increment Size + Seed — side by side */}
         <div className="grid grid-cols-2 gap-5">
           {/* Increment size */}
           <div className="flex flex-col gap-2.5">
@@ -217,7 +271,7 @@ export function ModelConfigStage({
                   <span className="font-mono text-[11px] text-muted-foreground/40 uppercase tracking-widest">
                     Random
                   </span>
-                  <span className="font-mono text-[10px] text-muted-foreground/25">
+                  <span className="font-mono text-[10px] text-muted-foreground/50">
                     · new split each cycle
                   </span>
                 </div>
@@ -244,7 +298,7 @@ export function ModelConfigStage({
               )}
               <button
                 onClick={() => updateField("randomSeed", rollSeed())}
-                className="p-2.5 rounded-lg border border-border/20 bg-card text-muted-foreground/50 hover:text-foreground hover:border-primary/30 hover:bg-primary/5 transition-all"
+                className="p-2.5 rounded-lg border border-border/20 bg-card text-muted-foreground/70 hover:text-foreground hover:border-primary/30 hover:bg-primary/5 transition-all"
                 title="Roll a random seed and lock it"
               >
                 <DiceIcon className="w-4 h-4" />
@@ -252,20 +306,20 @@ export function ModelConfigStage({
               {!isRandom && (
                 <button
                   onClick={() => updateField("randomSeed", null)}
-                  className="p-2.5 rounded-lg border border-border/20 bg-card text-muted-foreground/40 hover:text-red-400 hover:border-red-400/30 hover:bg-red-400/5 transition-all"
+                  className="p-2.5 rounded-lg border border-border/20 bg-card text-muted-foreground/70 hover:text-red-400 hover:border-red-400/30 hover:bg-red-400/5 transition-all"
                   title="Clear seed — use random each cycle"
                 >
                   <span className="font-mono text-xs leading-none">✕</span>
                 </button>
               )}
             </div>
-            <p className="font-mono text-[11px] text-muted-foreground/50">
+            <p className="font-mono text-[11px] text-muted-foreground/70">
               {isRandom ? "Click 🎲 to lock a specific seed" : `Locked · 0 – ${SEED_MAX.toLocaleString()}`}
             </p>
           </div>
         </div>
 
-        {/* 3. Query strategy — full width, last */}
+        {/* 3. Query Strategy — full width */}
         <div className="flex flex-col gap-2.5">
           <div className="flex items-center gap-2">
             <label className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
@@ -297,12 +351,13 @@ export function ModelConfigStage({
             </p>
           </div>
         </div>
+
       </div>
 
       {/* Footer */}
       <footer className="px-6 py-4 flex items-center justify-between">
         <button
-          onClick={onNext}
+          onClick={handleNext}
           disabled={!canStart}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-mono text-xs font-semibold tracking-wide transition-all hover:bg-primary/90 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none"
         >
@@ -324,14 +379,6 @@ export function ModelConfigStage({
           >
             <UploadSmallIcon />
             <span>Restore Snapshot</span>
-          </button>
-          <button
-            onClick={onSnapshot}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
-            title="Download a snapshot of your current work"
-          >
-            <SnapshotIcon />
-            <span>Snapshot</span>
           </button>
         </div>
       </footer>

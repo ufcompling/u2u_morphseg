@@ -6,23 +6,23 @@
 :root {
   --background: #344e41;
   --foreground: #dad7cd;
-  --card: #3a5a40;
+  --card: #36533D;
   --card-foreground: #dad7cd;
   --popover: #3a5a40;
   --popover-foreground: #dad7cd;
-  --primary: #a3b18a;
+  --primary: #d1e7c5;
   --primary-foreground: #344e41;
   --secondary: #588157;
   --secondary-foreground: #dad7cd;
   --muted: #588157;
-  --muted-foreground: #a3b18a;
-  --accent: #a3b18a;
+  --muted-foreground: #d1e7c5;
+  --accent: #d1e7c5;
   --accent-foreground: #344e41;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: #dad7cd;
   --border: #588157;
   --input: #3a5a40;
-  --ring: #a3b18a;
+  --ring: #d1e7c5;
   --radius: 0.5rem;
 }
 
@@ -58,8 +58,15 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    scrollbar-gutter: stable; /* reserves scrollbar space so layout never shifts when it appears */
+  }
   body {
     @apply bg-background text-foreground;
+    overflow-y: scroll; /* fallback for browsers without scrollbar-gutter support */
+  }
+  button {
+    cursor: pointer;
   }
   input[type="number"]::-webkit-inner-spin-button,
   input[type="number"]::-webkit-outer-spin-button {

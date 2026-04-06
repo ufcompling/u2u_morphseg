@@ -63,6 +63,7 @@ export interface UseTurtleshellReturn {
   annotationWords: AnnotationWord[];
   totalAnnotationWords: number;
   handleUpdateBoundaries: (wordId: string, boundaryIndices: number[]) => void;
+  handleBulkUpdateBoundaries: (updates: Array<{ wordId: string; boundaryIndices: number[] }>) => void;
   handleSubmitAnnotations: () => Promise<void>;
   handleSkipAnnotation: () => void;
 
@@ -93,17 +94,29 @@ export interface UseTurtleshellReturn {
 
 export function useTurtleshell(): UseTurtleshellReturn {
   const [language, setLanguageState] = useState<string>("");
+  // Track the stage here so handleLanguageChange / setModelConfig can read it
+  // without a stale closure. This ref is kept in sync with currentStage below.
+  const currentStageRef = useRef<WorkflowStage>("config");
 
   const handleLanguageChange = useCallback((lang: string) => {
     setLanguageState(lang);
-    setLanguage(lang);
+    // Only push to the worker (which sets window.language and the VFS path
+    // prefix) once the user has left the config stage. While they are still
+    // typing the language name we must not create /data/<partial>/ dirs.
+    if (currentStageRef.current !== "config") {
+      setLanguage(lang);
+    }
   }, []);
 
   const projectDB = useProjectDB();
-  const [rolesMap, setRolesMap] = useState<Record<string, FileRole | null>>({});
+  const [rolesMap, setRolesMap] = useState<Record<string, FileRole | null>>({});  
 
-  // Sync language to worker on mount and whenever it changes
-  useEffect(() => { setLanguage(language); }, [language]);
+  // Sync language to worker ONLY when past the config stage.
+  useEffect(() => {
+    if (currentStageRef.current !== "config") {
+      setLanguage(language);
+    }
+  }, [language]);
 
   const { pyodideReady, pyodideLoading, pyodideError, modelRestored, runCycle, runInference, wipeVfs } =
     usePyodideWorker();
@@ -127,9 +140,18 @@ export function useTurtleshell(): UseTurtleshellReturn {
 
   const goToStage = useCallback(
   (stage: WorkflowStage) => {
+    const leavingConfig = currentStageRef.current === "config" && stage !== "config";
+    currentStageRef.current = stage;
     setCompletedStages(deriveCompletedStages(stage));
     setCurrentStage(stage);
-    projectDB.saveProjectMeta({ currentStage: stage });
+    if (leavingConfig) {
+      // First time leaving config: flush the language to the worker and persist
+      // the full model config + stage in one shot. Nothing was written before.
+      setLanguage((window as any).language ?? "");
+      projectDB.saveProjectMeta({ currentStage: stage, modelConfig: modelConfigRef.current });
+    } else {
+      projectDB.saveProjectMeta({ currentStage: stage });
+    }
   },
   [projectDB]
 );
@@ -137,13 +159,19 @@ export function useTurtleshell(): UseTurtleshellReturn {
   // ── Core state ──────────────────────────────────────────────────────────
 
   const [modelConfig, setModelConfigLocal] = useState<ModelConfig>(DEFAULT_MODEL_CONFIG);
+  const modelConfigRef = useRef<ModelConfig>(DEFAULT_MODEL_CONFIG);
   const [currentIteration, setCurrentIteration] = useState(1);
   const cumulativeSelectSize = useRef(0);
 
   const setModelConfig = useCallback(
     (config: ModelConfig) => {
       setModelConfigLocal(config);
-      projectDB.saveProjectMeta({ modelConfig: config });
+      modelConfigRef.current = config;
+      // Skip DB write while on the config stage — goToStage will do one bulk
+      // flush when the user clicks "Upload Files".
+      if (currentStageRef.current !== "config") {
+        projectDB.saveProjectMeta({ modelConfig: config });
+      }
     },
     [projectDB]
   );
@@ -151,6 +179,15 @@ export function useTurtleshell(): UseTurtleshellReturn {
   // ── File management ─────────────────────────────────────────────────────
 
   const [isUploading, setIsUploading] = useState(false);
+
+
+  // Sync currentStage with projectDB.project?.currentStage (e.g. after snapshot restore)
+  useEffect(() => {
+    if (!projectDB.project) return;
+    currentStageRef.current = projectDB.project.currentStage;
+    setCurrentStage(projectDB.project.currentStage);
+    setCompletedStages(deriveCompletedStages(projectDB.project.currentStage));
+  }, [projectDB.project?.currentStage]);
 
   const handleUpload = useCallback(
     async (fileList: FileList | null) => {
@@ -177,9 +214,13 @@ export function useTurtleshell(): UseTurtleshellReturn {
 
   const handleAssignRole = useCallback(
     (filePath: string, role: FileRole) => {
-      setRolesMap((prev) => ({ ...prev, [filePath]: role }));
+      setRolesMap((prev) => {
+        const next = { ...prev, [filePath]: role };
+        projectDB.saveProjectMeta({ rolesMap: next });
+        return next;
+      });
     },
-    []
+    [projectDB]
   );
 
   const handleRemoveFile = useCallback(
@@ -191,6 +232,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
       setRolesMap((prev) => {
         const copy = { ...prev };
         delete copy[filePath];
+        projectDB.saveProjectMeta({ rolesMap: copy });
         return copy;
       });
     },
@@ -242,10 +284,13 @@ export function useTurtleshell(): UseTurtleshellReturn {
     }
 
     setCurrentStage(p.currentStage);
+    currentStageRef.current = p.currentStage;
     setCompletedStages(deriveCompletedStages(p.currentStage));
     setModelConfigLocal(p.modelConfig);
+    modelConfigRef.current = p.modelConfig;
     setCurrentIteration(p.currentIteration);
     cumulativeSelectSize.current = p.cumulativeSelectSize;
+    if (p.rolesMap) setRolesMap(p.rolesMap);
 
     if (p.currentStage === "annotation") {
       projectDB.loadAnnotations(p.currentIteration).then((words) => {
@@ -374,6 +419,23 @@ export function useTurtleshell(): UseTurtleshellReturn {
     annotations, files, projectDB,
   ]);
 
+  const handleBulkUpdateBoundaries = useCallback(
+    (updates: Array<{ wordId: string; boundaryIndices: number[] }>) => {
+      const updatedWords = annotations.annotationWords.map((w) => {
+        const update = updates.find((u) => u.wordId === w.id);
+        if (!update) return w;
+        return {
+          ...w,
+          boundaries: update.boundaryIndices.map((index) => ({ index })),
+          confirmed: true,
+        };
+      });
+      annotations.setAnnotationWords(updatedWords);
+      projectDB.saveAnnotationWords(currentIteration, updatedWords);
+    },
+    [annotations, currentIteration, projectDB]
+  );
+
   const handleSkipAnnotation = useCallback(() => {
     // Skipping annotation returns to results rather than starting the next cycle —
     // the user didn't label anything so we let them decide from the results page.
@@ -424,13 +486,16 @@ export function useTurtleshell(): UseTurtleshellReturn {
 
   const handleStartOver = useCallback(async () => {
     setCurrentStage("config");
+    currentStageRef.current = "config";
     setCompletedStages([]);
     setModelConfigLocal(DEFAULT_MODEL_CONFIG);
+    modelConfigRef.current = DEFAULT_MODEL_CONFIG;
     setCurrentIteration(1);
     cumulativeSelectSize.current = 0;
     setTrainingResult(null);
     setPreviousResult(null);
     setAutoStartTraining(false);
+    setRolesMap({});
 
     annotations.resetAnnotations();
     training.resetTrainingState();
@@ -480,6 +545,7 @@ export function useTurtleshell(): UseTurtleshellReturn {
     annotationWords: annotations.annotationWords,
     totalAnnotationWords: annotations.totalAnnotationWords,
     handleUpdateBoundaries,
+    handleBulkUpdateBoundaries,
     handleSubmitAnnotations,
     handleSkipAnnotation,
 
@@ -496,7 +562,30 @@ export function useTurtleshell(): UseTurtleshellReturn {
     handleNewCycle,
     handleStartOver,
     handleDownloadSnapshot: projectDB.downloadSnapshot,
-    handleReadSnapshot: projectDB.readSnapshot,
+    handleReadSnapshot: async (snapshotJson: string) => {
+      await projectDB.readSnapshot(snapshotJson);
+      // Sync React language state from window.language set inside readSnapshot
+      const restoredLang = (window as any).language as string | undefined;
+      if (restoredLang && restoredLang !== language) {
+        handleLanguageChange(restoredLang);
+      }
+      // Parse project meta directly from snapshot bytes to avoid stale React state.
+      // (projectDB.project reflects the old state until the next React re-render)
+      try {
+        const snap = JSON.parse(snapshotJson) as Record<string, number[]>;
+        if (snap['project.json']) {
+          const text = new TextDecoder().decode(new Uint8Array(snap['project.json']));
+          const meta = JSON.parse(text);
+          if (meta?.currentStage === 'annotation') {
+            const words = await projectDB.loadAnnotations(meta.currentIteration);
+            if (words.length > 0) {
+              annotations.setAnnotationWords(words);
+            }
+          }
+          if (meta?.rolesMap) setRolesMap(meta.rolesMap);
+        }
+      } catch {}
+    },
 
     // Inference
     isRunningInference: training.isRunningInference,

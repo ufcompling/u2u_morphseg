@@ -2,7 +2,7 @@ import { useState, useEffect, type DragEvent, type ChangeEvent } from "react";
 import type { fileData, FileRole } from "../../../lib/types";
 import { formatSize } from "../../../lib/format-utils";
 import {
-  UploadIcon, FileIcon, TrashIcon, ArrowIcon, SnapshotIcon,
+  UploadIcon, FileIcon, TrashIcon, ArrowIcon,
 } from "../../../components/ui/icons";
 import {
   validateAnnotatedFile,
@@ -25,7 +25,6 @@ interface DatasetIngestionProps {
   onBack: () => void;
   isUploading: boolean;
   pyodideReady: boolean;
-  onSnapshot: () => void;
   /** Delimiter from ModelConfig — used to validate annotated files */
   delimiter: string;
 }
@@ -39,7 +38,6 @@ export function DatasetIngestion({
   onBack,
   isUploading,
   pyodideReady,
-  onSnapshot,
   delimiter,
 }: DatasetIngestionProps) {
   const hiddenNames = new Set(["project.json", "cycles.json", "annotations.json"]);
@@ -167,8 +165,8 @@ export function DatasetIngestion({
             statusMessage.isError
               ? "text-red-400/70"
               : canStartTraining
-                ? "text-primary/60"
-                : "text-muted-foreground/40"
+                ? "text-primary/70"
+                : "text-muted-foreground/70"
           }`}
         >
           {statusMessage.text}
@@ -180,14 +178,6 @@ export function DatasetIngestion({
             className="px-4 py-2.5 rounded-xl font-mono text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/20 transition-all"
           >
             Back
-          </button>
-          <button
-            onClick={onSnapshot}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border/40 bg-secondary/10 font-mono text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-secondary/20 transition-all"
-            title="Download a snapshot of your current work"
-          >
-            <SnapshotIcon />
-            <span>Snapshot</span>
           </button>
           <button
             onClick={onStartTraining}

@@ -35,7 +35,7 @@ export function MorphAnalyzer() {
       <TurtleShellBackground />
 
       <main className="w-full max-w-4xl relative z-10">
-        <div className="bg-card/98 backdrop-blur-3xl border border-border/20 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden ring-1 ring-white/5">
+        <div className="bg-card/98 backdrop-blur-3xl border border-border/20 rounded-2xl shadow-2xl shadow-black/40 overflow-visible ring-1 ring-white/5">
 
           <header className="px-6 py-4 flex items-center border-b border-border/20 bg-secondary/5">
             <div>
@@ -120,7 +120,7 @@ function useLoadingLabel(pyodideReady: boolean, indexedDBReady: boolean, allRead
 
 // ── Init overlay ─────────────────────────────────────────────────────────────
 
-const FAVICON = `${import.meta.env.BASE_URL}favicon.ico`;
+const LOGO = `${import.meta.env.BASE_URL}turtleshell_logo.png`;
 
 const ICON_SIZE = 96;
 const GAP       = 18;
@@ -271,9 +271,9 @@ function InitOverlay({ pyodideReady, indexedDBReady, pyodideError, allReady }: I
           />
         </svg>
 
-        {/* Favicon */}
+        {/* logo */}
         <img
-          src={FAVICON} alt="TurtleShell"
+          src={LOGO} alt="TurtleShell"
           width={ICON_SIZE} height={ICON_SIZE}
           draggable={false}
           style={{
@@ -371,7 +371,6 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           config={ts.modelConfig}
           onUpdateConfig={ts.setModelConfig}
           onNext={() => ts.goToStage("ingestion")}
-          onSnapshot={ts.handleDownloadSnapshot}
           onReadSnapshot={ts.handleReadSnapshot}
         />
       );
@@ -386,7 +385,6 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           onStartTraining={ts.handleStartTraining}
           isUploading={ts.isUploading}
           pyodideReady={ts.pyodideReady}
-          onSnapshot={ts.handleDownloadSnapshot}
           delimiter={ts.modelConfig.delimiter}
         />
       );
@@ -397,7 +395,6 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           currentIteration={ts.currentIteration}
           isComplete={ts.isTrainingComplete}
           onContinue={() => ts.goToStage("results")}
-          onSnapshot={ts.handleDownloadSnapshot}
         />
       );
     case "annotation":
@@ -405,12 +402,12 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
         <AnnotationWorkspaceStage
           words={ts.annotationWords}
           onUpdateBoundaries={ts.handleUpdateBoundaries}
+          onBulkUpdateBoundaries={ts.handleBulkUpdateBoundaries}
           onSubmit={ts.handleSubmitAnnotations}
           onSkip={ts.handleSkipAnnotation}
           totalWords={ts.totalAnnotationWords}
           currentIteration={ts.currentIteration}
           onSnapshot={ts.handleDownloadSnapshot}
-          onReadSnapshot={ts.handleReadSnapshot}
         />
       );
     case "results":
@@ -419,6 +416,7 @@ function StageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
           result={ts.trainingResult}
           previousResult={ts.previousResult}
           cycleHistory={ts.cycleHistory}
+          queryStrategy={ts.modelConfig.queryStrategy}
           onDownloadIncrement={ts.handleDownloadIncrement}
           onDownloadResidual={ts.handleDownloadResidual}
           onDownloadEvaluation={ts.handleDownloadEvaluation}
