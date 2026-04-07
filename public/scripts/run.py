@@ -89,10 +89,10 @@ def run_training_cycle(config_json: str) -> str:
 			data['test']['words'], data['test']['morphs'], test_predictions, precision, recall, f1, delimiter
 		)
 
+		X_select = get_unlabeled_features(data['select']['words'], delta)
+		y_select_predict: DatasetLabels = crf.predict(X_select)
 		match query_strategy:
 			case 'confidence':
-				X_select = get_unlabeled_features(data['select']['words'], delta)
-				y_select_predict: DatasetLabels = crf.predict(X_select)
 				marginals: DatasetMarginals = crf.predict_marginals(X_select)
 				query_data: list[ConfidenceData] = get_confidence_data(data['select']['words'], y_select_predict, marginals)
 			case 'random':
