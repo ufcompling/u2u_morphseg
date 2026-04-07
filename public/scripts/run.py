@@ -48,7 +48,7 @@ def run_training_cycle(config_json: str) -> str:
 		annotated_file: str = config['annotatedFile']
 		unannotated_file: str = config['unannotatedFile']
 		target_language: str = config.get('targetLanguage', 'unknown')
-		query_strategy: Literal['confidence', 'random'] = config.get('queryStrategy', 'confidence')
+		query_strategy: Literal['uncertainty', 'random'] = config.get('queryStrategy', 'uncertainty')
 		increment_size: int = config.get('incrementSize', 100)
 		max_iterations: int = config.get('maxIterations', 100)
 		delimiter: str = config.get('delimiter', '!')
@@ -92,11 +92,11 @@ def run_training_cycle(config_json: str) -> str:
 		X_select = get_unlabeled_features(data['select']['words'], delta)
 		y_select_predict: DatasetLabels = crf.predict(X_select)
 		match query_strategy:
-			case 'confidence':
+			case 'uncertainty':
 				marginals: DatasetMarginals = crf.predict_marginals(X_select)
 				query_data: list[ConfidenceData] = get_confidence_data(data['select']['words'], y_select_predict, marginals)
 			case 'random':
-				query_data: LabeledData = list(zip(data['select']['words'], y_select_predict))
+				query_data: list[LabeledData] = list(zip(data['select']['words'], y_select_predict))
 				random.shuffle(query_data)
 			case _:
 				raise ValueError(f"Unsupported query strategy: {query_strategy}")
