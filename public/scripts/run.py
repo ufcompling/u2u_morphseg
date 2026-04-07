@@ -7,7 +7,7 @@ from typing import Literal
 from itertools import repeat
 from sklearn_crfsuite import CRF
 
-from aliases import DataDict, DatasetFeatures, DatasetLabels, LabeledData, MorphList, DatasetMarginals, ConfidenceData
+from aliases import DataDict, DatasetFeatures, DatasetLabels, MorphList, DatasetMarginals, ConfidenceData
 from partition import process_file
 from db_worker import read_file
 from process_data import process_data
