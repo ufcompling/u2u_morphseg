@@ -13,7 +13,6 @@ WordLabels: TypeAlias = list[PredictionLabel]
 DatasetLabels: TypeAlias = list[WordLabels]
 
 ConfidenceData: TypeAlias = tuple[Word, DatasetLabels, float]
-LabeledData: TypeAlias = tuple[Word, DatasetLabels]
 
 CharMarginals: TypeAlias = dict[PredictionLabel, float]
 WordMarginals: TypeAlias = list[CharMarginals]

@@ -4,9 +4,10 @@
 
 import json, os, random
 from typing import Literal
+from itertools import repeat
 from sklearn_crfsuite import CRF
 
-from aliases import DataDict, DatasetFeatures, DatasetLabels, LabeledData, MorphList, DatasetMarginals, ConfidenceData
+from aliases import DataDict, DatasetFeatures, DatasetLabels, MorphList, DatasetMarginals, ConfidenceData
 from partition import process_file
 from db_worker import read_file
 from process_data import process_data
@@ -48,7 +49,7 @@ def run_training_cycle(config_json: str) -> str:
 		annotated_file: str = config['annotatedFile']
 		unannotated_file: str = config['unannotatedFile']
 		target_language: str = config.get('targetLanguage', 'unknown')
-		query_strategy: Literal['confidence', 'random'] = config.get('queryStrategy', 'confidence')
+		query_strategy: Literal['uncertainty', 'random'] = config.get('queryStrategy', 'uncertainty')
 		increment_size: int = config.get('incrementSize', 100)
 		max_iterations: int = config.get('maxIterations', 100)
 		delimiter: str = config.get('delimiter', '!')
@@ -89,18 +90,18 @@ def run_training_cycle(config_json: str) -> str:
 			data['test']['words'], data['test']['morphs'], test_predictions, precision, recall, f1, delimiter
 		)
 
+		X_select = get_unlabeled_features(data['select']['words'], delta)
+		y_select_predict: DatasetLabels = crf.predict(X_select)
 		match query_strategy:
-			case 'confidence':
-				X_select = get_unlabeled_features(data['select']['words'], delta)
-				y_select_predict: DatasetLabels = crf.predict(X_select)
+			case 'uncertainty':
 				marginals: DatasetMarginals = crf.predict_marginals(X_select)
 				query_data: list[ConfidenceData] = get_confidence_data(data['select']['words'], y_select_predict, marginals)
 			case 'random':
-				query_data: LabeledData = list(zip(data['select']['words'], y_select_predict))
+				query_data: list[ConfidenceData] = list(zip(data['select']['words'], y_select_predict, repeat(0.0)))
 				random.shuffle(query_data)
 			case _:
 				raise ValueError(f"Unsupported query strategy: {query_strategy}")
-			
+		
 		increment_words: list[str] = [word for word, _, _ in query_data[:increment_size]]
 		increment_content: str = '\n'.join(increment_words)
 		increment_data: list[dict[str, str | float | list[dict]]] = format_increment(query_data[:increment_size])
