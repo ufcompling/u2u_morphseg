@@ -4,6 +4,7 @@
 
 import json, os, random
 from typing import Literal
+from itertools import repeat
 from sklearn_crfsuite import CRF
 
 from aliases import DataDict, DatasetFeatures, DatasetLabels, LabeledData, MorphList, DatasetMarginals, ConfidenceData
@@ -96,11 +97,11 @@ def run_training_cycle(config_json: str) -> str:
 				marginals: DatasetMarginals = crf.predict_marginals(X_select)
 				query_data: list[ConfidenceData] = get_confidence_data(data['select']['words'], y_select_predict, marginals)
 			case 'random':
-				query_data: list[LabeledData] = list(zip(data['select']['words'], y_select_predict))
+				query_data: list[ConfidenceData] = list(zip(data['select']['words'], y_select_predict, repeat(0.0)))
 				random.shuffle(query_data)
 			case _:
 				raise ValueError(f"Unsupported query strategy: {query_strategy}")
-			
+		
 		increment_words: list[str] = [word for word, _, _ in query_data[:increment_size]]
 		increment_content: str = '\n'.join(increment_words)
 		increment_data: list[dict[str, str | float | list[dict]]] = format_increment(query_data[:increment_size])
