@@ -544,6 +544,19 @@ export function useTurtleshell(): UseTurtleshellReturn {
         if (snap['project.json']) {
           const text = new TextDecoder().decode(new Uint8Array(snap['project.json']));
           const meta = JSON.parse(text);
+          // Sync all iteration/config state that the initial-load effect would set.
+          // hasRestored.current=true (set in handleStartOver) blocks that effect, so
+          // we must sync here — otherwise currentIteration stays stale, causing gold
+          // file saves and handleSubmitAnnotations to use the wrong cycle number.
+          if (meta?.currentIteration) {
+            setCurrentIteration(meta.currentIteration);
+          }
+          if (meta?.modelConfig) {
+            setModelConfigLocal(meta.modelConfig);
+          }
+          if (meta?.cumulativeSelectSize !== undefined) {
+            cumulativeSelectSize.current = meta.cumulativeSelectSize;
+          }
           if (meta?.currentStage === 'annotation') {
             const words = await projectDB.loadAnnotations(meta.currentIteration);
             if (words.length > 0) {
