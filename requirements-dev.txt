@@ -5,3 +5,7 @@ Cython>=3.0.0
 
 # Dependencies for python-crfsuite
 setuptools>=42
+
+# Dependencies for pyodide testing
+selenium
+pyodide-pytest
