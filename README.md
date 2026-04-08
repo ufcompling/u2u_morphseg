@@ -1,5 +1,8 @@
 # Senior Project: Morphological Analysis with Client-Side CRF
 
+![Overview-gif](https://github.com/user-attachments/assets/944773df-924e-4dc3-846d-9df831696ffa)
+
+
 ## 1. Abstract
 **Overview:** 
 The application allows users to perform sequence labeling using Conditional Random Fields (CRF) entirely within the web browser. By leveraging **Pyodide (WebAssembly)**, we move the computation from the server to the client. The system also utilizes **Active Learning** strategies to suggest which data points a researcher should annotate next, significantly reducing manual effort while maintaining high model accuracy.
