@@ -79,6 +79,11 @@ else
         echo "ERROR: No wheel found in temp-crfsuite/dist/ after build!"
         exit 1
     fi
+
+    # Change the onwership of the wheel file that is made inside of docker container.
+    if [ -f /.dockerenv ]; then
+        chmod -R 777 "$WHEEL_PATH"
+    fi
 fi
 
 echo "========================== DONE! Your environment is ready. =========================="
