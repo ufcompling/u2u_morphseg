@@ -24,39 +24,42 @@ The application allows users to perform sequence labeling using Conditional Rand
 ## 3. Project Architecture
 ```
 .
-├── public/                           # Static assets served directly by the browser.
-│   ├── wheels/                       # Compiled .whl files (Don't delete!)
-│   ├── requirements.txt              # Browser-side Python dependencies
-│   └── scripts/                      # Python logic (CRF & analysis)
-├── src/
-│   ├── components/                   
-│   │   └── ui/                       # Shared UI components (Buttons, Modals)
-│   ├── features/                     # Feature-based modules
-│   │   └── analyzer/                 # Morphological Analyzer feature
-│   │       ├── components/           
-│   │       └── hooks/                
-│   ├── hooks/                        # Global React hooks
-│   ├── layouts/                      # Page structure components
-│   ├── pages/                        # Individual routes/views
-│   ├── services/
-│   │   ├── database/                 # IndexedDB configuration
-│   │   └── pyodide/                  # Pyodide (WASM) initialization and bridge
-│   │       └── worker/               # Background processing workers
-│   ├── App.tsx                       # Root component & Router
-│   ├── index.css                     
-│   └── main.tsx                      # Application entry point
-├── test/                             # Test suite directory
-│   ├── features/                     # UI and integration tests
-│   └── services/                     # Database and engine tests
-|          └── db_tests/              # Database tests
-├── index.html                        # Entry point (loads Pyodide CDN)
-├── package.json                      # Dependencies and scripts
-├── Dockerfile                        # Build environment for Emscripten & Pyodide
-├── docker-compose.yml                # Orchestrates the Wasm wheel compilation process
-├── Makefile                          # Shortcut commands for building, running, and cleaning the backend environment
-├── requirements-dev.txt              # Local build tools (pyodide-build, etc.)
-├── setup.sh                          # Environment & Wasm build script
-└── vite.config.ts                    # Vite bundler configuration
+├─ .github/workflows                # Github action configuration files
+├─ public/                          # Static assets for deployment
+│  ├─ wheels/                       # The compiled wheel artifacts
+│  ├─ scripts/                      # Python utilities (CRF & analysis)
+│  └─ requirements.txt              # Browser-side Python dependencies
+├─ setup.sh                         # Environment & Wasm build script
+├─ src/                             # Main application source
+│  ├─ App.tsx
+│  ├─ components/                   # Reusable UI elements and layout helpers
+│  ├─ features/                     # Groups feature-specific modules
+│  │  └─ analyzer/                  # The morphological annotation workflow
+│  ├─ hooks/                        # Shared React hooks
+│  ├─ lib/                          # Shared utilities, validation, and types
+│  ├─ pages/                        # Route-level views
+│  ├─ services/                     
+│  │  ├─ database/                  # IndexedDB configuration
+│  │  └─ pyodide/                   # Pyodide (WASM) initialization and bridge
+│  │     └─ worker/                 # Background processing workers
+|  ├─ main.tsx                      # Application entry point
+│  └─ index.css
+├─ test/                            # Test assets and suites
+│  ├─ features/                     # Unit test cases for ML layers.
+│  ├─ services/                     # Unit test cases for persistence layers.
+│  └─ testdata/                     
+├─ Dockerfile                       # Build environment for Emscripten & Pyodide
+├─ LICENSE
+├─ Makefile                         # Shortcut commands for building a wheel file.
+├─ README.md                        # Project documentation
+├─ requirements-dev.txt             # Python build/development dependencies
+├─ bun.lock
+├─ docker-compose.yml               # Orchestrates the Wasm wheel compilation process
+├─ eslint.config.js
+├─ index.html                       # Entry point HTML.
+├─ package.json
+└─ vite.config.ts
+
 ```
 ---
 
@@ -131,7 +134,7 @@ Permission Warning: Since the wheel files are generated inside a Docker containe
 
 ```
 sudo rm public/wheels/*.whl
-```
+
 ```
 
 ---
@@ -168,5 +171,6 @@ bun run dev
 ---
 
 ## 9. Testing
+```
 bun test
 ```
