@@ -40,7 +40,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: public/wheels/python_crfsuite*.whl
-          # hashFiles to auto-update if if the compiler tools or CRFSUITE_VERSION changes.
+          # hashFiles to auto-update if the compiler tools or CRFSUITE_VERSION changes.
           key: ${{ runner.os }}-build-${{ env.CRFSUITE_VERSION }}-${{ hashFiles('requirements-dev.txt') }}
 
       - name: Build Custom Wheel (If not cached)
@@ -63,3 +63,25 @@ jobs:
 
       - name: Build Project
         run: bun run build
+
+      # Run pyodide-pytest and selenium testing with web browser
+      - name: Install Chrome and ChromeDriver
+        run: |
+          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -
+          echo 'deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main' | tee /etc/apt/sources.list.d/google-chrome.list
+          apt-get update
+          apt-get install -y google-chrome-stable
+          # Install ChromeDriver (matching Chrome version)
+          CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
+          wget -O /tmp/chromedriver.zip https://chromedriver.storage.googleapis.com/$(curl -s https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION)/chromedriver_linux64.zip
+          unzip /tmp/chromedriver.zip -d /usr/local/bin/
+          chmod +x /usr/local/bin/chromedriver
+
+      - name: Serve Built App
+        run: |
+          python -m http.server 8000 --directory dist &
+          sleep 2  # Wait for server to start
+
+      - name: Run Python/Selenium Tests
+        run: |
+          python -m pytest test/  # Assuming test files are in test/ directory
