@@ -172,6 +172,42 @@ bun run dev
 ---
 
 ## 9. Testing
+
+### JavaScript Tests
+For the Bun/JavaScript test suites, run:
 ```
 bun test
+```
+
+### Pyodide Tests (Python-in-Browser)
+These tests run Python code inside a virtualized browser environment. Follow these steps to set up your local environment:
+1. Environment Setup
+First, create and activate your virtual environment, then install the required development dependencies:
+```
+python -m venv .venv       # If you don't have one already
+source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
+pip install -r requirements-dev.txt
+```
+
+2. Install Browser Binaries
+Since we use Playwright as the test runner, you need to install the Chromium binary and its necessary system dependencies:
+```
+python -m playwright install chromium --with-deps
+```
+
+3. Setup Pyodide Runtime
+The tests require a local copy of the Pyodide runtime (v0.27.3) to serve the environment:
+```
+# Download the distribution
+wget https://github.com/pyodide/pyodide/releases/download/0.27.3/pyodide-0.27.3.tar.bz2
+
+# Extract to the 'pyodide' directory
+mkdir -p pyodide
+tar -xjf pyodide-0.27.3.tar.bz2 -C pyodide --strip-components=1
+```
+
+4. Run Tests
+Execute the Pyodide-specific tests using the following command. This points to your local Pyodide folder and uses Playwright to handle the browser logic:
+```
+pytest test/services/pytest/ --dist-dir=pyodide --runtime chrome --runner playwright
 ```
