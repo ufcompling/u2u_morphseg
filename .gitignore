@@ -35,6 +35,7 @@ ENV/
 # Pyodide Wheels
 *.whl
 /public/wheels/*.whl
+pyodide
 
 # Temporary build folders
 temp-crfsuite/
@@ -42,3 +43,6 @@ emsdk/
 
 # Pyodide build environments
 .pyodide-xbuildenv*
+
+# cache
+test/services/pytest/__pycache__
