@@ -40,7 +40,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: public/wheels/python_crfsuite*.whl
-          # hashFiles to auto-update if if the compiler tools or CRFSUITE_VERSION changes.
+          # hashFiles to auto-update if the compiler tools or CRFSUITE_VERSION changes.
           key: ${{ runner.os }}-build-${{ env.CRFSUITE_VERSION }}-${{ hashFiles('requirements-dev.txt') }}
 
       - name: Build Custom Wheel (If not cached)
@@ -63,3 +63,23 @@ jobs:
 
       - name: Build Project
         run: bun run build
+
+      - name: Download Pyodide Assets
+        run: |
+          wget https://github.com/pyodide/pyodide/releases/download/0.27.3/pyodide-0.27.3.tar.bz2
+          mkdir -p pyodide
+          tar -xjf pyodide-0.27.3.tar.bz2 -C pyodide --strip-components=1
+
+      # --- PLAYWRIGHT SECTION ---
+      - name: Install Playwright Browsers
+        run: |
+          # This installs the Chromium binary and the required Linux system libs
+          python -m playwright install chromium --with-deps
+
+      - name: Run Python/Pyodide Tests
+        run: |
+          # Use --runner playwright and --runtime chrome
+          pytest test/services/pytest/ \
+            --dist-dir=pyodide \
+            --runtime chrome \
+            --runner playwright
