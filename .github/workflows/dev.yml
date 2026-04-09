@@ -64,24 +64,22 @@ jobs:
       - name: Build Project
         run: bun run build
 
-      # Run pyodide-pytest and selenium testing with web browser
-      - name: Install Chrome and ChromeDriver
+      - name: Download Pyodide Assets
         run: |
-          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -
-          echo 'deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main' | tee /etc/apt/sources.list.d/google-chrome.list
-          apt-get update
-          apt-get install -y google-chrome-stable
-          # Install ChromeDriver (matching Chrome version)
-          CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
-          wget -O /tmp/chromedriver.zip https://chromedriver.storage.googleapis.com/$(curl -s https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION)/chromedriver_linux64.zip
-          unzip /tmp/chromedriver.zip -d /usr/local/bin/
-          chmod +x /usr/local/bin/chromedriver
+          wget https://github.com/pyodide/pyodide/releases/download/0.27.3/pyodide-0.27.3.tar.bz2
+          mkdir -p pyodide
+          tar -xjf pyodide-0.27.3.tar.bz2 -C pyodide --strip-components=1
 
-      - name: Serve Built App
+      # --- PLAYWRIGHT SECTION ---
+      - name: Install Playwright Browsers
         run: |
-          python -m http.server 8000 --directory dist &
-          sleep 2  # Wait for server to start
+          # This installs the Chromium binary and the required Linux system libs
+          npx playwright install chromium --with-deps
 
-      - name: Run Python/Selenium Tests
+      - name: Run Python/Pyodide Tests
         run: |
-          pytest test/services/pytest/ --dist-dir=$(python -c "import pyodide; import os; print(os.path.dirname(pyodide.__file__))") --runtime chrome
+          # Use --runner playwright and --runtime chrome
+          pytest test/services/pytest/ \
+            --dist-dir=pyodide \
+            --runtime chrome \
+            --runner playwright
