@@ -74,7 +74,7 @@ jobs:
       - name: Install Playwright Browsers
         run: |
           # This installs the Chromium binary and the required Linux system libs
-          npx playwright install chromium --with-deps
+          python -m playwright install chromium --with-deps
 
       - name: Run Python/Pyodide Tests
         run: |
