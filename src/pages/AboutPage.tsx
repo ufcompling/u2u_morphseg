@@ -45,6 +45,26 @@ export function AboutPage() {
               or sensitive linguistic materials.
             </p>
           </section>
+
+          <section className="pt-6 border-t border-border/10 flex flex-col md:flex-row items-center gap-6">
+            <div className="shrink-0">
+              <img 
+                src="/u2u_morphseg/DrLiu.png" 
+                alt="Dr. Liu" 
+                className="w-20 h-20 rounded-xl object-cover border border-border/20 shadow-lg bg-secondary/20"
+                onError={(e) => {
+                  // Fallback if image not found
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            </div>
+            <div>
+              <h2 className="text-primary font-semibold uppercase tracking-wider text-xs mb-2">Development Team</h2>
+              <p className="text-[13px] text-foreground/70 leading-relaxed">
+                Turtleshell is developed by the <span className="text-foreground font-medium">Computational Linguistics Lab</span> within the Department of Linguistics at the <span className="text-foreground font-medium">University of Florida</span>, led by Dr. Liu.
+              </p>
+            </div>
+          </section>
         </div>
       </div>
 
