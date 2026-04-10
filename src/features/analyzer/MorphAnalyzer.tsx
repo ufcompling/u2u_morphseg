@@ -31,11 +31,13 @@ export function MorphAnalyzer() {
   }, [ts.pyodideReady, ts.indexedDBReady, allReady]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 md:p-8 relative">
+    <div className="min-h-screen flex items-center justify-center p-4 md:p-8 relative isolate">
       <TurtleShellBackground />
 
       <main className="w-full max-w-4xl relative z-10">
-        <div className="bg-card/98 backdrop-blur-3xl border border-border/20 rounded-2xl shadow-2xl shadow-black/40 overflow-visible ring-1 ring-white/5">
+        <div className="bg-card/98 backdrop-blur-3xl border border-border/20 rounded-2xl shadow-2xl shadow-black/40 overflow-visible ring-1 ring-white/5"
+          style={{ backfaceVisibility: "hidden", transform: "translate3d(0,0,0)" }}
+        >
 
           <header className="px-6 py-4 flex items-center border-b border-border/20 bg-secondary/5">
             <div>
@@ -54,7 +56,7 @@ export function MorphAnalyzer() {
           </header>
 
           {/* App content always rendered — overlay sits on top */}
-          <div className="relative">
+          <div className="relative min-h-[440px]">
             <div>
               {ts.pyodideError && !showOverlay && (
                 <ErrorBanner
@@ -344,16 +346,12 @@ function AnimatedStageRenderer({ ts }: { ts: UseTurtleshellReturn }) {
 
   const style = {
     opacity: phase === "out" ? 0 : 1,
-    transform:
-      phase === "out"  ? "translateY(3px)"
-      : phase === "in" ? "translateY(-2px)"
-      : "translateY(0)",
     transition:
       phase === "out"
-        ? "opacity 150ms cubic-bezier(0.4, 0, 1, 1), transform 150ms cubic-bezier(0.4, 0, 1, 1)"
-        : "opacity 350ms cubic-bezier(0, 0, 0.2, 1), transform 350ms cubic-bezier(0, 0, 0.2, 1)",
+        ? "opacity 150ms cubic-bezier(0.4, 0, 1, 1)"
+        : "opacity 350ms cubic-bezier(0, 0, 0.2, 1)",
     pointerEvents: transitioning ? "none" : "auto",
-    willChange: "opacity, transform",
+    willChange: "opacity",
   } as React.CSSProperties;
 
   return (
