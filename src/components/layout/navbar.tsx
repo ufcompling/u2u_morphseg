@@ -1,17 +1,21 @@
 import { useRef, useEffect, useState } from "react";
 
 interface Props {
-  view: "home" | "app";
-  onNavigate: (view: "home" | "app") => void;
+  view: "home" | "app" | "about";
+  onNavigate: (view: "home" | "app" | "about") => void;
 }
 
 export function Navbar({ view, onNavigate }: Props) {
   const homeRef = useRef<HTMLButtonElement>(null);
   const appRef = useRef<HTMLButtonElement>(null);
+  const aboutRef = useRef<HTMLButtonElement>(null);
   const [dotStyle, setDotStyle] = useState({ left: 0, width: 0, opacity: 0 });
 
   useEffect(() => {
-    const active = view === "home" ? homeRef.current : appRef.current;
+    const active = 
+      view === "home" ? homeRef.current : 
+      view === "app" ? appRef.current : 
+      aboutRef.current;
     if (!active) return;
     setDotStyle({
       left: active.offsetLeft,
@@ -59,6 +63,15 @@ export function Navbar({ view, onNavigate }: Props) {
             }`}
           >
             App
+          </button>
+          <button
+            ref={aboutRef}
+            onClick={() => onNavigate("about")}
+            className={`px-4 py-2 text-[13px] font-medium transition-colors duration-300 ${
+              view === "about" ? "text-foreground" : "text-foreground/35 hover:text-foreground/60"
+            }`}
+          >
+            About
           </button>
 
           {/* Sliding dot indicator */}
