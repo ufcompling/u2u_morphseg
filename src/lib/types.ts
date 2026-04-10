@@ -192,6 +192,8 @@ export interface InferenceConfig {
   delta?: number;
   /** VFS working directory where crf.model was saved (default /tmp/turtleshell) */
   workDir?: string;
+  /** Target language to locate the saved model */
+  targetLanguage?: string;
 }
 
 /** Result from a full-corpus inference pass. */

@@ -151,7 +151,7 @@ export function TrainingProgressStage({
         {isComplete ? (
           <div className="flex flex-wrap items-center justify-between gap-4">
             <p className="font-mono text-[11px] text-muted-foreground/70">
-              Ready to annotate low-confidence words
+              Ready to annotate words
             </p>
             <div className="flex items-center gap-2">
               <button

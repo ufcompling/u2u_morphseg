@@ -144,6 +144,7 @@ def run_inference(config_json: str) -> str:
         - residualTgt: str   residual pool content (.tgt format)
         - delta: int         context window for features (default 4)
         - workDir: str       VFS directory where crf.model lives
+        - targetLanguage: str language code (default 'unknown')
     :type config_json: str
     :return: JSON string with fields:
         - predictions: list[{word, segmentation}]
@@ -156,7 +157,7 @@ def run_inference(config_json: str) -> str:
 		config: dict = json.loads(config_json)
 
 		target_language: str = config.get('targetLanguage', 'unknown')
-		work_dir: str = f'data/{target_language}/'
+		work_dir: str = f'/data/{target_language}/'
 		delta: int = config.get('delta', 4)
 
 		crf: CRF | None = load_crf(work_dir, 'crf.model')
