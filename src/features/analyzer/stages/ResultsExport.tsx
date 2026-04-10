@@ -140,7 +140,7 @@ export function ResultsExportStage({
 
                       {/* Tooltip on hover */}
                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-10">
-                        <div className="bg-card border border-border/30 rounded-lg px-3 py-2 shadow-xl shadow-black/30 whitespace-nowrap">
+                        <div className="bg-card border border-border/30 rounded-lg px-3 py-2 shadow-xl shadow-black/30 min-w-[160px] max-w-[240px] text-left break-words">
                           <p className="font-mono text-[9px] text-muted-foreground uppercase tracking-wider">
                             Cycle {snap.iteration}
                           </p>
