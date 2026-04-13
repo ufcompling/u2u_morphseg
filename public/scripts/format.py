@@ -16,6 +16,7 @@ def format_evaluation(words: list[Word], gold_morphs: list[MorphList], pred_morp
 	
 def format_increment(confidence_data: list[ConfidenceData]) -> list[dict[str, str | float | list[dict]]]:
 	increment: list[dict[str, str | float | list[dict]]] = []
+	
 	for i, (word, labels, confscore) in enumerate(confidence_data):
 		increment.append({
 			'id': f'w{i}',

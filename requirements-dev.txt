@@ -5,3 +5,9 @@ Cython>=3.0.0
 
 # Dependencies for python-crfsuite
 setuptools>=42
+
+# Dependencies for pyodide testing
+pytest>=8.2.2,<9.0.0
+pytest-pyodide==0.59.0
+pytest-asyncio>=0.23.0
+playwright>=1.40.0
