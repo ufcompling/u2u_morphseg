@@ -64,21 +64,34 @@ jobs:
       - name: Build Project
         run: bun run build
 
+      - name: Cache Playwright Browsers
+        id: cache-playwright
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('requirements-dev.txt') }}
+
+      - name: Install Playwright Browsers
+        if: steps.cache-playwright.outputs.cache-hit != 'true'
+        run: python -m playwright install chromium --with-deps
+
+      - name: Cache Pyodide Assets
+        id: cache-pyodide
+        uses: actions/cache@v4
+        with:
+          path: pyodide
+          key: ${{ runner.os }}-pyodide-0.27.3
+
       - name: Download Pyodide Assets
+        if: steps.cache-pyodide.outputs.cache-hit != 'true'
         run: |
           wget https://github.com/pyodide/pyodide/releases/download/0.27.3/pyodide-0.27.3.tar.bz2
           mkdir -p pyodide
           tar -xjf pyodide-0.27.3.tar.bz2 -C pyodide --strip-components=1
-
-      # --- PLAYWRIGHT SECTION ---
-      - name: Install Playwright Browsers
-        run: |
-          # This installs the Chromium binary and the required Linux system libs
-          python -m playwright install chromium --with-deps
+          rm pyodide-0.27.3.tar.bz2 # Keep the workspace clean
 
       - name: Run Python/Pyodide Tests
         run: |
-          # Use --runner playwright and --runtime chrome
           pytest test/services/pytest/ \
             --dist-dir=pyodide \
             --runtime chrome \
