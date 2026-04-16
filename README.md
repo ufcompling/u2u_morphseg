@@ -2,6 +2,8 @@
 
 ![Overview-gif](https://github.com/user-attachments/assets/944773df-924e-4dc3-846d-9df831696ffa)
 
+> **Looking for the User Guide?**
+> Detailed step-by-step instructions, workflow guides, and troubleshooting tips can be found in the [User Manual (manual.md)](manual.md).
 
 ## 1. Abstract
 **Overview:** 
