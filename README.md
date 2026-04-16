@@ -173,7 +173,7 @@ bun run dev
 
 ---
 
-## 9. Testing
+## 12. Testing
 
 ### JavaScript Tests
 For the Bun/JavaScript test suites, run:
@@ -213,3 +213,32 @@ Execute the Pyodide-specific tests using the following command. This points to y
 ```
 pytest test/services/pytest/ --dist-dir=pyodide --runtime chrome --runner playwright
 ```
+
+---
+
+## 13. Development Workflow & CI/CD
+
+We follow a **dev-to-main** branching strategy. All contributors are encouraged to follow these steps to maintain code quality and deployment stability.
+
+### Branching Strategy
+* **`main`**: Production-ready code. Only updated via PR from `dev`.
+* **`dev`**: Integration branch for new features.
+* **`feature/[feature-name]`**: Individual branches for specific tasks or components.
+
+### Step-by-Step Workflow
+
+1.  **Feature Development**: Create a dedicated branch for every new feature or bug fix (e.g., `feature/annotate-ui`).
+2.  **Pull Request to `dev`**: Once a feature is complete, open a Pull Request (PR) to the `dev` branch.
+    * **CI Trigger (Test and Build)**: A GitHub Action is automatically triggered to run the full testing suite.
+3.  **Code Review & Merge**: 
+    * Upon successful completion of the CI tests and a manual code review, the merge is approved.
+    * **CI Trigger (Build)**: A second automated check ensures the project builds successfully without errors.
+4.  **Production Release**: When the `dev` branch is stable and ready for release, a PR is made from `dev` to `main`.
+    * **Requirement**: This merge requires at least **one peer approval**.
+5.  **Deployment (CD)**: 
+    * Once the merge to `main` is successful, a Continuous Deployment (CD) pipeline is triggered.
+    Once the merge to `main` is successful, a Continuous Deployment (CD) pipeline is triggered.
+    * If the deployment fails, the previous version of the site remains live until a fix is merged.
+    * The live application on **GitHub Pages** is automatically updated with the new changes.
+
+---
