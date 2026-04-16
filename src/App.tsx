@@ -3,8 +3,9 @@ import { useState, useEffect, useRef } from "react";
 import { Navbar } from "./components/layout/navbar";
 import { LandingPage } from "./pages/LandingPage";
 import { MorphAnalyzerPage } from "./pages/MorphAnalyzerPage";
+import { AboutPage } from "./pages/AboutPage";
 
-type View = "home" | "app";
+type View = "home" | "app" | "about";
 
 export default function App() {
   const [view, setView] = useState<View>("home");
@@ -54,6 +55,18 @@ export default function App() {
           <MorphAnalyzerPage onBack={() => navigateTo("home")} />
         </div>
       )}
+
+      {/* About */}
+      <div
+        style={{
+          opacity: fading || view !== "about" ? 0 : 1,
+          pointerEvents: view !== "about" ? "none" : "auto",
+          position: view !== "about" ? "absolute" : "relative",
+          transition: "opacity 200ms ease",
+        }}
+      >
+        <AboutPage />
+      </div>
     </>
   );
 }
