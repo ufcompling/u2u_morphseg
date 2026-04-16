@@ -71,13 +71,14 @@ export function ResultsExportStage({
           No results available yet
         </p>
         
-        {/* TODO: EMERGENCY EXIT!! I was stuck in the result page lol */}
         <button
-            onClick={onStartOver}
-            className="flex items-center gap-2 pl-4 pr-5 py-2.5 rounded-xl bg-primary/10 border border-primary/30 text-primary font-mono text-[11px] font-semibold tracking-wide transition-all hover:bg-primary hover:text-primary-foreground hover:border-primary active:scale-[0.97]"
-          >
-            <LoopIcon />
-          </button>
+          onClick={onStartOver}
+          className="flex items-center gap-2 px-4 py-2.5 mt-6 mx-auto rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 font-mono text-[11px] font-medium hover:bg-red-500/20 hover:border-red-500/50 transition-all active:scale-[0.98]"
+          title="Emergency exit - resets entire project"
+        >
+          <LoopIcon className="w-3.5 h-3.5" />
+          <span>Start Over</span>
+        </button>
       </div>
       
     );
@@ -139,7 +140,7 @@ export function ResultsExportStage({
 
                       {/* Tooltip on hover */}
                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-10">
-                        <div className="bg-card border border-border/30 rounded-lg px-3 py-2 shadow-xl shadow-black/30 whitespace-nowrap">
+                        <div className="bg-card border border-border/30 rounded-lg px-3 py-2 shadow-xl shadow-black/30 min-w-[160px] max-w-[240px] text-left break-words">
                           <p className="font-mono text-[9px] text-muted-foreground uppercase tracking-wider">
                             Cycle {snap.iteration}
                           </p>

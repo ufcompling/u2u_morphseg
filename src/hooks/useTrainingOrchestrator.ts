@@ -174,9 +174,11 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
       delta: CRF_FEATURE_DELTA,
       selectSize: cumulativeSelectSize.current,
       randomSeed: resolvedSeed,
+      queryStrategy: modelConfig.queryStrategy,
       delimiter: modelConfig.delimiter,
     };
-
+    console.debug("[training] cycleConfig", cycleConfig);
+    
     try {
       const result = await runCycle(cycleConfig, (stepId, done, detail) => {
         updateStep(stepId, done, detail);
@@ -225,11 +227,17 @@ export function useTrainingOrchestrator(deps: TrainingOrchestratorDeps): Trainin
   // ── Inference ───────────────────────────────────────────────────────────
 
   const startInference = useCallback(async () => {
-    if (!residualContent || isRunningInference) return;
+    console.log("[startInference] Called. residualContent length:", residualContent?.length, "isRunningInference:", isRunningInference);
+    if (!residualContent || isRunningInference) {
+      console.warn("[startInference] Early exit: residualContent=", residualContent?.length ? 'has content' : 'empty', "isRunningInference=", isRunningInference);
+      return;
+    }
     setIsRunningInference(true);
     try {
-      const config: InferenceConfig = { residualTgt: residualContent, delta: CRF_FEATURE_DELTA };
+      console.log("[startInference] Starting inference with", (residualContent?.split('\n').filter(Boolean) || []).length, "lines");
+      const config: InferenceConfig = { residualTgt: residualContent, delta: CRF_FEATURE_DELTA, targetLanguage: modelConfig.targetLanguage };
       const result = await runInference(config);
+      console.log("[startInference] Inference complete:", result);
       setPredictionsContent(result.predictionsContent);
       setInferenceStats({ totalWords: result.totalWords, processedWords: result.totalWords });
       setInferenceComplete(true);
