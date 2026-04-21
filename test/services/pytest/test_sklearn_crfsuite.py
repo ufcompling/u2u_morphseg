@@ -1,10 +1,7 @@
 from pytest_pyodide import run_in_pyodide
-from pytest_pyodide.decorator import copy_files_to_pyodide
+from conftest import load_turtleshell
 
-@copy_files_to_pyodide(
-    file_list=[('dist/wheels/python_crfsuite-0.9.12-cp312-cp312-pyodide_2024_0_wasm32.whl', '/tmp')],
-    install_wheels=True
-)
+@load_turtleshell
 @run_in_pyodide
 async def test_sklearn_crfsuite(selenium):
     import micropip
